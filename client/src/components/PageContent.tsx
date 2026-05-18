@@ -257,13 +257,18 @@ export function PageContent({ pageId, line, block }: Props) {
       return;
     }
     try {
-      await updatePage({ page_id: pageId, content: draft }).unwrap();
-      dispatch(showToast("Saved"));
+      const r = await updatePage({ page_id: pageId, content: draft }).unwrap();
+      dispatch(
+        showToast({ message: `Saved · v${r.version}`, kind: "success" }),
+      );
       setEditing(false);
       setDraft("");
     } catch (e) {
-      const err = e as { status?: number };
-      dispatch(showToast(`save failed: ${err.status ?? "error"}`));
+      const err = e as { status?: number; data?: { error?: string } };
+      const detail = err.data?.error ?? err.status ?? "error";
+      dispatch(
+        showToast({ message: `Save failed: ${detail}`, kind: "error" }),
+      );
     }
   };
 

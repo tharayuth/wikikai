@@ -3,13 +3,14 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 export type Theme = "light" | "dark";
 export type HelpTab = "user" | "mcp";
 export type HelpLang = "en" | "th";
+export type ToastKind = "info" | "success" | "error";
 
 export interface UiState {
   theme: Theme;
   helpOpen: boolean;
   helpTab: HelpTab;
   helpLang: HelpLang;
-  toast: { message: string; ts: number } | null;
+  toast: { message: string; kind: ToastKind; ts: number } | null;
   /** Project names selected for filtering. null = no filter (show all). */
   selectedProjects: string[] | null;
   projectFilterOpen: boolean;
@@ -101,8 +102,15 @@ export const uiSlice = createSlice({
     closeHelp(state) {
       state.helpOpen = false;
     },
-    showToast(state, action: PayloadAction<string>) {
-      state.toast = { message: action.payload, ts: Date.now() };
+    showToast(
+      state,
+      action: PayloadAction<string | { message: string; kind?: ToastKind }>,
+    ) {
+      const payload =
+        typeof action.payload === "string"
+          ? { message: action.payload, kind: "info" as ToastKind }
+          : { message: action.payload.message, kind: action.payload.kind ?? "info" };
+      state.toast = { ...payload, ts: Date.now() };
     },
     clearToast(state) {
       state.toast = null;
