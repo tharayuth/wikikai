@@ -100,7 +100,14 @@ export interface PromptLogResponse {
 export const portalApi = createApi({
   reducerPath: "portalApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api/" }),
-  tagTypes: ["Knowledge", "KnowledgeList", "Page", "Projects", "PromptLog"],
+  tagTypes: [
+    "Knowledge",
+    "KnowledgeList",
+    "Page",
+    "Revisions",
+    "Projects",
+    "PromptLog",
+  ],
   endpoints: (builder) => ({
     listProjects: builder.query<
       { projects: { name: string; count: number; registered: boolean }[] },
@@ -218,7 +225,7 @@ export const portalApi = createApi({
       number
     >({
       query: (pid) => `pages/${pid}/revisions`,
-      providesTags: (_r, _e, pid) => [{ type: "Page", id: pid }],
+      providesTags: (_r, _e, pid) => [{ type: "Revisions", id: pid }],
     }),
 
     getPageRaw: builder.query<string, number | { pageId: number; version?: number }>({
@@ -250,6 +257,7 @@ export const portalApi = createApi({
         result
           ? [
               { type: "Page", id: arg.page_id },
+              { type: "Revisions", id: arg.page_id },
               { type: "Knowledge", id: result.knowledge_id },
               { type: "KnowledgeList", id: "LIST" },
               { type: "PromptLog", id: result.knowledge_id },
@@ -271,7 +279,10 @@ export const portalApi = createApi({
       number
     >({
       query: (pid) => ({ url: `pages/${pid}/revisions`, method: "DELETE" }),
-      invalidatesTags: (_r, _e, pid) => [{ type: "Page", id: pid }],
+      invalidatesTags: (_r, _e, pid) => [
+        { type: "Page", id: pid },
+        { type: "Revisions", id: pid },
+      ],
     }),
 
     toggleTaskAtIndex: builder.mutation<
@@ -282,9 +293,12 @@ export const portalApi = createApi({
         url: `pages/${pageId}/tasks/${index}/toggle`,
         method: "POST",
       }),
-      // Optimistic DOM flip is enough; refetch would yank the article
-      // and scroll-jump.
-      invalidatesTags: [],
+      // Refresh the version pill row but NOT the rendered article tag —
+      // re-rendering the article would yank the DOM + scroll-jump on
+      // every checkbox click.
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Revisions", id: arg.pageId },
+      ],
     }),
 
     search: builder.query<
