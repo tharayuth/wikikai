@@ -1,0 +1,62 @@
+{
+  "name": "wikikai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WikiKai — MCP server for publishing presentation-style knowledge pages.",
+  "author": {
+    "name": "Tharayuth Kaewma",
+    "email": "tharayuth@gmail.com"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch src/index.ts",
+    "dev:client": "vite --config client/vite.config.ts",
+    "start": "tsx src/index.ts",
+    "seed": "tsx scripts/seed.ts",
+    "build": "npm run build:client && tsc -p .",
+    "build:client": "vite build --config client/vite.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p . --noEmit && tsc -p client/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@reduxjs/toolkit": "^2.12.0",
+    "better-sqlite3": "^11.7.0",
+    "chart.js": "^4.5.1",
+    "codemirror": "^6.0.2",
+    "express": "^4.21.2",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.2.0",
+    "mermaid": "^11.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-redux": "^9.3.0",
+    "shiki": "^1.24.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^4.17.21",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@types/supertest": "^6.0.2",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "concurrently": "^9.2.1",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.4.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+client/dist/
+coverage/
+
+# User data (SQLite + raw markdown lives here at runtime)
+data/
+
+# Secrets
+.env
+.env.local
+*.pem
+
+# OS / editor cruft
+.DS_Store
+*.log
+.idea/
+.vscode/
+*.swp
+
+# Per-user Claude Code settings (project-level shared settings.json may be committed)
+.claude/settings.local.json

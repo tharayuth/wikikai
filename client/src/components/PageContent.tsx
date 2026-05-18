@@ -1,0 +1,461 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  useDeletePageMutation,
+  useGetPageQuery,
+  useGetPageRenderedQuery,
+  useListRevisionsQuery,
+  usePruneRevisionsMutation,
+  useUpdatePageMutation,
+} from "../store/api";
+import { useAppDispatch, useAppSelector } from "../store";
+import { showToast } from "../store/uiSlice";
+import { useMermaidCharts } from "../hooks/useMermaidCharts";
+import { useChecklistToggles } from "../hooks/useChecklistToggles";
+import { navigateTo } from "../hooks/useHash";
+import { PageEditor, type PageEditorHandle } from "./PageEditor";
+import { PageDiffModal } from "./PageDiffModal";
+import { ImageUploadModal } from "./ImageUploadModal";
+
+/**
+ * Find `{@N}` annotations that appear more than once on a fence-open line in
+ * the same content. Each block id is supposed to be unique within a page
+ * (and globally), so duplicates usually mean the author copy-pasted a fenced
+ * block and forgot to strip the id so the server can re-allocate.
+ *
+ * Returns a Map of duplicated id → occurrence count, or null when there are
+ * no duplicates.
+ */
+function findDuplicateBlockIds(content: string): Map<number, number> | null {
+  const lines = content.split("\n");
+  const counts = new Map<number, number>();
+  let inFence = false;
+  let fenceMarker = "";
+  for (const line of lines) {
+    if (!inFence) {
+      const open = /^\s*(```+)\s*([A-Za-z0-9_-]+)([^\n]*)$/.exec(line);
+      if (open) {
+        inFence = true;
+        fenceMarker = open[1];
+        const idMatch = /\{@(\d+)\}/.exec(open[3]);
+        if (idMatch) {
+          const id = Number(idMatch[1]);
+          counts.set(id, (counts.get(id) ?? 0) + 1);
+        }
+      }
+    } else {
+      const close = new RegExp(`^\\s*${fenceMarker}\\s*$`);
+      if (close.test(line)) {
+        inFence = false;
+        fenceMarker = "";
+      }
+    }
+  }
+  const dups = new Map<number, number>();
+  for (const [id, c] of counts) if (c > 1) dups.set(id, c);
+  return dups.size > 0 ? dups : null;
+}
+
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const sec = Math.max(0, Math.floor(diff / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+interface Props {
+  pageId: number;
+  line: number | null;
+  block: number | null;
+}
+
+export function PageContent({ pageId, line, block }: Props) {
+  const meta = useGetPageQuery(pageId);
+  const revisions = useListRevisionsQuery(pageId);
+  const [viewVersion, setViewVersion] = useState<number | null>(null);
+  const rendered = useGetPageRenderedQuery({
+    pageId,
+    version: viewVersion ?? undefined,
+  });
+  const [delPage] = useDeletePageMutation();
+  const [pruneRevisions, pruneState] = usePruneRevisionsMutation();
+  const [updatePage, updateState] = useUpdatePageMutation();
+  const dispatch = useAppDispatch();
+  const theme = useAppSelector((s) => s.ui.theme);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string>("");
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [jumpLine, setJumpLine] = useState<number | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const editorRef = useRef<PageEditorHandle | null>(null);
+
+  useMermaidCharts(
+    bodyRef,
+    // `editing` must be in the dep list: toggling Edit raw → Cancel
+    // unmounts + remounts the article element without changing any of
+    // the other deps, so without this the badge/click handlers would
+    // stay bound to the destroyed DOM and the @N menu would never
+    // open again until a full reload.
+    [rendered.data ?? "", theme, pageId, viewVersion, editing],
+    theme,
+    pageId,
+  );
+  useChecklistToggles();
+
+  // Reset to latest + exit edit mode whenever the current page changes.
+  useEffect(() => {
+    setViewVersion(null);
+    setEditing(false);
+  }, [pageId]);
+
+  // Block-badge "Edit this block" → enter edit mode + scroll editor to
+  // the line of the `{@N}` annotation.
+  useEffect(() => {
+    const onEditBlock = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { blockId: number };
+      if (!meta.data) return;
+      const lines = meta.data.content.split("\n");
+      let target = 1;
+      for (let i = 0; i < lines.length; i++) {
+        const m = /\{@(\d+)\}/.exec(lines[i]);
+        if (m && Number(m[1]) === detail.blockId) {
+          target = i + 1;
+          break;
+        }
+      }
+      setDraft(meta.data.content);
+      setEditing(true);
+      setJumpLine(target);
+    };
+    window.addEventListener("wikikai-edit-block", onEditBlock);
+    return () => window.removeEventListener("wikikai-edit-block", onEditBlock);
+  }, [meta.data]);
+
+  useEffect(() => {
+    if (!rendered.data) return;
+    if (block == null && !line) return;
+    const t = setTimeout(() => {
+      const root = bodyRef.current;
+      if (!root) return;
+      if (block != null) {
+        const el = root.querySelector<HTMLElement>(
+          `[data-block-id="${block}"]`,
+        );
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("block-flash");
+          window.setTimeout(() => el.classList.remove("block-flash"), 1600);
+          return;
+        }
+        dispatch(showToast(`block @${block} not found on this page`));
+        return;
+      }
+      const headings = root.querySelectorAll<HTMLElement>("h1, h2, h3");
+      if (headings.length > 0) {
+        headings[0].scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      dispatch(showToast(`jumped near line ${line}`));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [line, block, rendered.data, dispatch]);
+
+  if (meta.isLoading || rendered.isLoading) {
+    return (
+      <article className="markdown-body" ref={bodyRef}>
+        <p style={{ color: "var(--text-3)", padding: 24 }}>
+          Loading page #{pageId}…
+        </p>
+      </article>
+    );
+  }
+  if (meta.error || rendered.error || !meta.data) {
+    return (
+      <article className="markdown-body">
+        <p style={{ padding: 24 }}>page #{pageId} not found</p>
+      </article>
+    );
+  }
+
+  const kid = meta.data.knowledge_id;
+  const currentVersion = meta.data.version;
+  const activeVersion = viewVersion ?? currentVersion;
+  const revList = revisions.data?.revisions ?? [];
+
+  // Timestamp shown in the header — matches whichever version the user is
+  // looking at (falls back to the page's updated_at for the live version).
+  const activeRevision = revList.find((r) => r.version === activeVersion);
+  const activeTimestamp = activeRevision?.created_at ?? meta.data.updated_at;
+
+  const onPruneRevisions = async () => {
+    const oldCount = Math.max(0, revList.length - 2);
+    if (oldCount === 0) {
+      dispatch(showToast("≤ 2 revisions already — nothing to prune"));
+      return;
+    }
+    if (!confirm(`Delete ${oldCount} old revision(s) — keep only the latest 2 versions?`)) {
+      return;
+    }
+    try {
+      const r = await pruneRevisions(pageId).unwrap();
+      const kept = r.kept_versions.map((v) => `v${v}`).join(", ");
+      dispatch(showToast(`Pruned ${r.removed} revision(s) · kept ${kept}`));
+      setViewVersion(null);
+    } catch (e) {
+      const err = e as { status?: number };
+      dispatch(showToast(`prune failed: ${err.status ?? "error"}`));
+    }
+  };
+
+  const onDelete = async () => {
+    if (!confirm(`Delete page #${pageId} "${meta.data!.title}"?`)) return;
+    try {
+      await delPage({ page_id: pageId, knowledge_id: kid }).unwrap();
+      dispatch(showToast(`deleted page #${pageId}`));
+      navigateTo({ kid });
+    } catch (e) {
+      const err = e as { status?: number };
+      dispatch(showToast(`delete failed: ${err.status ?? "error"}`));
+    }
+  };
+
+  const onStartEdit = () => {
+    setDraft(meta.data!.content);
+    setEditing(true);
+  };
+  const onCancelEdit = () => {
+    setEditing(false);
+    setDraft("");
+  };
+  const onSaveEdit = async () => {
+    const dups = findDuplicateBlockIds(draft);
+    if (dups) {
+      const list = Array.from(dups.entries())
+        .map(([id, c]) => `@${id} (×${c})`)
+        .join(", ");
+      alert(
+        `Duplicate block ids on this page: ${list}\n\n` +
+          `Block ids must be unique. This usually happens when a fenced block is copy-pasted and the {@N} annotation gets duplicated — delete {@N} from every duplicate so the server can allocate fresh ids on save.`,
+      );
+      return;
+    }
+    try {
+      await updatePage({ page_id: pageId, content: draft }).unwrap();
+      dispatch(showToast("Saved"));
+      setEditing(false);
+      setDraft("");
+    } catch (e) {
+      const err = e as { status?: number };
+      dispatch(showToast(`save failed: ${err.status ?? "error"}`));
+    }
+  };
+
+  return (
+    <>
+      <div className="page-id-header">
+        <button
+          className="page-id-badge"
+          onClick={() => {
+            navigator.clipboard.writeText(`#${pageId}`);
+            dispatch(showToast(`copied #${pageId}`));
+          }}
+          title="copy page id (#N)"
+        >
+          #{pageId}
+        </button>
+        <span className="page-lines">{meta.data.total_lines} lines</span>
+
+        {revList.length > 0 && (
+          <div
+            className="page-versions"
+            title={
+              revList.length > 1
+                ? "Click a number to view an older version. Click the latest to return."
+                : `Only one version (v${currentVersion}) — no older snapshots`
+            }
+          >
+            <span className="page-versions-label">v</span>
+            {revList.map((r) => (
+              <button
+                key={r.version}
+                type="button"
+                className={`page-version${activeVersion === r.version ? " active" : ""}${r.is_current ? " is-current" : ""}`}
+                onClick={() =>
+                  setViewVersion(r.is_current ? null : r.version)
+                }
+                title={`v${r.version}${r.is_current ? " (latest)" : ""} · ${r.line_count}L · ${new Date(r.created_at).toLocaleString()}`}
+              >
+                {r.version}
+              </button>
+            ))}
+            {viewVersion != null && viewVersion !== currentVersion && (
+              <button
+                type="button"
+                className="page-version-latest"
+                onClick={() => setViewVersion(null)}
+                title="Back to latest version"
+              >
+                → latest
+              </button>
+            )}
+            <span className="page-versions-sep" aria-hidden />
+            <button
+              type="button"
+              className="page-version-prune"
+              onClick={onPruneRevisions}
+              disabled={pruneState.isLoading || revList.length <= 2}
+              title={
+                revList.length <= 2
+                  ? "≤ 2 revisions already — nothing to prune"
+                  : `Delete old revisions, keep the latest 2 versions`
+              }
+            >
+              {pruneState.isLoading ? "Pruning…" : "Delete revisions"}
+            </button>
+          </div>
+        )}
+
+        <div className="page-actions">
+          <span
+            className="page-updated"
+            title={`v${activeVersion} · ${new Date(activeTimestamp).toLocaleString()}`}
+          >
+            {relTime(activeTimestamp)}
+          </span>
+          {editing ? (
+            <>
+              <button
+                className="add-images-btn"
+                onClick={() => setUploadOpen(true)}
+                disabled={updateState.isLoading}
+                title="Upload images and insert markdown at the cursor"
+              >
+                <span aria-hidden style={{ fontSize: 14 }}>🖼</span>
+                <span>Add Images</span>
+              </button>
+              <span className="edit-action-gap" />
+              <button onClick={onCancelEdit} disabled={updateState.isLoading}>
+                Cancel
+              </button>
+              <button
+                className="primary"
+                onClick={onSaveEdit}
+                disabled={updateState.isLoading}
+                title="Save raw markdown"
+              >
+                {updateState.isLoading ? "Saving…" : "Save"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onStartEdit}
+                title={`Edit raw markdown of page #${pageId} in place`}
+                disabled={viewVersion != null && viewVersion !== currentVersion}
+              >
+                Edit raw
+              </button>
+              <button className="danger" onClick={onDelete} title="Delete this page">
+                Delete page
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {viewVersion != null && viewVersion !== currentVersion && (
+        <div className="page-revision-banner">
+          <span>
+            Viewing <strong>v{viewVersion}</strong> (older) — the latest is v{currentVersion}
+          </span>
+          <button
+            type="button"
+            className="page-revision-diff-btn"
+            onClick={() => setDiffOpen(true)}
+            title={`Compare v${viewVersion} with v${currentVersion}`}
+          >
+            🔍 Diff vs v{currentVersion}
+          </button>
+        </div>
+      )}
+
+      {diffOpen && viewVersion != null && viewVersion !== currentVersion && (
+        <PageDiffModal
+          pageId={pageId}
+          oldVersion={viewVersion}
+          newVersion={currentVersion}
+          newIsLatest
+          onClose={() => setDiffOpen(false)}
+        />
+      )}
+
+      <ImageUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onInsert={(images) => {
+          if (!editorRef.current || images.length === 0) return;
+          const ctx = editorRef.current.getCursorContext();
+          // Inside another fenced block we can't drop a nested ```images
+          // fence — it would close the host. Pick the right inline form
+          // based on the host's language:
+          //   - html-embed  → raw <img width=… height=… />
+          //   - everything else → markdown `![alt](src "WxH")` (the size
+          //     slot is consumed by the image renderer; checklist / steps
+          //     text run through renderInline so this works inside their
+          //     JSON string values too).
+          if (ctx.inFence) {
+            const isHtml = ctx.fenceLang === "html-embed";
+            const out = images
+              .map((img) => {
+                if (isHtml) {
+                  const alt = img.alt.replace(/"/g, "&quot;");
+                  return `<img src="${img.src}" alt="${alt}" width="${img.width}" height="${img.height}" />`;
+                }
+                const alt = img.alt.replace(/[\]\\]/g, "");
+                return `![${alt}](${img.src} "${img.width}x${img.height}")`;
+              })
+              .join("\n");
+            editorRef.current.insertAtCursor(out);
+            return;
+          }
+          // Top-level → drop an `images` fence so the gallery gets its
+          // own @N (server backfills `{@N}` on save).
+          const entries = images
+            .map((img) => {
+              const alt = img.alt.replace(/"/g, '\\"');
+              return `  { "src": "${img.src}", "alt": "${alt}", "width": ${img.width}, "height": ${img.height} }`;
+            })
+            .join(",\n");
+          const block = `\n\`\`\`images\n[\n${entries}\n]\n\`\`\`\n`;
+          editorRef.current.insertAtCursor(block);
+        }}
+      />
+
+      {editing ? (
+        <div className="page-editor-wrap">
+          <PageEditor
+              ref={editorRef}
+              initial={draft}
+              onChange={setDraft}
+              theme={theme}
+              jumpToLine={jumpLine}
+              onJumped={() => setJumpLine(null)}
+            />
+        </div>
+      ) : (
+        <article
+          className="markdown-body"
+          ref={bodyRef}
+          // Rendered HTML comes from server-side markdown-it (html: false) with
+          // fenced JSON blocks HTML-attr-escaped — safe to inject.
+          dangerouslySetInnerHTML={{ __html: rendered.data ?? "" }}
+        />
+      )}
+    </>
+  );
+}
