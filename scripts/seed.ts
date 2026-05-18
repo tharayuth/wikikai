@@ -807,7 +807,7 @@ Markdown table cells don't auto-render \`[ ]\` as a clickable box (the GFM task-
 </table>
 \`\`\`
 
-> ⚠️ \`<input type="checkbox">\` inside \`html-embed\` is **visual only** (we mark it \`disabled\` here so the cursor is honest). It's perfect for status reports / readouts where the table layout matters. For real clickable saved state, use the plain markdown style above.
+> 💡 \`<input type="checkbox">\` inside \`html-embed\` is **also clickable** — the renderer rewrites each one with a shared task index, so toggles in a styled table or card save back to source just like the plain-markdown list above. The \`disabled\` boxes in the table below are intentionally inert (the column shows historical status); remove \`disabled\` to make them live.
 
 ## 3. Checkboxes inside any HTML layout
 
