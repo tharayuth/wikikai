@@ -224,8 +224,20 @@ export function PageContent({ pageId, line, block }: Props) {
     }
   };
 
-  const onStartEdit = () => {
-    setDraft(meta.data!.content);
+  const onStartEdit = async () => {
+    // Pull fresh raw + rendered HTML before opening the editor. Checkbox
+    // toggles and other optimistic mutations skip the Page tag invalidation
+    // (so the rendered article doesn't get yanked + scroll-jumped). Without
+    // refetching here, opening the editor right after toggling a `- [x]`
+    // would show the pre-toggle source, and Cancel would visually
+    // "revert" the box because the cached rendered HTML is also stale.
+    try {
+      const fresh = await meta.refetch().unwrap();
+      setDraft(fresh.content);
+    } catch {
+      setDraft(meta.data!.content);
+    }
+    rendered.refetch();
     setEditing(true);
   };
   const onCancelEdit = () => {
