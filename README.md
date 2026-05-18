@@ -260,18 +260,6 @@ This is an early-stage project; the surface evolves. If you find a bug or want t
 
 [MIT](LICENSE) © 2026 Tharayuth Kaewma. Free for personal and commercial use; please keep the copyright notice.
 
-## Pre-public release checklist
-
-Before flipping the repo from private to public, walk through:
-
-- [ ] **Strip personal data** — `data/` is gitignored, but double-check nothing was force-added (`git log --all -- 'data/**'`)
-- [ ] **Scan for secrets** — `.env`, hard-coded tokens, local hostnames. `WIKIKAI_TOKEN` should never appear in commits
-- [ ] **Update author / repo URLs** — set the real GitHub clone URL in the [Quick start](#quick-start) section above
-- [x] ~~**Add screenshots**~~ — three portal shots live in [`docs/screenshots/`](docs/screenshots/) and are linked above
-- [ ] **Test from scratch** — `rm -rf data node_modules && npm install && npm run dev` on a clean checkout
-- [ ] **Verify LICENSE year + name** — already set, just confirm
-- [ ] **CI** — add a GitHub Action that runs `npm run typecheck` + `npm test` on push (optional but nice for the badge story)
-
 ## Acknowledgements
 
 Built on the shoulders of [Anthropic's MCP](https://modelcontextprotocol.io/), [markdown-it](https://github.com/markdown-it/markdown-it), [Shiki](https://shiki.style/), [Mermaid](https://mermaid.js.org/), [Chart.js](https://www.chartjs.org/), [CodeMirror](https://codemirror.net/), and [better-sqlite3](https://github.com/WiseLibs/better-sqlite3).
