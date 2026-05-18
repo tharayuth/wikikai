@@ -231,7 +231,6 @@ export class PageStore {
       "steps",
       "html-embed",
       "images",
-      "checklist",
     ]);
     let inFence = false;
     let fenceMarker = "";
@@ -797,81 +796,6 @@ export class PageStore {
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
     this.bumpKnowledge(meta.knowledge_id);
     return { id: pageId, version: r.version, new_line_count: countLines(next), replaced_lines: replacedLines };
-  }
-
-  /**
-   * Toggle a single item in a `checklist` fenced block. Locates the block
-   * by its global `@N` id, parses the JSON body, flips items[index].done,
-   * re-serializes (preserving the original formatting feel — 2-space
-   * indent), writes back through editLines so the same version-bump /
-   * revision-snapshot / FTS-reindex path runs.
-   *
-   * Throws when the block id doesn't exist, isn't a `checklist`, the JSON
-   * doesn't parse, or the index is out of range.
-   */
-  toggleChecklistItem(
-    blockId: number,
-    index: number,
-    done: boolean,
-  ): {
-    page_id: number;
-    knowledge_id: number;
-    version: number;
-    block_id: number;
-    index: number;
-    done: boolean;
-    item_text: string;
-  } {
-    const b = this.getBlock(blockId);
-    if (!b) throw new Error(`block @${blockId} not found`);
-    if (b.kind !== "checklist") {
-      throw new Error(`block @${blockId} is not a checklist (kind=${b.kind})`);
-    }
-    let cfg: { title?: string; description?: string; items: Array<{ text: string; done?: boolean }> };
-    try {
-      cfg = JSON.parse(b.inner);
-    } catch (e) {
-      throw new Error(
-        `block @${blockId}: cannot parse JSON — ${(e as Error).message}`,
-      );
-    }
-    if (!Array.isArray(cfg.items)) {
-      throw new Error(`block @${blockId}: items must be an array`);
-    }
-    if (index < 0 || index >= cfg.items.length) {
-      throw new Error(
-        `block @${blockId}: index ${index} out of range (0..${cfg.items.length - 1})`,
-      );
-    }
-    const item = cfg.items[index];
-    const normalizedItem =
-      typeof item === "string"
-        ? { text: item as string, done }
-        : { ...item, done };
-    cfg.items[index] = normalizedItem;
-    // Re-serialize preserving the block's fence marker and `{@N}` annotation.
-    // The fence open line and close line are kept as-is — only the JSON body
-    // between them changes.
-    const lines = b.source.split("\n");
-    const openLine = lines[0];
-    const closeLine = lines[lines.length - 1];
-    const newInner = JSON.stringify(cfg, null, 2);
-    const newSource = [openLine, newInner, closeLine].join("\n");
-    const r = this.editLines(
-      b.page_id,
-      b.line_start,
-      b.line_end,
-      newSource,
-    );
-    return {
-      page_id: b.page_id,
-      knowledge_id: b.knowledge_id,
-      version: r.version,
-      block_id: blockId,
-      index,
-      done: !!normalizedItem.done,
-      item_text: normalizedItem.text,
-    };
   }
 
   replaceText(

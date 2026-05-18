@@ -282,34 +282,8 @@ export const portalApi = createApi({
         url: `pages/${pageId}/tasks/${index}/toggle`,
         method: "POST",
       }),
-      // Same rationale as toggleChecklistItem — optimistic DOM flip is
-      // enough; refetch would yank the article and scroll-jump.
-      invalidatesTags: [],
-    }),
-
-    toggleChecklistItem: builder.mutation<
-      {
-        page_id: number;
-        knowledge_id: number;
-        version: number;
-        block_id: number;
-        index: number;
-        done: boolean;
-        item_text: string;
-        url: string;
-      },
-      { block_id: number; index: number; done: boolean }
-    >({
-      query: ({ block_id, index, done }) => ({
-        url: `blocks/${block_id}/checklist/${index}`,
-        method: "PATCH",
-        body: { done },
-      }),
-      // Intentionally do NOT invalidate Page/Knowledge tags here. The
-      // optimistic .done class flip already reflects the new state in
-      // the DOM, and refetching the rendered HTML would replace the
-      // article element + scroll the viewport back to the top on every
-      // click. The user's next navigation refreshes naturally.
+      // Optimistic DOM flip is enough; refetch would yank the article
+      // and scroll-jump.
       invalidatesTags: [],
     }),
 
@@ -350,6 +324,5 @@ export const {
   useAddProjectMutation,
   useRemoveProjectMutation,
   useGetPromptLogQuery,
-  useToggleChecklistItemMutation,
   useToggleTaskAtIndexMutation,
 } = portalApi;

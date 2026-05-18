@@ -839,21 +839,6 @@ Same html-embed trick works for gradient cards, sidebars, or any custom layout:
 </div>
 \`\`\`
 
-## 4. Legacy — \`\`\`checklist fence
-
-The original titled progress-card form is still supported for documents that already use it. New docs should prefer the simpler \`- [ ]\` style above; this one is here for back-compat:
-
-\`\`\`checklist
-{
-  "title": "Legacy form (still works)",
-  "description": "Has a title, a progress bar, and \`@N\` block id — use when those matter",
-  "items": [
-    { "text": "Item one", "done": true },
-    { "text": "Item two", "done": false }
-  ]
-}
-\`\`\`
-
 ## Ask the AI
 
 > "Six-item checklist to prep tomorrow's standup" — AI will write a \`- [ ]\` list
@@ -869,7 +854,7 @@ The original titled progress-card form is still supported for documents that alr
 - Every toggle is a **revision** — see when items got checked via the version dropdown on the page header
 - AI can flip boxes via \`toggle_task({ page_id, index })\` — index is the 0-based position of \`- [ ]\` / \`- [x]\` lines on the page (top-down, skipping any inside fenced code)
 - Tasks inside fenced code blocks are intentionally NOT rendered as checkboxes — you can show literal \`- [ ]\` examples in a \`\`\`markdown block without them becoming clickable`,
-  "Interactive `- [ ]` checkboxes — plain · in tables (html-embed) · in cards · legacy fence",
+  "Interactive `- [ ]` checkboxes — plain · in tables (html-embed) · in cards",
 );
 
 // ─── Page 10: Images ─────────────────────────────────────────────

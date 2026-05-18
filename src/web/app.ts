@@ -201,39 +201,6 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
-  // ─── Checklist toggle (rendered checkboxes write back to the page) ───
-  app.patch("/api/blocks/:bid/checklist/:idx", async (req, res, next) => {
-    try {
-      const bid = parseId(req.params.bid);
-      const idx = parseInt(req.params.idx, 10);
-      if (!Number.isFinite(idx) || idx < 0) {
-        res.status(400).json({ error: "idx must be a non-negative integer" });
-        return;
-      }
-      if (typeof req.body?.done !== "boolean") {
-        res.status(400).json({ error: "`done` must be a boolean" });
-        return;
-      }
-      const result = await opts.handlers.toggle_checklist_item({
-        block_id: bid,
-        index: idx,
-        done: req.body.done,
-      });
-      res.json(result);
-    } catch (e) {
-      if (isNotFound(e)) {
-        res.status(404).json({ error: (e as Error).message });
-        return;
-      }
-      const msg = (e as Error).message;
-      if (msg.startsWith("block ") || msg.includes("out of range")) {
-        res.status(400).json({ error: msg });
-        return;
-      }
-      next(e);
-    }
-  });
-
   app.get("/api/knowledge/:id/prompts", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);

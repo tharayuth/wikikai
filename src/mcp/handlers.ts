@@ -211,13 +211,6 @@ export const GetPromptLogSchema = z.object({
   offset: z.number().int().min(0).optional(),
 });
 
-export const ToggleChecklistItemSchema = z.object({
-  block_id: z.number().int().positive().describe("The `@N` id of the checklist fence to mutate."),
-  index: z.number().int().min(0).describe("0-based index into `items`."),
-  done: z.boolean().describe("New checked state."),
-  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
-});
-
 export const ToggleTaskSchema = z.object({
   page_id: z.number().int().positive(),
   index: z
@@ -366,7 +359,6 @@ export type ToolInputs = {
   get_image: z.infer<typeof GetImageSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
   get_prompt_log: z.infer<typeof GetPromptLogSchema>;
-  toggle_checklist_item: z.infer<typeof ToggleChecklistItemSchema>;
   toggle_task: z.infer<typeof ToggleTaskSchema>;
 };
 
@@ -575,17 +567,6 @@ export interface ToolHandlers {
     knowledge_id: number;
     total: number;
     entries: PromptLogEntry[];
-  }>;
-
-  toggle_checklist_item(input: ToolInputs["toggle_checklist_item"]): Promise<{
-    page_id: number;
-    knowledge_id: number;
-    version: number;
-    block_id: number;
-    index: number;
-    done: boolean;
-    item_text: string;
-    url: string;
   }>;
 
   toggle_task(input: ToolInputs["toggle_task"]): Promise<{
@@ -1112,26 +1093,6 @@ export function buildToolHandlers(
         knowledge_id: parsed.knowledge_id,
         total: entries.length,
         entries,
-      };
-    },
-
-    async toggle_checklist_item(input) {
-      const parsed = ToggleChecklistItemSchema.parse(input);
-      const r = pages.toggleChecklistItem(
-        parsed.block_id,
-        parsed.index,
-        parsed.done,
-      );
-      logIf(
-        "toggle_checklist_item",
-        parsed.user_prompt,
-        r.knowledge_id,
-        r.page_id,
-        r.version,
-      );
-      return {
-        ...r,
-        url: urlFor(ctx, r.knowledge_id, r.page_id),
       };
     },
 

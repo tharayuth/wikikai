@@ -120,7 +120,7 @@ export interface CursorContext {
   /** True when the caret is on a line that lives inside a fenced block
    *  (between an open ``` line and its closing ``` line). */
   inFence: boolean;
-  /** The fence language tag (e.g. "checklist", "html-embed") when
+  /** The fence language tag (e.g. "html-embed", "steps") when
    *  inFence is true; empty otherwise. */
   fenceLang: string;
 }

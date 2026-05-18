@@ -276,7 +276,7 @@ export function ImageUploadModal({ open, onClose, onInsert }: Props) {
               </tr>
               <tr>
                 <td>
-                  Inside any other fence (<code>checklist</code> / <code>steps</code> / …)
+                  Inside any other fence (<code>steps</code> / …)
                 </td>
                 <td>
                   <code>{`![alt](src "${width}x${height}")`}</code>

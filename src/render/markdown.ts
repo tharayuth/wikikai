@@ -252,111 +252,6 @@ function renderImages(jsonText: string, blockId: number | null = null): string {
   return `<div class="${layoutClass}"${blockIdAttr(blockId)}>${figures}${blockBadge(blockId)}</div>`;
 }
 
-interface ChecklistItem {
-  text: string;
-  done?: boolean;
-}
-
-interface ChecklistConfig {
-  title?: string;
-  description?: string;
-  items: ChecklistItem[];
-}
-
-function parseChecklist(jsonText: string):
-  | { ok: true; cfg: ChecklistConfig }
-  | { ok: false; error: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    return { ok: false, error: "must be a JSON object" };
-  }
-  const obj = parsed as Partial<ChecklistConfig>;
-  if (!Array.isArray(obj.items)) {
-    return { ok: false, error: "`items` must be an array" };
-  }
-  const items: ChecklistItem[] = obj.items.map((raw, i) => {
-    if (typeof raw === "string") return { text: raw, done: false };
-    if (typeof raw !== "object" || raw === null) {
-      return { text: `(item ${i}: invalid)`, done: false };
-    }
-    const r = raw as { text?: unknown; done?: unknown };
-    return {
-      text: typeof r.text === "string" ? r.text : `(item ${i}: missing text)`,
-      done: r.done === true,
-    };
-  });
-  return {
-    ok: true,
-    cfg: {
-      title: typeof obj.title === "string" ? obj.title : undefined,
-      description:
-        typeof obj.description === "string" ? obj.description : undefined,
-      items,
-    },
-  };
-}
-
-function renderChecklist(
-  jsonText: string,
-  md: MarkdownIt,
-  blockId: number | null = null,
-): string {
-  const result = parseChecklist(jsonText);
-  if (!result.ok) {
-    return `<div class="render-error">checklist error: ${escapeHtml(result.error)}</div>`;
-  }
-  const { cfg } = result;
-  const total = cfg.items.length;
-  const doneCount = cfg.items.filter((it) => it.done).length;
-  const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
-  const blockAttr = blockId == null ? "" : ` data-block-id="${blockId}"`;
-  const titleHtml = cfg.title
-    ? `<div class="checklist-title">${escapeHtml(cfg.title)}</div>`
-    : "";
-  const descHtml = cfg.description
-    ? `<div class="checklist-desc">${md.renderInline(cfg.description)}</div>`
-    : "";
-  const items = cfg.items
-    .map((it, i) => {
-      const doneClass = it.done ? " done" : "";
-      const checked = it.done ? " checked" : "";
-      // Interactive: client attaches a change handler that PATCHes
-      // /api/blocks/:bid/checklist/:idx. The `disabled` attribute is
-      // NOT set here so the box is clickable in the rendered page.
-      // If blockId is missing (shouldn't happen post-backfill) we
-      // disable the input — there's no server target to write back to.
-      const disabled = blockId == null ? " disabled" : "";
-      return (
-        `<li class="checklist-item${doneClass}">` +
-        `<label>` +
-        `<input type="checkbox" class="checklist-toggle"${blockAttr} data-item-idx="${i}"${checked}${disabled} />` +
-        `<span class="checklist-text">${md.renderInline(it.text)}</span>` +
-        `</label>` +
-        `</li>`
-      );
-    })
-    .join("");
-  return (
-    `<div class="checklist"${blockAttr} data-total="${total}" data-done="${doneCount}">` +
-    titleHtml +
-    descHtml +
-    `<div class="checklist-progress" data-pct="${pct}">` +
-    `<div class="checklist-progress-bar" style="width:${pct}%"></div>` +
-    `<div class="checklist-progress-text">${doneCount} / ${total}` +
-    (total > 0 ? ` <span>(${pct}%)</span>` : "") +
-    `</div>` +
-    `</div>` +
-    `<ul class="checklist-items">${items}</ul>` +
-    blockBadge(blockId) +
-    `</div>`
-  );
-}
-
 function renderChartGrid(jsonText: string, blockId: number | null = null): string {
   let items: unknown;
   try {
@@ -441,9 +336,6 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     }
     if (info === "images") {
       return renderImages(token.content, blockId) + "\n";
-    }
-    if (info === "checklist") {
-      return renderChecklist(token.content, md, blockId) + "\n";
     }
     if (info === "html-embed") {
       // Raw HTML for flexible content — richer tables, custom layouts,

@@ -4,7 +4,7 @@
 [![Node 20+](https://img.shields.io/badge/node-%E2%89%A520.12-brightgreen)](#requirements)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)](#tech-stack)
 
-**WikiKai** is a self-hosted **knowledge base + MCP server** — let an AI assistant (Claude Code, Claude Desktop, or any MCP-aware client) write, edit, and recall presentation-ready documents for you. Markdown pages with Mermaid diagrams, Chart.js graphs, interactive checklists, image galleries, and stat cards. One persistent, searchable place — not scattered across chat sessions.
+**WikiKai** is a self-hosted **knowledge base + MCP server** — let an AI assistant (Claude Code, Claude Desktop, or any MCP-aware client) write, edit, and recall presentation-ready documents for you. Markdown pages with Mermaid diagrams, Chart.js graphs, interactive checkboxes, image galleries, and stat cards. One persistent, searchable place — not scattered across chat sessions.
 
 ```
 ┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
@@ -29,7 +29,7 @@
 Working with an AI day-to-day, every useful answer ends up buried in a chat session you can't search later. WikiKai gives the AI a persistent home to write to:
 
 - **Doesn't get lost** — every doc lives in one searchable place, browsable in a sidebar
-- **Presentation-ready** — diagrams, charts, KPI cards, step cards, gallery, checklists — not just text walls
+- **Presentation-ready** — diagrams, charts, KPI cards, step cards, gallery, interactive checkboxes — not just text walls
 - **Re-editable** — every change is a version snapshot. Roll back, diff old vs new, prune history
 - **Addressable** — every rich block has a global `@N` id, so you can say "update @47" and the AI knows exactly what you mean
 - **Auditable** — opt-in prompt log records the verbatim request that produced each revision
@@ -47,12 +47,11 @@ Working with an AI day-to-day, every useful answer ends up buried in a chat sess
 | ` ```steps ` | Numbered step cards (markdown inline allowed inside `body`) |
 | ` ```images ` | Thumbnail gallery → click-to-lightbox + per-image size |
 | Plain `- [ ]` lists | **Interactive checkboxes** — write a GFM task list anywhere a markdown list goes; clicking a box writes back to the source (version-bumped + revision-snapshotted). The preferred form. |
-| ` ```checklist ` | Legacy titled progress-card form (JSON, gets an `@N` id). Kept for back-compat — new docs should prefer plain `- [ ]` above |
 | ` ```html-embed ` | Raw HTML for layouts markdown can't express — tables, SVG, `<details>`, custom CSS |
 
 Plus standard markdown with Shiki syntax highlighting for 30+ languages.
 
-**Click `@N` → menu, edit a block, persist checklist state** — every rich block is addressable and editable in two paces:
+**Click `@N` → menu, edit a block, persist checkbox state** — every rich block is addressable and editable in two paces:
 
 <p align="center">
   <img src="docs/screenshots/02-mermaid-block-menu.png" alt="Mermaid diagram with the @N block-badge menu open showing Copy and Edit actions" width="900" />
@@ -95,7 +94,7 @@ URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, ne
 
 **Images** — `add_image` (base64 in, content-addressed) · `get_image` (returns inline image content block)
 
-**Interaction** — `toggle_task` (flip a plain `- [ ]` / `- [x]` task on a page — the same code path the web UI uses when a user clicks a rendered checkbox) · `toggle_checklist_item` (legacy form for the `\`\`\`checklist` JSON fence)
+**Interaction** — `toggle_task` (flip a plain `- [ ]` / `- [x]` task on a page — the same code path the web UI uses when a user clicks a rendered checkbox)
 
 **Audit** — `get_prompt_log` (rolling list of user prompts that shaped a doc; mutation tools accept opt-in `user_prompt`)
 

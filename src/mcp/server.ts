@@ -69,7 +69,7 @@ const addPageShape = {
   content: z.string().describe(
     "Markdown body. Custom fences for richer content: ```mermaid (diagrams), ```chart / ```chart-grid (Chart.js), ```stats (KPI cards), ```steps (numbered step cards), ```images (thumbnail gallery from add_image src paths), ```html-embed (raw HTML for flexible tables, layouts, SVG, iframes, AND `<img>` tags using add_image src paths). " +
       "Each rendered fenced block is auto-assigned a stable global id and annotated in source as ```mermaid {@123}; you can refer to it by `@N` thereafter (e.g. 'update @123'). " +
-      "Interactive checkboxes: write a GFM task list — `- [ ] thing to do` / `- [x] done` inside any bulleted list. The UI renders real clickable checkboxes that write back to source on click (server-side toggle, version-bumped, FTS-reindexed). AI can drive the same toggle via the `toggle_task` tool — pass `page_id` + the 0-based task index (counted top-down across all `- [ ]` / `- [x]` lines on the page, skipping any inside fenced code). For a titled progress-card UI with a captioned list, the legacy ```checklist JSON fence still exists, paired with `toggle_checklist_item`. " +
+      "Interactive checkboxes: write a GFM task list — `- [ ] thing to do` / `- [x] done` inside any bulleted list. The UI renders real clickable checkboxes that write back to source on click (server-side toggle, version-bumped, FTS-reindexed). AI can drive the same toggle via the `toggle_task` tool — pass `page_id` + the 0-based task index (counted top-down across all `- [ ]` / `- [x]` lines on the page, skipping any inside fenced code). For checkboxes inside a styled table or custom HTML layout, drop `<input type=\"checkbox\">` markup inside an ```html-embed block — visual-only (no write-back), useful for status readouts. " +
       "Plain markdown tables ARE supported but do NOT receive an `@N` id — if a table needs to be referenceable, write it as a `<table>` inside an ```html-embed block instead. " +
       "Images: upload via `add_image` first, then embed the returned `src` in any of three ways: (a) plain markdown `![alt](/img/...)` — the most flexible, works in paragraphs, list items, AND markdown table cells; use this when the image is inline content. Optional sizing via the title slot — `![alt](src \"WxH\")` (e.g. `\"300x200\"`, `\"300x\"` width-only, `\"x200\"` height-only, or `\"caption w=300 h=200\"`); aspect ratio is always preserved. (b) Paste the `src` into an ```images fence for a thumbnail gallery with click-to-lightbox, or (c) `<img src='/img/...' />` inside an ```html-embed when the image is part of a custom HTML layout (flex row, `<details>`, custom width). All three surfaces are picked up by `read_page`'s `images_referenced` list. " +
       "See get_example for templates.",
@@ -143,13 +143,6 @@ const getPromptLogShape = {
   knowledge_id: z.number().int().positive(),
   limit: z.number().int().min(1).max(500).optional().describe("Default 100; max 500."),
   offset: z.number().int().min(0).optional(),
-};
-
-const toggleChecklistItemShape = {
-  block_id: z.number().int().positive().describe("The `@N` id of the target checklist fence"),
-  index: z.number().int().min(0).describe("0-based item index inside the checklist's `items` array"),
-  done: z.boolean().describe("New checked state"),
-  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
 
 const toggleTaskShape = {
@@ -539,9 +532,8 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
   );
 
   // ─── Interactive checkboxes ───
-  // Two surfaces with two tools — `toggle_task` is the simpler, more common
-  // case (plain GFM `- [ ]` task lists) and `toggle_checklist_item` is the
-  // legacy JSON-fence form kept for back-compat with existing docs.
+  // GFM-style `- [ ] item` / `- [x] item` task lists. Same code path
+  // the rendered UI uses when the user clicks a checkbox.
   server.registerTool(
     "toggle_task",
     {
@@ -550,24 +542,10 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
         "Flip a GFM-style task checkbox written as `- [ ] task` or `- [x] task` in a list. " +
         "Identifies the target by `page_id` + a 0-based `index` counted top-down across all such lines on the page (tasks inside fenced code blocks are skipped). " +
         "Writes the new `[ ]` / `[x]` marker back to the page source (bumps version, snapshots revision, reindexes FTS). The web UI calls this same endpoint when a user clicks a rendered checkbox. " +
-        "Use when the user says 'tick task 2 on page #19', 'mark the third checkbox done', or 'uncheck item 0'. " +
-        "This is the preferred form — plain markdown, works in any list, no JSON. For titled progress-card UI with a captioned list, see the legacy `toggle_checklist_item`.",
+        "Use when the user says 'tick task 2 on page #19', 'mark the third checkbox done', or 'uncheck item 0'.",
       inputSchema: toggleTaskShape,
     },
     async (input) => jsonContent(await handlers.toggle_task(input)),
-  );
-
-  server.registerTool(
-    "toggle_checklist_item",
-    {
-      title: "Toggle a checkbox inside a `checklist` fence (legacy)",
-      description:
-        "Flip the `done` state of one item inside a legacy `checklist` JSON fence (the titled progress-card variant with `@N` id). " +
-        "Locates the block by its global `@N` id, mutates `items[index].done`, writes the updated JSON back to the page source (bumps version, snapshots revision, reindexes FTS). " +
-        "Use when the doc uses the `checklist` fence (you'll see `@N` on the block); for plain `- [ ] item` markdown task lists, use `toggle_task` instead.",
-      inputSchema: toggleChecklistItemShape,
-    },
-    async (input) => jsonContent(await handlers.toggle_checklist_item(input)),
   );
 
   // ─── Prompt log ───

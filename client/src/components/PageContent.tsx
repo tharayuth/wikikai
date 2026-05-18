@@ -406,7 +406,7 @@ export function PageContent({ pageId, line, block }: Props) {
           // based on the host's language:
           //   - html-embed  → raw <img width=… height=… />
           //   - everything else → markdown `![alt](src "WxH")` (the size
-          //     slot is consumed by the image renderer; checklist / steps
+          //     slot is consumed by the image renderer; steps
           //     text run through renderInline so this works inside their
           //     JSON string values too).
           if (ctx.inFence) {
