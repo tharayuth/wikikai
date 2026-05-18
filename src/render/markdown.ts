@@ -380,38 +380,78 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
   };
 
   // ─── GFM task lists ───
-  // Find inline tokens that sit inside `<li><p>…` and whose first text
-  // child starts with `[ ]` or `[x]`. Strip the marker, prepend an
-  // <input type="checkbox"> with a page-wide 0-based index, and mark the
-  // parent <li> + <ul> so CSS can drop the bullet.
-  md.core.ruler.after("inline", "task-lists", (state) => {
+  // Walk tokens in source order and assign a single page-wide 0-based
+  // index to every clickable checkbox the page can produce. Two sources:
+  //   • GFM `- [ ]` / `- [x]` task-list items — rewritten in-place.
+  //   • `<input type="checkbox">` tags inside `html-embed` fences —
+  //     stamped with the same class + data-task-index so the click hook
+  //     can route them through the same toggle endpoint. We also strip
+  //     `disabled` so they become interactive.
+  // Order matches what PageStore.toggleTaskAtIndex walks server-side
+  // (line-by-line, skipping non-html-embed fences), so click → flip
+  // hits the correct source occurrence.
+  md.core.ruler.after("inline", "task-checkboxes", (state) => {
     const tokens = state.tokens;
-    let taskIndex = 0;
+    let idx = 0;
     for (let i = 0; i < tokens.length; i++) {
       const tok = tokens[i];
-      if (tok.type !== "inline") continue;
-      const prev1 = tokens[i - 1];
-      const prev2 = tokens[i - 2];
-      if (!prev1 || prev1.type !== "paragraph_open") continue;
-      if (!prev2 || prev2.type !== "list_item_open") continue;
-      const first = tok.children?.[0];
-      if (!first || first.type !== "text") continue;
-      const m = /^\[([ xX])\]\s+/.exec(first.content);
-      if (!m) continue;
-      const done = m[1].toLowerCase() === "x";
-      const idx = taskIndex++;
-      first.content = first.content.slice(m[0].length);
-      const checkbox = new state.Token("html_inline", "", 0);
-      checkbox.content = `<input type="checkbox" class="task-list-item-checkbox" data-task-index="${idx}"${done ? " checked" : ""}> `;
-      tok.children = [checkbox, ...(tok.children ?? [])];
-      prev2.attrJoin("class", "task-list-item");
-      // Walk back to the enclosing list opener and tag it too.
-      for (let j = i - 3; j >= 0; j--) {
-        const t = tokens[j];
-        if (t.type === "bullet_list_open" || t.type === "ordered_list_open") {
-          t.attrJoin("class", "contains-task-list");
-          break;
+
+      // ─── GFM task list item ───
+      if (tok.type === "inline") {
+        const prev1 = tokens[i - 1];
+        const prev2 = tokens[i - 2];
+        if (!prev1 || prev1.type !== "paragraph_open") continue;
+        if (!prev2 || prev2.type !== "list_item_open") continue;
+        const first = tok.children?.[0];
+        if (!first || first.type !== "text") continue;
+        const m = /^\[([ xX])\]\s+/.exec(first.content);
+        if (!m) continue;
+        const done = m[1].toLowerCase() === "x";
+        const myIdx = idx++;
+        first.content = first.content.slice(m[0].length);
+        const checkbox = new state.Token("html_inline", "", 0);
+        checkbox.content = `<input type="checkbox" class="task-list-item-checkbox" data-task-index="${myIdx}"${done ? " checked" : ""}> `;
+        tok.children = [checkbox, ...(tok.children ?? [])];
+        prev2.attrJoin("class", "task-list-item");
+        for (let j = i - 3; j >= 0; j--) {
+          const t = tokens[j];
+          if (t.type === "bullet_list_open" || t.type === "ordered_list_open") {
+            t.attrJoin("class", "contains-task-list");
+            break;
+          }
         }
+        continue;
+      }
+
+      // ─── html-embed fence — rewrite each <input type="checkbox"> ───
+      if (tok.type === "fence") {
+        const info = (tok.info || "").trim();
+        const lang = info.replace(/\{@\d+\}/, "").split(/\s+/)[0].toLowerCase();
+        if (lang !== "html-embed") continue;
+        tok.content = tok.content.replace(
+          /<input\b([^>]*)>/gi,
+          (full, raw: string) => {
+            // Only target checkboxes; leave text/number/etc. inputs alone.
+            if (!/\btype\s*=\s*['"]checkbox['"]/i.test(raw)) return full;
+            const checked = /\bchecked\b/i.test(raw);
+            // Keep author-set attrs except the ones we manage.
+            const cleaned = raw
+              .replace(/\btype\s*=\s*['"]checkbox['"]/i, "")
+              .replace(/\bchecked\b/gi, "")
+              .replace(/\bdisabled\b/gi, "")
+              .replace(/\bdata-task-index\s*=\s*['"][^'"]*['"]/gi, "")
+              .replace(/\bclass\s*=\s*['"]([^'"]*)['"]/i, (_m, cls) => {
+                const merged = `${cls} task-list-item-checkbox`.trim();
+                return `class="${merged}"`;
+              })
+              .replace(/\s+/g, " ")
+              .trim();
+            const hasClass = /\bclass\s*=/i.test(cleaned);
+            const classAttr = hasClass ? "" : ` class="task-list-item-checkbox"`;
+            const myIdx = idx++;
+            return `<input type="checkbox"${classAttr} data-task-index="${myIdx}"${checked ? " checked" : ""}${cleaned ? " " + cleaned : ""}>`;
+          },
+        );
       }
     }
     return false;

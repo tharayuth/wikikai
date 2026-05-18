@@ -49,6 +49,19 @@ describe("renderMarkdown", () => {
     // Indices keep counting across separate lists
   });
 
+  it("rewrites <input type=checkbox> inside html-embed with shared index + strips disabled", async () => {
+    const md =
+      "- [ ] one\n\n```html-embed\n<table><tr><td><input type=\"checkbox\" checked disabled></td></tr><tr><td><input type=\"checkbox\" disabled></td></tr></table>\n```\n\n- [x] two";
+    const out = await renderMarkdown(md);
+    // GFM tasks get indices 0 and 3 (with html-embed checkboxes taking 1, 2)
+    expect(out).toMatch(/data-task-index="0"[^>]*>\s*one/);
+    expect(out).toMatch(/data-task-index="1"[^>]*checked/);
+    expect(out).toMatch(/data-task-index="2"[^>]*>(?![^<]*checked)/);
+    expect(out).toMatch(/data-task-index="3"[^>]*checked[^>]*>\s*two/);
+    // disabled is gone everywhere
+    expect(out).not.toMatch(/disabled/);
+  });
+
   it("does not treat fenced code block lines as task items", async () => {
     const md = "```md\n- [ ] looks like a task but isn't\n```\n\n- [x] real task";
     const out = await renderMarkdown(md);

@@ -554,11 +554,13 @@ export class PageStore {
   }
 
   /**
-   * Flip the Nth GFM-style task checkbox (`- [ ]` / `- [x]`) in a page's
-   * source. Index is 0-based and counts only list items at the start of
-   * a line, outside any fenced code block. Mutates the page, bumps
-   * version + revision + FTS like other edits. Throws when the index
-   * is out of range.
+   * Flip the Nth interactive checkbox in a page's source. Two kinds are
+   * counted together, in document order:
+   *   • GFM `- [ ]` / `- [x]` task-list items at the start of a line.
+   *   • `<input type="checkbox" ...>` tags inside an `html-embed` fence.
+   * Any other fenced code block is skipped so a sample of `- [ ]` in a
+   * `md` fence doesn't get its source flipped. Mutates the page, bumps
+   * version + revision + FTS like other edits. Throws on out-of-range.
    */
   toggleTaskAtIndex(
     pageId: number,
@@ -569,24 +571,33 @@ export class PageStore {
     const content = this.readContent(meta.knowledge_id, pageId);
     const lines = content.split("\n");
     const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
+    const htmlCheckboxRe = /<input\b([^>]*)>/gi;
+    type GfmTarget = { kind: "gfm"; line: number; match: RegExpExecArray };
+    type HtmlTarget = {
+      kind: "html";
+      line: number;
+      offset: number;
+      raw: string;
+      attrs: string;
+    };
     let inFence = false;
+    let fenceLang = "";
     let fenceMarker = "";
     let count = 0;
-    let targetLine = -1;
-    let targetMatch: RegExpExecArray | null = null;
-    for (let i = 0; i < lines.length; i++) {
+    let target: GfmTarget | HtmlTarget | null = null;
+    for (let i = 0; i < lines.length && !target; i++) {
       if (!inFence) {
-        const open = /^(\s*)(```+)/.exec(lines[i]);
+        const open = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)?/.exec(lines[i]);
         if (open) {
           inFence = true;
           fenceMarker = open[2];
+          fenceLang = (open[3] ?? "").toLowerCase();
           continue;
         }
         const m = taskRe.exec(lines[i]);
         if (!m) continue;
         if (count === index) {
-          targetLine = i;
-          targetMatch = m;
+          target = { kind: "gfm", line: i, match: m };
           break;
         }
         count++;
@@ -594,16 +605,57 @@ export class PageStore {
         const closeRe = new RegExp(`^\\s*${fenceMarker}+\\s*$`);
         if (closeRe.test(lines[i])) {
           inFence = false;
+          fenceLang = "";
           fenceMarker = "";
+          continue;
+        }
+        if (fenceLang !== "html-embed") continue;
+        htmlCheckboxRe.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = htmlCheckboxRe.exec(lines[i])) !== null) {
+          const attrs = m[1] ?? "";
+          if (!/\btype\s*=\s*['"]checkbox['"]/i.test(attrs)) continue;
+          if (count === index) {
+            target = {
+              kind: "html",
+              line: i,
+              offset: m.index,
+              raw: m[0],
+              attrs,
+            };
+            break;
+          }
+          count++;
         }
       }
     }
-    if (targetLine < 0 || !targetMatch) {
+    if (!target) {
       throw new Error(`task index ${index} not found on page #${pageId}`);
     }
-    const wasChecked = targetMatch[2].toLowerCase() === "x";
-    const newMark = wasChecked ? " " : "x";
-    lines[targetLine] = lines[targetLine].replace(taskRe, `$1[${newMark}]`);
+
+    let done: boolean;
+    if (target.kind === "gfm") {
+      const wasChecked = target.match[2].toLowerCase() === "x";
+      done = !wasChecked;
+      const newMark = wasChecked ? " " : "x";
+      lines[target.line] = lines[target.line].replace(
+        taskRe,
+        `$1[${newMark}]`,
+      );
+    } else {
+      const wasChecked = /\bchecked\b/i.test(target.attrs);
+      done = !wasChecked;
+      const newAttrs = wasChecked
+        ? target.attrs.replace(/\s*\bchecked\b\s*/i, " ").replace(/\s+/g, " ")
+        : `${target.attrs.trimEnd()} checked`;
+      const flipped = `<input${newAttrs.startsWith(" ") ? "" : " "}${newAttrs.trim()}>`;
+      const line = lines[target.line];
+      lines[target.line] =
+        line.substring(0, target.offset) +
+        flipped +
+        line.substring(target.offset + target.raw.length);
+    }
+
     const next = this.writeContent(meta.knowledge_id, pageId, lines.join("\n"));
     const r = this.bumpVersion(pageId);
     const now = new Date().toISOString();
@@ -618,7 +670,7 @@ export class PageStore {
       now,
     );
     this.bumpKnowledge(meta.knowledge_id);
-    return { index, done: !wasChecked, version: r.version, updated_at: now };
+    return { index, done, version: r.version, updated_at: now };
   }
 
   /**
