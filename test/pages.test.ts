@@ -308,6 +308,47 @@ describe("PageStore", () => {
 
   // ───────── Cascade delete ─────────
 
+  describe("toggleTaskAtIndex", () => {
+    it("flips GFM `- [ ]` and `- [x]` markers", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "tasks",
+        content: "- [ ] one\n- [x] two\n- [ ] three",
+      });
+      pages.toggleTaskAtIndex(p.id, 0);
+      pages.toggleTaskAtIndex(p.id, 1);
+      const after = pages.getMetadata(p.id) && fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      expect(after).toBe("- [x] one\n- [ ] two\n- [ ] three");
+    });
+
+    it("flips <input type=checkbox> inside html-embed, round-trips both ways", () => {
+      const initial =
+        "- [ ] before\n\n```html-embed\n<input type=\"checkbox\" checked disabled>\n<input type=\"checkbox\" disabled>\n```\n\n- [x] after";
+      const p = pages.add({ knowledge_id: kid, title: "mix", content: initial });
+      // Index 0 = GFM "before", 1 = html "checked", 2 = html unchecked, 3 = GFM "after"
+      pages.toggleTaskAtIndex(p.id, 1); // uncheck the checked html
+      const fp = path.join(tmpDir, String(kid), `${p.id}.md`);
+      let raw = fs.readFileSync(fp, "utf8");
+      expect(raw).toContain('<input type="checkbox" disabled>');
+      expect(raw).not.toContain('<input type="checkbox" checked disabled>');
+      // Toggle back — re-check it; output must still be a valid <input> tag
+      pages.toggleTaskAtIndex(p.id, 1);
+      raw = fs.readFileSync(fp, "utf8");
+      const lines = raw.split("\n");
+      // Two html lines remain valid <input ...> tags
+      const inputs = lines.filter((l) => l.startsWith("<input"));
+      expect(inputs).toHaveLength(2);
+      for (const l of inputs) {
+        expect(l).toMatch(/^<input type="checkbox"/);
+      }
+      // The first html row is checked again
+      expect(inputs[0]).toMatch(/\bchecked\b/);
+    });
+  });
+
   describe("cascade", () => {
     it("page rows are removed when knowledge is deleted (FK CASCADE)", () => {
       pages.add({ knowledge_id: kid, title: "A", content: "a" });

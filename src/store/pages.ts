@@ -645,10 +645,16 @@ export class PageStore {
     } else {
       const wasChecked = /\bchecked\b/i.test(target.attrs);
       done = !wasChecked;
-      const newAttrs = wasChecked
-        ? target.attrs.replace(/\s*\bchecked\b\s*/i, " ").replace(/\s+/g, " ")
-        : `${target.attrs.trimEnd()} checked`;
-      const flipped = `<input${newAttrs.startsWith(" ") ? "" : " "}${newAttrs.trim()}>`;
+      const stripped = target.attrs
+        .replace(/\s*\bchecked\b\s*/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const nextAttrs = wasChecked
+        ? stripped
+        : stripped
+          ? `${stripped} checked`
+          : "checked";
+      const flipped = `<input ${nextAttrs}>`;
       const line = lines[target.line];
       lines[target.line] =
         line.substring(0, target.offset) +
