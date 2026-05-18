@@ -1914,7 +1914,7 @@ a:hover { text-decoration: underline; }
   position: relative;
   padding-left: 4px;
 }
-.markdown-body li.task-list-item > input.task-list-item-checkbox {
+.markdown-body input.task-list-item-checkbox {
   appearance: none;
   -webkit-appearance: none;
   width: 14px;
@@ -1929,14 +1929,14 @@ a:hover { text-decoration: underline; }
   transition: background .12s, border-color .12s;
   flex-shrink: 0;
 }
-.markdown-body li.task-list-item > input.task-list-item-checkbox:hover {
+.markdown-body input.task-list-item-checkbox:hover {
   border-color: var(--accent);
 }
-.markdown-body li.task-list-item > input.task-list-item-checkbox:checked {
+.markdown-body input.task-list-item-checkbox:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
-.markdown-body li.task-list-item > input.task-list-item-checkbox:checked::after {
+.markdown-body input.task-list-item-checkbox:checked::after {
   content: "";
   position: absolute;
   top: 1px;
