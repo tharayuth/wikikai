@@ -104,6 +104,7 @@ export const portalApi = createApi({
     "Knowledge",
     "KnowledgeList",
     "Page",
+    "PageRendered",
     "Revisions",
     "Projects",
     "PromptLog",
@@ -206,7 +207,9 @@ export const portalApi = createApi({
         params: version ? { version } : undefined,
         responseHandler: (r) => r.text(),
       }),
-      providesTags: (_r, _e, arg) => [{ type: "Page", id: arg.pageId }],
+      providesTags: (_r, _e, arg) => [
+        { type: "PageRendered", id: arg.pageId },
+      ],
     }),
 
     listRevisions: builder.query<
@@ -257,6 +260,7 @@ export const portalApi = createApi({
         result
           ? [
               { type: "Page", id: arg.page_id },
+              { type: "PageRendered", id: arg.page_id },
               { type: "Revisions", id: arg.page_id },
               { type: "Knowledge", id: result.knowledge_id },
               { type: "KnowledgeList", id: "LIST" },
@@ -269,6 +273,7 @@ export const portalApi = createApi({
       query: ({ page_id }) => ({ url: `pages/${page_id}`, method: "DELETE" }),
       invalidatesTags: (_r, _e, arg) => [
         { type: "Page", id: arg.page_id },
+        { type: "PageRendered", id: arg.page_id },
         { type: "Knowledge", id: arg.knowledge_id },
         { type: "KnowledgeList", id: "LIST" },
       ],
@@ -293,10 +298,12 @@ export const portalApi = createApi({
         url: `pages/${pageId}/tasks/${index}/toggle`,
         method: "POST",
       }),
-      // Refresh the version pill row but NOT the rendered article tag —
-      // re-rendering the article would yank the DOM + scroll-jump on
-      // every checkbox click.
+      // Refresh page metadata (so currentVersion + the active version
+      // pill move forward) and the revision pill list — but NOT
+      // PageRendered. Refetching the rendered HTML would yank the
+      // article DOM and scroll-jump on every checkbox click.
       invalidatesTags: (_r, _e, arg) => [
+        { type: "Page", id: arg.pageId },
         { type: "Revisions", id: arg.pageId },
       ],
     }),

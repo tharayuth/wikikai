@@ -109,6 +109,8 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
                   { type: "KnowledgeList", id: "LIST" },
                   "Knowledge",
                   "Page",
+                  "PageRendered",
+                  "Revisions",
                 ]),
               );
               dispatch(showToast("Refreshed"));
