@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  portalApi,
   useDeletePageMutation,
   useGetPageQuery,
   useGetPageRenderedQuery,
@@ -75,7 +76,12 @@ interface Props {
 }
 
 export function PageContent({ pageId, line, block }: Props) {
-  const meta = useGetPageQuery(pageId);
+  // refetchOnMountOrArgChange: re-check the page's version from the server
+  // whenever the user navigates to a (possibly cached) page. If the server's
+  // version moved on (another session / AI edited it), the version-watcher
+  // effect below invalidates the rendered + revisions cache so the article
+  // and pill row catch up.
+  const meta = useGetPageQuery(pageId, { refetchOnMountOrArgChange: true });
   const revisions = useListRevisionsQuery(pageId);
   const [viewVersion, setViewVersion] = useState<number | null>(null);
   const rendered = useGetPageRenderedQuery({
@@ -113,6 +119,26 @@ export function PageContent({ pageId, line, block }: Props) {
     setViewVersion(null);
     setEditing(false);
   }, [pageId]);
+
+  // Per-page snapshot of the version we've seen so far. If a navigation
+  // brings up a page whose server version is now newer than what we had
+  // cached, invalidate the rendered HTML + revisions list for that pid so
+  // the article and the version pills both catch up.
+  const lastSeenVersionRef = useRef<Map<number, number>>(new Map());
+  useEffect(() => {
+    if (!meta.data) return;
+    const v = meta.data.version;
+    const prev = lastSeenVersionRef.current.get(pageId);
+    lastSeenVersionRef.current.set(pageId, v);
+    if (prev != null && prev !== v) {
+      dispatch(
+        portalApi.util.invalidateTags([
+          { type: "PageRendered", id: pageId },
+          { type: "Revisions", id: pageId },
+        ]),
+      );
+    }
+  }, [pageId, meta.data?.version, dispatch]);
 
   // Block-badge "Edit this block" → enter edit mode + scroll editor to
   // the line of the `{@N}` annotation.
