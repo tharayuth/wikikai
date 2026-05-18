@@ -1146,7 +1146,7 @@ export class PageStore {
 
   /** Maximum number of revision snapshots kept per page. Any older rows are
    *  pruned automatically after each save. */
-  static readonly MAX_REVISIONS_PER_PAGE = 5;
+  static readonly MAX_REVISIONS_PER_PAGE = 10;
 
   /**
    * Insert a snapshot of the page state at the given version. Idempotent on

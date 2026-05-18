@@ -393,6 +393,12 @@ export function PageContent({ pageId, line, block }: Props) {
           <span>
             Viewing <strong>v{viewVersion}</strong> (older) — the latest is v{currentVersion}
           </span>
+          <span
+            className="page-revision-when"
+            title={new Date(activeTimestamp).toLocaleString()}
+          >
+            saved {new Date(activeTimestamp).toLocaleString()}
+          </span>
           <button
             type="button"
             className="page-revision-diff-btn"
