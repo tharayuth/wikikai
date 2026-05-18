@@ -312,14 +312,26 @@ export function PageContent({ pageId, line, block }: Props) {
             </button>
           </>
         ) : (
-          <button
-            className="page-edit-btn"
-            onClick={onStartEdit}
-            title={`Edit page #${pageId} in place`}
-            disabled={viewVersion != null && viewVersion !== currentVersion}
-          >
-            ✎ Edit page
-          </button>
+          <>
+            <button
+              className="page-edit-btn"
+              onClick={onStartEdit}
+              title={`Edit page #${pageId} in place`}
+              disabled={viewVersion != null && viewVersion !== currentVersion}
+            >
+              ✎ Edit page
+            </button>
+            {viewVersion != null && viewVersion !== currentVersion && (
+              <button
+                type="button"
+                className="page-version-latest"
+                onClick={() => setViewVersion(null)}
+                title={`Back to latest version (v${currentVersion})`}
+              >
+                → latest
+              </button>
+            )}
+          </>
         )}
 
         <div className="page-actions">
@@ -352,16 +364,6 @@ export function PageContent({ pageId, line, block }: Props) {
                   {r.version}
                 </button>
               ))}
-              {viewVersion != null && viewVersion !== currentVersion && (
-                <button
-                  type="button"
-                  className="page-version-latest"
-                  onClick={() => setViewVersion(null)}
-                  title="Back to latest version"
-                >
-                  → latest
-                </button>
-              )}
             </div>
           )}
           {!editing && (
