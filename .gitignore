@@ -5,6 +5,7 @@ node_modules/
 dist/
 client/dist/
 coverage/
+logs/
 
 # User data (SQLite + raw markdown lives here at runtime)
 data/
