@@ -750,74 +750,126 @@ Colors: \`purple\` · \`blue\` · \`green\` · \`amber\` · \`red\` · \`cyan\`.
   "Stat cards (KPI numbers) + Step cards (numbered sequence)",
 );
 
-// ─── Page 9: Checklist ───────────────────────────────────────────
+// ─── Page 9: Interactive checkboxes ──────────────────────────────
 addPage(
-  "9. Checklist — actually clickable",
-  `# ✅ Interactive checklists
+  "9. Interactive checkboxes",
+  `# ✅ Interactive checkboxes
 
-A todo list where ticking a box **really saves** — the state persists across reloads. Good for release checklists, prep lists, onboarding tasks.
+Click a box, the page **really saves** — state persists across reloads. Same path the AI uses when you say "tick task 2". Good for release lists, prep, onboarding, QA, anything you'd write as a todo.
 
-## A simple list
+## 1. Plain markdown — the simple way
+
+Write a GFM task list anywhere a normal markdown list would go. Each \`- [ ]\` becomes a clickable checkbox.
+
+- [x] Tests green on main
+- [ ] Docs updated
+- [ ] Stakeholder sign-off
+- [ ] Database backup taken
+
+> 💡 **Click any box above** — the strikethrough flips and the source is saved. Reload the page; state is still there.
+
+### Inline formatting works
+
+- [x] Clone the repo: \`git clone https://github.com/...\`
+- [x] Install — \`npm install\` (takes ~30 seconds)
+- [ ] Read the **README.md** first
+- [ ] Skim the [contribution guide](https://github.com/tharayuth/wikikai)
+
+### Nested lists work too
+
+- [ ] Launch prep
+  - [x] Smoke tests
+  - [ ] Final review
+  - [ ] Announce on Slack
+- [ ] Post-launch
+  - [ ] Watch dashboards 24h
+  - [ ] Blog post
+
+## 2. Checkboxes inside a table
+
+Markdown table cells don't auto-render \`[ ]\` as a clickable box (the GFM task-list rule only fires inside list items). For an interactive checkbox **inside a table**, drop it into an \`html-embed\`:
+
+\`\`\`html-embed
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="background:#eef0ff;color:#4f46e5;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #6366f1;">Step</th>
+      <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #6366f1;width:90px;">Done</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #6366f1;">Owner</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td style="padding:6px 12px;">Cut release branch</td><td style="text-align:center;"><input type="checkbox" checked disabled></td><td style="padding:6px 12px;">DevOps</td></tr>
+    <tr><td style="padding:6px 12px;">Build & tag</td><td style="text-align:center;"><input type="checkbox" checked disabled></td><td style="padding:6px 12px;">CI</td></tr>
+    <tr><td style="padding:6px 12px;">Smoke test staging</td><td style="text-align:center;"><input type="checkbox" disabled></td><td style="padding:6px 12px;">QA</td></tr>
+    <tr><td style="padding:6px 12px;">Roll forward production</td><td style="text-align:center;"><input type="checkbox" disabled></td><td style="padding:6px 12px;">Release manager</td></tr>
+  </tbody>
+</table>
+\`\`\`
+
+> ⚠️ \`<input type="checkbox">\` inside \`html-embed\` is **visual only** (we mark it \`disabled\` here so the cursor is honest). It's perfect for status reports / readouts where the table layout matters. For real clickable saved state, use the plain markdown style above.
+
+## 3. Checkboxes inside any HTML layout
+
+Same html-embed trick works for gradient cards, sidebars, or any custom layout:
+
+\`\`\`html-embed
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+  <div style="background:#ecfdf5;border:1px solid #86efac;border-left:4px solid #10b981;border-radius:8px;padding:12px 14px;">
+    <div style="font-weight:700;color:#065f46;margin-bottom:6px;">🟢 Shipped</div>
+    <div style="font-size:13px;line-height:1.7;color:#1c1c1b;">
+      <div><input type="checkbox" checked disabled> Onboarding redesign</div>
+      <div><input type="checkbox" checked disabled> i18n round 1</div>
+    </div>
+  </div>
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:8px;padding:12px 14px;">
+    <div style="font-weight:700;color:#92400e;margin-bottom:6px;">🟡 In flight</div>
+    <div style="font-size:13px;line-height:1.7;color:#1c1c1b;">
+      <div><input type="checkbox" disabled> Search ranking v2</div>
+      <div><input type="checkbox" disabled> Image OCR</div>
+    </div>
+  </div>
+  <div style="background:#eff6ff;border:1px solid #93c5fd;border-left:4px solid #3b82f6;border-radius:8px;padding:12px 14px;">
+    <div style="font-weight:700;color:#1e3a8a;margin-bottom:6px;">🔵 Backlog</div>
+    <div style="font-size:13px;line-height:1.7;color:#1c1c1b;">
+      <div><input type="checkbox" disabled> Mobile sidebar</div>
+      <div><input type="checkbox" disabled> Multi-user auth</div>
+    </div>
+  </div>
+</div>
+\`\`\`
+
+## 4. Legacy — \`\`\`checklist fence
+
+The original titled progress-card form is still supported for documents that already use it. New docs should prefer the simpler \`- [ ]\` style above; this one is here for back-compat:
 
 \`\`\`checklist
 {
-  "title": "Pre-deploy checklist",
-  "description": "Everything must be checked before pushing the button",
+  "title": "Legacy form (still works)",
+  "description": "Has a title, a progress bar, and \`@N\` block id — use when those matter",
   "items": [
-    { "text": "Tests green on main", "done": true },
-    { "text": "Docs updated", "done": false },
-    { "text": "Stakeholder sign-off", "done": false },
-    { "text": "Database backup taken", "done": false }
+    { "text": "Item one", "done": true },
+    { "text": "Item two", "done": false }
   ]
 }
 \`\`\`
-
-> 💡 **Tick a box** — the strikethrough appears immediately and the change is written to the source. Reload the page; the state is still there.
-
-## Inline markdown in items
-
-\`\`\`checklist
-{
-  "title": "Fresh project setup",
-  "items": [
-    { "text": "Clone the repo: \`git clone https://github.com/...\`", "done": true },
-    { "text": "Install — \`npm install\` (takes ~30 seconds)", "done": true },
-    { "text": "Read the **README.md** first", "done": false },
-    { "text": "Skim the [contribution guide](#)", "done": false }
-  ]
-}
-\`\`\`
-
-## Images inside items
-
-\`\`\`checklist
-{
-  "title": "Visual QA review",
-  "description": "Check the design team's screenshots before sign-off",
-  "items": [
-    { "text": "Home page hero", "done": false },
-    { "text": "Login flow steps", "done": false },
-    { "text": "Mobile responsive layout", "done": false }
-  ]
-}
-\`\`\`
-
-(Add \`![alt](/img/...)\` inside any item's \`text\` to embed an icon or thumbnail.)
 
 ## Ask the AI
 
-> "Six-item checklist to prep tomorrow's standup"
+> "Six-item checklist to prep tomorrow's standup" — AI will write a \`- [ ]\` list
 
 > "Release v2.5 checklist: tests, changelog, blog post, social-media post, deploy staging, deploy prod, monitor"
 
-> "Tick @118 item 3 — done" (the AI will toggle it)
+> "Tick task 3 on this page — done" (the AI calls \`toggle_task\` with index 3)
+
+> "Mark the 'docs updated' line off" — AI finds the line and flips it
 
 ## Tips
 
-- The progress bar auto-computes \`done / total\` across the items
-- Every toggle is a **revision** — see when items got checked via the version dropdown
-- AI can tick boxes too: "@118 item 0 is done"`,
-  "Interactive todo lists with progress bar + inline markdown + images per item",
+- Every toggle is a **revision** — see when items got checked via the version dropdown on the page header
+- AI can flip boxes via \`toggle_task({ page_id, index })\` — index is the 0-based position of \`- [ ]\` / \`- [x]\` lines on the page (top-down, skipping any inside fenced code)
+- Tasks inside fenced code blocks are intentionally NOT rendered as checkboxes — you can show literal \`- [ ]\` examples in a \`\`\`markdown block without them becoming clickable`,
+  "Interactive `- [ ]` checkboxes — plain · in tables (html-embed) · in cards · legacy fence",
 );
 
 // ─── Page 10: Images ─────────────────────────────────────────────

@@ -383,6 +383,23 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Flip the Nth GFM task checkbox (- [ ] / - [x]) in a page's source.
+  // Index is 0-based, page-wide, in document order, skipping any task
+  // syntax inside fenced code blocks.
+  app.post("/api/pages/:pid/tasks/:index/toggle", (req, res, next) => {
+    try {
+      const pid = parseId(req.params.pid);
+      const idx = Number(req.params.index);
+      if (!Number.isInteger(idx) || idx < 0) {
+        res.status(400).json({ error: "invalid task index" });
+        return;
+      }
+      res.json(opts.pages.toggleTaskAtIndex(pid, idx));
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // ─── Search ───
   app.get("/api/search", async (req, res, next) => {
     try {

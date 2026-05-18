@@ -274,6 +274,19 @@ export const portalApi = createApi({
       invalidatesTags: (_r, _e, pid) => [{ type: "Page", id: pid }],
     }),
 
+    toggleTaskAtIndex: builder.mutation<
+      { index: number; done: boolean; version: number; updated_at: string },
+      { pageId: number; index: number }
+    >({
+      query: ({ pageId, index }) => ({
+        url: `pages/${pageId}/tasks/${index}/toggle`,
+        method: "POST",
+      }),
+      // Same rationale as toggleChecklistItem — optimistic DOM flip is
+      // enough; refetch would yank the article and scroll-jump.
+      invalidatesTags: [],
+    }),
+
     toggleChecklistItem: builder.mutation<
       {
         page_id: number;
@@ -338,4 +351,5 @@ export const {
   useRemoveProjectMutation,
   useGetPromptLogQuery,
   useToggleChecklistItemMutation,
+  useToggleTaskAtIndexMutation,
 } = portalApi;

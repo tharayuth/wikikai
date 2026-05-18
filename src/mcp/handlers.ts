@@ -218,6 +218,18 @@ export const ToggleChecklistItemSchema = z.object({
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
+export const ToggleTaskSchema = z.object({
+  page_id: z.number().int().positive(),
+  index: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      "0-based index of the `- [ ]` / `- [x]` task on the page, counted top-down across all lists, ignoring tasks that sit inside fenced code blocks.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
 export const SearchSchema = z.object({
   query: z
     .string()
@@ -355,6 +367,7 @@ export type ToolInputs = {
   get_example: z.infer<typeof GetExampleSchema>;
   get_prompt_log: z.infer<typeof GetPromptLogSchema>;
   toggle_checklist_item: z.infer<typeof ToggleChecklistItemSchema>;
+  toggle_task: z.infer<typeof ToggleTaskSchema>;
 };
 
 export interface ToolHandlers {
@@ -572,6 +585,16 @@ export interface ToolHandlers {
     index: number;
     done: boolean;
     item_text: string;
+    url: string;
+  }>;
+
+  toggle_task(input: ToolInputs["toggle_task"]): Promise<{
+    page_id: number;
+    knowledge_id: number;
+    index: number;
+    done: boolean;
+    version: number;
+    updated_at: string;
     url: string;
   }>;
 }
@@ -1109,6 +1132,29 @@ export function buildToolHandlers(
       return {
         ...r,
         url: urlFor(ctx, r.knowledge_id, r.page_id),
+      };
+    },
+
+    async toggle_task(input) {
+      const parsed = ToggleTaskSchema.parse(input);
+      const meta = pages.getMetadata(parsed.page_id);
+      if (!meta) throw new Error(`page #${parsed.page_id} not found`);
+      const r = pages.toggleTaskAtIndex(parsed.page_id, parsed.index);
+      logIf(
+        "toggle_task",
+        parsed.user_prompt,
+        meta.knowledge_id,
+        parsed.page_id,
+        r.version,
+      );
+      return {
+        page_id: parsed.page_id,
+        knowledge_id: meta.knowledge_id,
+        index: r.index,
+        done: r.done,
+        version: r.version,
+        updated_at: r.updated_at,
+        url: urlFor(ctx, meta.knowledge_id, parsed.page_id),
       };
     },
   };

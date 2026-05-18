@@ -268,6 +268,16 @@ export function PageContent({ pageId, line, block }: Props) {
         >
           #{pageId}
         </button>
+        {!editing && (
+          <button
+            className="page-edit-btn"
+            onClick={onStartEdit}
+            title={`Edit page #${pageId} in place`}
+            disabled={viewVersion != null && viewVersion !== currentVersion}
+          >
+            ✎ Edit page
+          </button>
+        )}
         <span className="page-lines">{meta.data.total_lines} lines</span>
 
         {revList.length > 0 && (
@@ -303,20 +313,6 @@ export function PageContent({ pageId, line, block }: Props) {
                 → latest
               </button>
             )}
-            <span className="page-versions-sep" aria-hidden />
-            <button
-              type="button"
-              className="page-version-prune"
-              onClick={onPruneRevisions}
-              disabled={pruneState.isLoading || revList.length <= 2}
-              title={
-                revList.length <= 2
-                  ? "≤ 2 revisions already — nothing to prune"
-                  : `Delete old revisions, keep the latest 2 versions`
-              }
-            >
-              {pruneState.isLoading ? "Pruning…" : "Delete revisions"}
-            </button>
           </div>
         )}
 
@@ -354,11 +350,16 @@ export function PageContent({ pageId, line, block }: Props) {
           ) : (
             <>
               <button
-                onClick={onStartEdit}
-                title={`Edit raw markdown of page #${pageId} in place`}
-                disabled={viewVersion != null && viewVersion !== currentVersion}
+                className="page-prune-btn"
+                onClick={onPruneRevisions}
+                disabled={pruneState.isLoading || revList.length <= 2}
+                title={
+                  revList.length <= 2
+                    ? "≤ 2 revisions already — nothing to prune"
+                    : `Delete old revisions, keep the latest 2 versions`
+                }
               >
-                Edit raw
+                {pruneState.isLoading ? "Pruning…" : "Delete revisions"}
               </button>
               <button className="danger" onClick={onDelete} title="Delete this page">
                 Delete page

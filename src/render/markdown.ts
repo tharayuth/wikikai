@@ -487,6 +487,44 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       : self.renderToken(tokens, idx, options);
   };
 
+  // ─── GFM task lists ───
+  // Find inline tokens that sit inside `<li><p>…` and whose first text
+  // child starts with `[ ]` or `[x]`. Strip the marker, prepend an
+  // <input type="checkbox"> with a page-wide 0-based index, and mark the
+  // parent <li> + <ul> so CSS can drop the bullet.
+  md.core.ruler.after("inline", "task-lists", (state) => {
+    const tokens = state.tokens;
+    let taskIndex = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (tok.type !== "inline") continue;
+      const prev1 = tokens[i - 1];
+      const prev2 = tokens[i - 2];
+      if (!prev1 || prev1.type !== "paragraph_open") continue;
+      if (!prev2 || prev2.type !== "list_item_open") continue;
+      const first = tok.children?.[0];
+      if (!first || first.type !== "text") continue;
+      const m = /^\[([ xX])\]\s+/.exec(first.content);
+      if (!m) continue;
+      const done = m[1].toLowerCase() === "x";
+      const idx = taskIndex++;
+      first.content = first.content.slice(m[0].length);
+      const checkbox = new state.Token("html_inline", "", 0);
+      checkbox.content = `<input type="checkbox" class="task-list-item-checkbox" data-task-index="${idx}"${done ? " checked" : ""}> `;
+      tok.children = [checkbox, ...(tok.children ?? [])];
+      prev2.attrJoin("class", "task-list-item");
+      // Walk back to the enclosing list opener and tag it too.
+      for (let j = i - 3; j >= 0; j--) {
+        const t = tokens[j];
+        if (t.type === "bullet_list_open" || t.type === "ordered_list_open") {
+          t.attrJoin("class", "contains-task-list");
+          break;
+        }
+      }
+    }
+    return false;
+  });
+
   return md;
 }
 

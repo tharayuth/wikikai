@@ -9,9 +9,9 @@
 ```
 ┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
 │                               │  HTTP   │  /mcp        ← MCP tools         │
-│  23 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
+│  24 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
 │  read_page, edit_section,     │         │  /           ← React SPA         │
-│  add_image, toggle_checklist, │         │  /mermaid/.. ← fullscreen viewer │
+│  add_image, toggle_task,      │         │  /mermaid/.. ← fullscreen viewer │
 │  get_prompt_log, search, …    │         │  /chart/..   ← fullscreen viewer │
 └───────────────────────────────┘         │  /img/<hash> ← image serving     │
                                           │                                  │
@@ -46,7 +46,8 @@ Working with an AI day-to-day, every useful answer ends up buried in a chat sess
 | ` ```stats ` | Inline KPI card row with semantic colors |
 | ` ```steps ` | Numbered step cards (markdown inline allowed inside `body`) |
 | ` ```images ` | Thumbnail gallery → click-to-lightbox + per-image size |
-| ` ```checklist ` | **Interactive todo** — clicking the checkbox writes back to source (version-bumped + revision-snapshotted) |
+| Plain `- [ ]` lists | **Interactive checkboxes** — write a GFM task list anywhere a markdown list goes; clicking a box writes back to the source (version-bumped + revision-snapshotted). The preferred form. |
+| ` ```checklist ` | Legacy titled progress-card form (JSON, gets an `@N` id). Kept for back-compat — new docs should prefer plain `- [ ]` above |
 | ` ```html-embed ` | Raw HTML for layouts markdown can't express — tables, SVG, `<details>`, custom CSS |
 
 Plus standard markdown with Shiki syntax highlighting for 30+ languages.
@@ -59,8 +60,8 @@ Plus standard markdown with Shiki syntax highlighting for 30+ languages.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/03-interactive-checklist.png" alt="Interactive checklist with a progress bar and ticked items" width="900" />
-  <br/><em>Checklists persist — ticking a box writes back to the source (page version bumped, revision snapshotted). The AI can drive the same toggle via the <code>toggle_checklist_item</code> tool.</em>
+  <img src="docs/screenshots/03-interactive-checklist.png" alt="Interactive checkboxes with a progress bar and ticked items" width="900" />
+  <br/><em>Interactive checkboxes persist — ticking a <code>- [ ]</code> box writes back to the source (page version bumped, revision snapshotted). The AI can drive the same toggle via the <code>toggle_task</code> tool.</em>
 </p>
 
 ### Document model
@@ -82,7 +83,7 @@ Knowledge (&N)  ──┬── Page (#N) ──┬── Markdown content
 
 URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, near line 42.
 
-### MCP tool surface (23 tools)
+### MCP tool surface (24 tools)
 
 **Knowledge** — `add_knowledge` · `edit_knowledge` · `list_knowledge` · `get_knowledge` · `delete_knowledge` · `get_outline`
 
@@ -94,7 +95,7 @@ URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, ne
 
 **Images** — `add_image` (base64 in, content-addressed) · `get_image` (returns inline image content block)
 
-**Interaction** — `toggle_checklist_item` (the same code path the web UI uses when a user clicks a checkbox)
+**Interaction** — `toggle_task` (flip a plain `- [ ]` / `- [x]` task on a page — the same code path the web UI uses when a user clicks a rendered checkbox) · `toggle_checklist_item` (legacy form for the `\`\`\`checklist` JSON fence)
 
 **Audit** — `get_prompt_log` (rolling list of user prompts that shaped a doc; mutation tools accept opt-in `user_prompt`)
 
@@ -137,7 +138,7 @@ Open <http://localhost:5173> for the dev UI (HMR + proxied API), or <http://loca
 }
 ```
 
-Restart Claude Code; all 23 tools appear automatically. Try:
+Restart Claude Code; all 24 tools appear automatically. Try:
 
 > Save what we just discussed as a knowledge titled "Postgres timeout fix", project "infra-notes".
 
@@ -197,7 +198,7 @@ src/
     images.ts         content-addressed image storage
     promptLog.ts      rolling per-knowledge prompt log (capped at 500 chars)
   mcp/
-    server.ts         registers all 23 tools on the MCP SDK
+    server.ts         registers all 24 tools on the MCP SDK
     handlers.ts       Zod schemas + tool implementations (single source of truth)
     examples/         markdown reference content served via get_example
   web/

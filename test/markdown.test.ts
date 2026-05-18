@@ -40,6 +40,24 @@ describe("renderMarkdown", () => {
     expect(out).toMatch(/title="company logo"/);
   });
 
+  it("renders GFM task list items as checkboxes with per-page index", async () => {
+    const out = await renderMarkdown("- [ ] alpha\n- [x] beta\n- [ ] gamma");
+    expect(out).toMatch(/<ul[^>]+class="[^"]*contains-task-list/);
+    expect(out).toMatch(/<li[^>]+class="[^"]*task-list-item[^"]*"[^>]*>\s*<input[^>]*data-task-index="0"[^>]*>\s*alpha/);
+    expect(out).toMatch(/data-task-index="1"[^>]*checked[^>]*>\s*beta/);
+    expect(out).toMatch(/data-task-index="2"[^>]*>\s*gamma/);
+    // Indices keep counting across separate lists
+  });
+
+  it("does not treat fenced code block lines as task items", async () => {
+    const md = "```md\n- [ ] looks like a task but isn't\n```\n\n- [x] real task";
+    const out = await renderMarkdown(md);
+    // Only one task-list checkbox should be emitted, index 0
+    const matches = out.match(/data-task-index="\d+"/g) ?? [];
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toBe('data-task-index="0"');
+  });
+
   it("renders tables", async () => {
     const out = await renderMarkdown("| a | b |\n|---|---|\n| 1 | 2 |");
     expect(out).toContain("<table");

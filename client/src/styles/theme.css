@@ -795,6 +795,43 @@ a:hover { text-decoration: underline; }
   line-height: 1.4;
 }
 .page-id-badge:hover { background: var(--accent); color: white; }
+.page-edit-btn {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: white;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  line-height: 1.4;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.page-edit-btn:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.page-edit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.page-prune-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  line-height: 1.4;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.page-prune-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.page-prune-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-lines {
   font-family: var(--mono);
   font-size: 11px;
@@ -1938,6 +1975,56 @@ a:hover { text-decoration: underline; }
 .sr-meta .sr-ids {
   font-family: var(--mono);
   font-size: 10.5px;
+}
+
+/* GFM task lists — `- [ ]` / `- [x]` anywhere in markdown.
+   Click a checkbox → PageStore.toggleTaskAtIndex flips the source. */
+.markdown-body ul.contains-task-list,
+.markdown-body ol.contains-task-list {
+  list-style: none;
+  padding-left: 4px;
+}
+.markdown-body li.task-list-item {
+  position: relative;
+  padding-left: 4px;
+}
+.markdown-body li.task-list-item > input.task-list-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--surface);
+  cursor: pointer;
+  position: relative;
+  transition: background .12s, border-color .12s;
+  flex-shrink: 0;
+}
+.markdown-body li.task-list-item > input.task-list-item-checkbox:hover {
+  border-color: var(--accent);
+}
+.markdown-body li.task-list-item > input.task-list-item-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.markdown-body li.task-list-item > input.task-list-item-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.markdown-body li.task-list-item.done,
+.markdown-body li.task-list-item:has(> input.task-list-item-checkbox:checked) {
+  color: var(--text-3);
+  text-decoration: line-through;
 }
 
 /* Block flash — brief highlight when scrolling to @N via search */

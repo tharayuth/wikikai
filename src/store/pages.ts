@@ -555,6 +555,74 @@ export class PageStore {
   }
 
   /**
+   * Flip the Nth GFM-style task checkbox (`- [ ]` / `- [x]`) in a page's
+   * source. Index is 0-based and counts only list items at the start of
+   * a line, outside any fenced code block. Mutates the page, bumps
+   * version + revision + FTS like other edits. Throws when the index
+   * is out of range.
+   */
+  toggleTaskAtIndex(
+    pageId: number,
+    index: number,
+  ): { index: number; done: boolean; version: number; updated_at: string } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const content = this.readContent(meta.knowledge_id, pageId);
+    const lines = content.split("\n");
+    const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
+    let inFence = false;
+    let fenceMarker = "";
+    let count = 0;
+    let targetLine = -1;
+    let targetMatch: RegExpExecArray | null = null;
+    for (let i = 0; i < lines.length; i++) {
+      if (!inFence) {
+        const open = /^(\s*)(```+)/.exec(lines[i]);
+        if (open) {
+          inFence = true;
+          fenceMarker = open[2];
+          continue;
+        }
+        const m = taskRe.exec(lines[i]);
+        if (!m) continue;
+        if (count === index) {
+          targetLine = i;
+          targetMatch = m;
+          break;
+        }
+        count++;
+      } else {
+        const closeRe = new RegExp(`^\\s*${fenceMarker}+\\s*$`);
+        if (closeRe.test(lines[i])) {
+          inFence = false;
+          fenceMarker = "";
+        }
+      }
+    }
+    if (targetLine < 0 || !targetMatch) {
+      throw new Error(`task index ${index} not found on page #${pageId}`);
+    }
+    const wasChecked = targetMatch[2].toLowerCase() === "x";
+    const newMark = wasChecked ? " " : "x";
+    lines[targetLine] = lines[targetLine].replace(taskRe, `$1[${newMark}]`);
+    const next = this.writeContent(meta.knowledge_id, pageId, lines.join("\n"));
+    const r = this.bumpVersion(pageId);
+    const now = new Date().toISOString();
+    this.syncFts(pageId, meta.title, meta.keywords, next);
+    this.saveRevision(
+      pageId,
+      r.version,
+      meta.title,
+      next,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      now,
+    );
+    this.bumpKnowledge(meta.knowledge_id);
+    return { index, done: !wasChecked, version: r.version, updated_at: now };
+  }
+
+  /**
    * Drop every historical revision row for `pageId` except the latest two
    * (the live snapshot + the one immediately before it, so an "undo" against
    * the current edit is still possible). Returns the number of rows removed
