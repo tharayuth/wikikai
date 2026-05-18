@@ -32,13 +32,24 @@ export function useChecklistToggles(): void {
       const prevDone = li?.classList.contains("done") ?? false;
       if (li) li.classList.toggle("done", want);
       try {
-        await toggleTask({ pageId: pid, index: idx }).unwrap();
+        const r = await toggleTask({ pageId: pid, index: idx }).unwrap();
+        dispatch(
+          showToast({
+            message: `Saved · v${r.version}`,
+            kind: "success",
+          }),
+        );
       } catch (err) {
         input.checked = !want;
         if (li) li.classList.toggle("done", prevDone);
         const msg = (err as { data?: { error?: string } } | undefined)?.data
           ?.error;
-        dispatch(showToast(`Task toggle failed${msg ? `: ${msg}` : ""}`));
+        dispatch(
+          showToast({
+            message: `Task toggle failed${msg ? `: ${msg}` : ""}`,
+            kind: "error",
+          }),
+        );
       }
     };
     document.addEventListener("change", onChange);
