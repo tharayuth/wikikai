@@ -846,6 +846,14 @@ a:hover { text-decoration: underline; }
   border-color: var(--accent-strong);
 }
 .page-edit-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+.page-edit-sep {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+  margin: 0 6px;
+  vertical-align: middle;
+}
 .page-prune-btn {
   background: var(--surface);
   border: 1px solid var(--border);

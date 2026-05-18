@@ -269,19 +269,31 @@ export function PageContent({ pageId, line, block }: Props) {
           #{pageId}
         </button>
         {editing ? (
-          <span className="page-edit-actions">
-            <button onClick={onCancelEdit} disabled={updateState.isLoading}>
-              Cancel
-            </button>
+          <>
+            <span className="page-edit-actions">
+              <button onClick={onCancelEdit} disabled={updateState.isLoading}>
+                Cancel
+              </button>
+              <button
+                className="primary"
+                onClick={onSaveEdit}
+                disabled={updateState.isLoading}
+                title="Save raw markdown"
+              >
+                {updateState.isLoading ? "Saving…" : "Save"}
+              </button>
+            </span>
+            <span className="page-edit-sep" aria-hidden />
             <button
-              className="primary"
-              onClick={onSaveEdit}
+              className="add-images-btn"
+              onClick={() => setUploadOpen(true)}
               disabled={updateState.isLoading}
-              title="Save raw markdown"
+              title="Upload images and insert markdown at the cursor"
             >
-              {updateState.isLoading ? "Saving…" : "Save"}
+              <span aria-hidden style={{ fontSize: 13 }}>🖼</span>
+              <span>Add Images</span>
             </button>
-          </span>
+          </>
         ) : (
           <button
             className="page-edit-btn"
@@ -300,7 +312,7 @@ export function PageContent({ pageId, line, block }: Props) {
           >
             {relTime(activeTimestamp)}
           </span>
-          {revList.length > 0 && (
+          {!editing && revList.length > 0 && (
             <div
               className="page-versions"
               title={
@@ -335,17 +347,7 @@ export function PageContent({ pageId, line, block }: Props) {
               )}
             </div>
           )}
-          {editing ? (
-            <button
-              className="add-images-btn"
-              onClick={() => setUploadOpen(true)}
-              disabled={updateState.isLoading}
-              title="Upload images and insert markdown at the cursor"
-            >
-              <span aria-hidden style={{ fontSize: 13 }}>🖼</span>
-              <span>Add Images</span>
-            </button>
-          ) : (
+          {!editing && (
             <>
               <button
                 className="page-prune-btn"
