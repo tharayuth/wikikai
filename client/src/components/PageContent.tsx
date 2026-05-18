@@ -268,7 +268,21 @@ export function PageContent({ pageId, line, block }: Props) {
         >
           #{pageId}
         </button>
-        {!editing && (
+        {editing ? (
+          <span className="page-edit-actions">
+            <button onClick={onCancelEdit} disabled={updateState.isLoading}>
+              Cancel
+            </button>
+            <button
+              className="primary"
+              onClick={onSaveEdit}
+              disabled={updateState.isLoading}
+              title="Save raw markdown"
+            >
+              {updateState.isLoading ? "Saving…" : "Save"}
+            </button>
+          </span>
+        ) : (
           <button
             className="page-edit-btn"
             onClick={onStartEdit}
@@ -278,43 +292,6 @@ export function PageContent({ pageId, line, block }: Props) {
             ✎ Edit page
           </button>
         )}
-        <span className="page-lines">{meta.data.total_lines} lines</span>
-
-        {revList.length > 0 && (
-          <div
-            className="page-versions"
-            title={
-              revList.length > 1
-                ? "Click a number to view an older version. Click the latest to return."
-                : `Only one version (v${currentVersion}) — no older snapshots`
-            }
-          >
-            <span className="page-versions-label">v</span>
-            {revList.map((r) => (
-              <button
-                key={r.version}
-                type="button"
-                className={`page-version${activeVersion === r.version ? " active" : ""}${r.is_current ? " is-current" : ""}`}
-                onClick={() =>
-                  setViewVersion(r.is_current ? null : r.version)
-                }
-                title={`v${r.version}${r.is_current ? " (latest)" : ""} · ${r.line_count}L · ${new Date(r.created_at).toLocaleString()}`}
-              >
-                {r.version}
-              </button>
-            ))}
-            {viewVersion != null && viewVersion !== currentVersion && (
-              <button
-                type="button"
-                className="page-version-latest"
-                onClick={() => setViewVersion(null)}
-                title="Back to latest version"
-              >
-                → latest
-              </button>
-            )}
-          </div>
-        )}
 
         <div className="page-actions">
           <span
@@ -323,30 +300,51 @@ export function PageContent({ pageId, line, block }: Props) {
           >
             {relTime(activeTimestamp)}
           </span>
+          {revList.length > 0 && (
+            <div
+              className="page-versions"
+              title={
+                revList.length > 1
+                  ? "Click a number to view an older version. Click the latest to return."
+                  : `Only one version (v${currentVersion}) — no older snapshots`
+              }
+            >
+              <span className="page-versions-label">v</span>
+              {revList.map((r) => (
+                <button
+                  key={r.version}
+                  type="button"
+                  className={`page-version${activeVersion === r.version ? " active" : ""}${r.is_current ? " is-current" : ""}`}
+                  onClick={() =>
+                    setViewVersion(r.is_current ? null : r.version)
+                  }
+                  title={`v${r.version}${r.is_current ? " (latest)" : ""} · ${r.line_count}L · ${new Date(r.created_at).toLocaleString()}`}
+                >
+                  {r.version}
+                </button>
+              ))}
+              {viewVersion != null && viewVersion !== currentVersion && (
+                <button
+                  type="button"
+                  className="page-version-latest"
+                  onClick={() => setViewVersion(null)}
+                  title="Back to latest version"
+                >
+                  → latest
+                </button>
+              )}
+            </div>
+          )}
           {editing ? (
-            <>
-              <button
-                className="add-images-btn"
-                onClick={() => setUploadOpen(true)}
-                disabled={updateState.isLoading}
-                title="Upload images and insert markdown at the cursor"
-              >
-                <span aria-hidden style={{ fontSize: 14 }}>🖼</span>
-                <span>Add Images</span>
-              </button>
-              <span className="edit-action-gap" />
-              <button onClick={onCancelEdit} disabled={updateState.isLoading}>
-                Cancel
-              </button>
-              <button
-                className="primary"
-                onClick={onSaveEdit}
-                disabled={updateState.isLoading}
-                title="Save raw markdown"
-              >
-                {updateState.isLoading ? "Saving…" : "Save"}
-              </button>
-            </>
+            <button
+              className="add-images-btn"
+              onClick={() => setUploadOpen(true)}
+              disabled={updateState.isLoading}
+              title="Upload images and insert markdown at the cursor"
+            >
+              <span aria-hidden style={{ fontSize: 13 }}>🖼</span>
+              <span>Add Images</span>
+            </button>
           ) : (
             <>
               <button

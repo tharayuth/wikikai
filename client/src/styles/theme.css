@@ -813,6 +813,39 @@ a:hover { text-decoration: underline; }
   border-color: var(--accent-strong);
 }
 .page-edit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.page-edit-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.page-edit-actions button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 10px;
+  line-height: 1.4;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.page-edit-actions button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.page-edit-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+.page-edit-actions button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.page-edit-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-prune-btn {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1082,20 +1115,31 @@ a:hover { text-decoration: underline; }
 }
 .page-actions button.primary:hover { background: var(--accent-strong); color: white; }
 .page-actions button.primary:disabled { background: var(--accent); }
+.add-images-btn,
 .page-actions button.add-images-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   background: var(--surface);
-  border-color: var(--accent);
+  border: 1px solid var(--accent);
   color: var(--accent-strong);
+  font: inherit;
+  font-size: 11px;
   font-weight: 600;
+  padding: 2px 10px;
+  line-height: 1.4;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
 }
+.add-images-btn:hover:not(:disabled),
 .page-actions button.add-images-btn:hover {
   background: var(--accent-light);
   color: var(--accent-strong);
   border-color: var(--accent);
 }
+.add-images-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-actions .edit-action-gap {
   flex: 0 0 auto;
   width: 14px;
