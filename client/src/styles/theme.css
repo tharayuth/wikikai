@@ -399,13 +399,13 @@ a:hover { text-decoration: underline; }
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
-  padding: 14px 16px 8px;
+  padding: 12px 12px 8px;
   margin: 0;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   text-align: left;
   text-decoration: none;
@@ -421,13 +421,13 @@ a:hover { text-decoration: underline; }
 }
 .group-chevron {
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-2);
-  font-size: 14px;
+  font-size: 18px;
   line-height: 1;
   transform: rotate(0deg);
   transition: transform 0.15s, color 0.12s;
@@ -439,9 +439,9 @@ a:hover { text-decoration: underline; }
 .sidebar-row { display: block; }
 .sidebar-item {
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 8px 12px 8px 4px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 4px;
   margin: 1px 8px;
   border-radius: 8px;
   cursor: pointer;
@@ -475,7 +475,7 @@ a:hover { text-decoration: underline; }
   background: transparent;
 }
 .sidebar-row.active-row .sidebar-pages {
-  margin: 2px 8px 0 29px;
+  margin: 2px 8px 0 24px;
 }
 .sidebar-row.active-row .sidebar-page.active {
   background: var(--accent);
@@ -488,18 +488,18 @@ a:hover { text-decoration: underline; }
 
 .sidebar-chevron {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
   background: transparent;
   border: none;
   color: var(--text-2);
   cursor: pointer;
-  font-size: 20px;
+  font-size: 14px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 4px;
   margin-top: 0;
   transform: rotate(0deg);
   transition: transform 0.15s, color 0.12s, background 0.12s;
@@ -510,7 +510,7 @@ a:hover { text-decoration: underline; }
 
 .sidebar-pages {
   list-style: none;
-  margin: 2px 8px 6px 34px;
+  margin: 2px 8px 6px 28px;
   padding: 0;
 }
 .sidebar-pages li { margin: 0; }
