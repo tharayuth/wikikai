@@ -253,8 +253,39 @@ a:hover { text-decoration: underline; }
   line-height: 1.25;
 }
 .ki-row-1 .ki-refresh {
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.sse-status {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   margin-left: 8px;
   flex-shrink: 0;
+  background: var(--text-3);
+  box-shadow: 0 0 0 0 transparent;
+  transition: background .12s, box-shadow .25s;
+}
+.sse-connected {
+  background: var(--green);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 30%, transparent);
+}
+.sse-connecting {
+  background: var(--amber);
+  animation: sse-pulse 1.2s ease-in-out infinite;
+}
+.sse-reconnecting {
+  background: var(--amber);
+  animation: sse-pulse 0.8s ease-in-out infinite;
+}
+.sse-offline {
+  background: var(--red);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 30%, transparent);
+}
+@keyframes sse-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
 }
 .ki-actions {
   display: flex;

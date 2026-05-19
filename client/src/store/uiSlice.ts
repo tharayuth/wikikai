@@ -4,6 +4,7 @@ export type Theme = "light" | "dark";
 export type HelpTab = "user" | "mcp";
 export type HelpLang = "en" | "th";
 export type ToastKind = "info" | "success" | "error";
+export type SseStatus = "connecting" | "connected" | "reconnecting" | "offline";
 
 export interface UiState {
   theme: Theme;
@@ -14,6 +15,8 @@ export interface UiState {
   /** Project names selected for filtering. null = no filter (show all). */
   selectedProjects: string[] | null;
   projectFilterOpen: boolean;
+  /** Live state of the /api/events SSE channel. */
+  sseStatus: SseStatus;
 }
 
 function initialSelectedProjects(): string[] | null {
@@ -61,6 +64,7 @@ const initialState: UiState = {
   toast: null,
   selectedProjects: initialSelectedProjects(),
   projectFilterOpen: false,
+  sseStatus: "connecting",
 };
 
 export const uiSlice = createSlice({
@@ -136,6 +140,9 @@ export const uiSlice = createSlice({
     closeProjectFilter(state) {
       state.projectFilterOpen = false;
     },
+    setSseStatus(state, action: PayloadAction<SseStatus>) {
+      state.sseStatus = action.payload;
+    },
   },
 });
 
@@ -151,4 +158,5 @@ export const {
   setSelectedProjects,
   openProjectFilter,
   closeProjectFilter,
+  setSseStatus,
 } = uiSlice.actions;

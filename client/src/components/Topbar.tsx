@@ -4,6 +4,7 @@ import { openHelp, openProjectFilter, showToast, toggleTheme } from "../store/ui
 import { portalApi, useLazySearchQuery } from "../store/api";
 import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
+import { SseStatus } from "./SseStatus";
 
 interface TopbarProps {
   searchText: string;
@@ -81,7 +82,9 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
           kid={activeKid}
           pid={activePid}
           titleSuffix={
-            <button
+            <>
+              <SseStatus />
+              <button
               className="icon-btn ki-refresh"
               title="Refresh — reload knowledge list, pages, and revisions"
               onClick={() => {
@@ -99,6 +102,7 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
             >
               ↻
             </button>
+            </>
           }
         />
         <div className="topbar-controls">
