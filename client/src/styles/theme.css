@@ -1261,6 +1261,14 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   box-shadow: var(--shadow-md), 0 4px 16px rgba(0,0,0,.04);
 }
+/* Defensive cap: any inline image (`![](…)` or raw <img>) gets clamped
+   to the article width regardless of an over-large width/height /
+   "WxH" title hint the author gave. Authors who want a tighter cap
+   can still set a smaller `"800x"`-style hint. */
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
 .markdown-body h1 {
   font-size: 19px; font-weight: 600;
   margin: 0 0 14px;
