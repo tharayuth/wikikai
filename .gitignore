@@ -24,3 +24,4 @@ data/
 
 # Per-user Claude Code settings (project-level shared settings.json may be committed)
 .claude/settings.local.json
+.claude/worktrees/
