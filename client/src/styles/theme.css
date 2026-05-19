@@ -388,7 +388,10 @@ a:hover { text-decoration: underline; }
   text-align: center;
 }
 .sidebar-group {
-  margin-bottom: 10px;
+  margin-bottom: 2px;
+}
+.sidebar-group.collapsed {
+  margin-bottom: 0;
 }
 .sidebar-group-title {
   position: sticky;
@@ -399,7 +402,7 @@ a:hover { text-decoration: underline; }
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
-  padding: 12px 12px 8px;
+  padding: 6px 12px;
   margin: 0;
   border: none;
   cursor: pointer;
