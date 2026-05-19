@@ -75,6 +75,24 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
             {selectedProjects ? `${selectedProjects.length} project` : "All projects"}
           </span>
         </button>
+        <button
+          className="icon-btn"
+          title="Refresh — reload knowledge list, pages, and revisions"
+          onClick={() => {
+            dispatch(
+              portalApi.util.invalidateTags([
+                { type: "KnowledgeList", id: "LIST" },
+                "Knowledge",
+                "Page",
+                "PageRendered",
+                "Revisions",
+              ]),
+            );
+            dispatch(showToast("Refreshed"));
+          }}
+        >
+          ↻
+        </button>
       </div>
       <div className="topbar-right">
         <KnowledgeInfo kid={activeKid} pid={activePid} />
@@ -100,24 +118,6 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
               />
             )}
           </div>
-          <button
-            className="icon-btn"
-            title="Refresh — reload knowledge list, pages, and revisions"
-            onClick={() => {
-              dispatch(
-                portalApi.util.invalidateTags([
-                  { type: "KnowledgeList", id: "LIST" },
-                  "Knowledge",
-                  "Page",
-                  "PageRendered",
-                  "Revisions",
-                ]),
-              );
-              dispatch(showToast("Refreshed"));
-            }}
-          >
-            ↻
-          </button>
           <button
             className="icon-btn"
             title="Help + MCP guide"
