@@ -384,7 +384,11 @@ export interface ToolHandlers {
       pages?: (PageWithStats & { url: string })[];
     }
   >;
-  delete_knowledge(input: ToolInputs["delete_knowledge"]): Promise<{ id: number; deleted: true }>;
+  delete_knowledge(input: ToolInputs["delete_knowledge"]): Promise<{
+    id: number;
+    deleted: true;
+    removed_images: number;
+  }>;
   get_outline(input: ToolInputs["get_outline"]): Promise<{
     knowledge_id: number;
     title: string;
@@ -420,7 +424,11 @@ export interface ToolHandlers {
     new_line_count: number;
     url: string;
   }>;
-  delete_page(input: ToolInputs["delete_page"]): Promise<{ id: number; deleted: true }>;
+  delete_page(input: ToolInputs["delete_page"]): Promise<{
+    id: number;
+    deleted: true;
+    removed_images: number;
+  }>;
   list_pages(input: ToolInputs["list_pages"]): Promise<(PageWithStats & { url: string })[]>;
   reorder_pages(input: ToolInputs["reorder_pages"]): Promise<{ ok: true; order: number[] }>;
 
@@ -705,6 +713,21 @@ function pageEntryShape(ctx: HandlerContext, p: PageEntry) {
   return { ...p, url: urlFor(ctx, p.knowledge_id, p.id) };
 }
 
+/** Compare every stored image hash against the set still referenced
+ *  by remaining page content; delete the orphans (file + DB row) and
+ *  return how many were removed. Run after delete_knowledge /
+ *  delete_page so a removed page's exclusive images don't linger. */
+function cleanupOrphanImages(pages: PageStore, images: ImageStore): number {
+  const referenced = pages.allReferencedImageHashes();
+  const stored = images.listAllHashes();
+  let removed = 0;
+  for (const { hash } of stored) {
+    if (referenced.has(hash)) continue;
+    if (images.remove(hash)) removed++;
+  }
+  return removed;
+}
+
 export function buildToolHandlers(
   knowledge: KnowledgeStore,
   pages: PageStore,
@@ -783,7 +806,8 @@ export function buildToolHandlers(
       const parsed = DeleteKnowledgeSchema.parse(input);
       pages.removeKnowledgeFiles(parsed.id);
       knowledge.remove(parsed.id);
-      return { id: parsed.id, deleted: true };
+      const removed_images = cleanupOrphanImages(pages, images);
+      return { id: parsed.id, deleted: true, removed_images };
     },
 
     async get_outline(input) {
@@ -861,7 +885,8 @@ export function buildToolHandlers(
     async delete_page(input) {
       const parsed = DeletePageSchema.parse(input);
       pages.remove(parsed.page_id);
-      return { id: parsed.page_id, deleted: true };
+      const removed_images = cleanupOrphanImages(pages, images);
+      return { id: parsed.page_id, deleted: true, removed_images };
     },
 
     async list_pages(input) {

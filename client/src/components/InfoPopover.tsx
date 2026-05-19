@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KnowledgeMeta, PageMeta } from "../store/api";
 import {
+  useDeleteKnowledgeMutation,
   useGetPromptLogQuery,
   useListProjectsQuery,
   useUpdateKnowledgeMutation,
 } from "../store/api";
+import { navigateTo } from "../hooks/useHash";
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
 
@@ -55,6 +57,7 @@ export function InfoPopover({ meta, activePage, onClose }: Props) {
   const { data: projectsData } = useListProjectsQuery();
   const { data: promptLog } = useGetPromptLogQuery(meta.id);
   const [updateKnowledge, { isLoading: saving }] = useUpdateKnowledgeMutation();
+  const [deleteKnowledge, { isLoading: deleting }] = useDeleteKnowledgeMutation();
   const [editingProject, setEditingProject] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
   const [projectDraft, setProjectDraft] = useState(meta.project ?? "");
@@ -384,6 +387,55 @@ export function InfoPopover({ meta, activePage, onClose }: Props) {
           </div>
         </>
       ) : null}
+
+      <hr />
+      <div className="ip-danger-zone">
+        <button
+          type="button"
+          className="ip-delete-knowledge"
+          disabled={deleting}
+          onClick={async () => {
+            const title = meta.title;
+            const typed = window.prompt(
+              `⚠️ Delete knowledge "${title}" (&${meta.id}) — every page, revision, and any image used only by this knowledge will be removed permanently.\n\nType the title "${title}" to confirm:`,
+            );
+            if (typed == null) return;
+            if (typed.trim() !== title) {
+              dispatch(showToast({ message: "Cancelled — title did not match", kind: "info" }));
+              return;
+            }
+            try {
+              const r = (await deleteKnowledge(meta.id).unwrap()) as {
+                id: number;
+                deleted: true;
+                removed_images?: number;
+              };
+              const imgPart =
+                r.removed_images && r.removed_images > 0
+                  ? ` · cleaned ${r.removed_images} orphan image(s)`
+                  : "";
+              dispatch(
+                showToast({
+                  message: `Deleted "${title}"${imgPart}`,
+                  kind: "success",
+                }),
+              );
+              onClose();
+              navigateTo({ kid: null });
+            } catch (e) {
+              const err = e as { status?: number; data?: { error?: string } };
+              dispatch(
+                showToast({
+                  message: `Delete failed: ${err.data?.error ?? err.status ?? "error"}`,
+                  kind: "error",
+                }),
+              );
+            }
+          }}
+        >
+          {deleting ? "Deleting…" : `🗑 Delete knowledge "${meta.title}"`}
+        </button>
+      </div>
     </div>
   );
 }

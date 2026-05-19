@@ -1289,6 +1289,30 @@ export class PageStore {
     const dir = path.resolve(this.itemsDir, String(knowledgeId));
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   }
+
+  /** Walk every remaining page on disk and collect every internal image
+   *  hash (`/img/<hash>.<ext>`) referenced anywhere in source. Used by
+   *  orphan-image cleanup after delete_knowledge / delete_page so a
+   *  removed page's exclusive images don't leak forever. */
+  allReferencedImageHashes(): Set<string> {
+    const set = new Set<string>();
+    const re = /\/img\/([a-f0-9]{64})\.[a-z0-9]{2,5}/gi;
+    const rows = this.db
+      .prepare(`SELECT id, knowledge_id FROM pages`)
+      .all() as { id: number; knowledge_id: number }[];
+    for (const r of rows) {
+      let content: string;
+      try {
+        content = this.readContent(r.knowledge_id, r.id);
+      } catch {
+        continue;
+      }
+      let m: RegExpExecArray | null;
+      re.lastIndex = 0;
+      while ((m = re.exec(content)) !== null) set.add(m[1]);
+    }
+    return set;
+  }
 }
 
 /** Find the nearest heading (## / ### …) that contains the given 1-based line.

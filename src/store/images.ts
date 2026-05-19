@@ -150,4 +150,26 @@ export class ImageStore {
   readBytes(hash: string, ext: string): Buffer {
     return fs.readFileSync(this.filePath(hash, ext));
   }
+
+  /** All currently-stored image hashes (used by orphan cleanup). */
+  listAllHashes(): { hash: string; ext: string }[] {
+    return this.db
+      .prepare(`SELECT hash, ext FROM images`)
+      .all() as { hash: string; ext: string }[];
+  }
+
+  /** Remove a single image from disk + DB. Returns true if it was
+   *  there and deleted, false if it wasn't in the registry. */
+  remove(hash: string): boolean {
+    const meta = this.get(hash);
+    if (!meta) return false;
+    const fp = this.filePath(meta.hash, meta.ext);
+    try {
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    } catch {
+      /* file might already be gone — DB row is still removed below */
+    }
+    this.db.prepare(`DELETE FROM images WHERE hash = ?`).run(hash);
+    return true;
+  }
 }

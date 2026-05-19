@@ -813,6 +813,35 @@ a:hover { text-decoration: underline; }
   border: none;
   border-top: 1px solid var(--border);
 }
+.info-popover .ip-danger-zone {
+  display: flex;
+  justify-content: stretch;
+}
+.info-popover .ip-delete-knowledge {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--red);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.info-popover .ip-delete-knowledge:hover:not(:disabled) {
+  background: var(--red);
+  border-color: var(--red);
+  color: white;
+}
+.info-popover .ip-delete-knowledge:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* Page-id header — styled as a single low-profile toolbar bar that spans
    from the #N page-id badge on the left to the Edit / Delete buttons on
