@@ -528,6 +528,11 @@ const STORAGE_KEY = "wikikai-article-w";
 let restoredFromStorage = false;
 function ArticleResizeHandle() {
   const [dragging, setDragging] = useState(false);
+  // Captured on mousedown so each mousemove computes a delta from the
+  // pointer's start position, not a re-derivation from frame.left
+  // (which itself shifts as the frame grows because the frame is
+  // margin:auto centered).
+  const startRef = useRef<{ x: number; width: number } | null>(null);
 
   useEffect(() => {
     if (restoredFromStorage) return;
@@ -546,20 +551,20 @@ function ArticleResizeHandle() {
   useEffect(() => {
     if (!dragging) return;
     const onMove = (e: MouseEvent) => {
-      // Frame is centered (margin: auto), so width = 2 * (cursor.x - frame.left)
-      // keeps the centerline stable. Clamp 480..2000 so the handle can't
-      // disappear off-screen.
-      const frame = document.querySelector(".article-frame") as HTMLElement | null;
-      if (!frame) return;
-      const rect = frame.getBoundingClientRect();
-      const next = Math.max(
-        480,
-        Math.min(2000, Math.round((e.clientX - rect.left) * 2)),
+      const start = startRef.current;
+      if (!start) return;
+      // Right edge moves by (cursor.x - startX); centered frame grows
+      // symmetrically so width grows by 2× that.
+      const delta = e.clientX - start.x;
+      const next = Math.max(480, Math.min(2000, start.width + delta * 2));
+      document.documentElement.style.setProperty(
+        "--article-w",
+        `${Math.round(next)}px`,
       );
-      document.documentElement.style.setProperty("--article-w", `${next}px`);
     };
     const onUp = () => {
       setDragging(false);
+      startRef.current = null;
       const cur = document.documentElement.style.getPropertyValue("--article-w");
       const n = parseInt(cur.replace("px", ""), 10);
       if (Number.isFinite(n)) {
@@ -587,6 +592,12 @@ function ArticleResizeHandle() {
       className={`article-resize-handle${dragging ? " dragging" : ""}`}
       onMouseDown={(e) => {
         e.preventDefault();
+        const frame = e.currentTarget.parentElement;
+        if (!frame) return;
+        startRef.current = {
+          x: e.clientX,
+          width: frame.getBoundingClientRect().width,
+        };
         setDragging(true);
       }}
       onDoubleClick={() => {
