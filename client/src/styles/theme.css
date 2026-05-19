@@ -810,15 +810,10 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 0;
   z-index: 5;
-  /* Mirror .article-frame so the toolbar (and its right-aligned
-     Delete / Refresh group) spans only the article column — not the
-     full viewer / viewport — and tracks the drag-resize handle. */
-  width: var(
-    --article-w,
-    min(calc(var(--app-max) - var(--sidebar-w) - 32px), calc(100% - 32px))
-  );
-  max-width: calc(100% - 32px);
-  margin: 0 16px;
+  /* Lives inside .article-frame so it inherits the resizable column
+     width automatically — right-side group ends at the frame edge
+     (where the drag handle sits), not the viewport edge. */
+  margin: 0;
   padding: 2px 12px;
   display: flex;
   align-items: center;
@@ -1268,8 +1263,14 @@ a:hover { text-decoration: underline; }
     min(calc(var(--app-max) - var(--sidebar-w) - 32px), calc(100% - 32px))
   );
   max-width: calc(100% - 32px);
-  margin: 10px 16px 60px;
+  margin: 0 16px 60px;
   min-width: 0;
+}
+/* Inside the frame, the sticky toolbar (.page-id-header) hugs the top
+   and the article body needs a small breath of space before it. */
+.article-frame > .markdown-body,
+.article-frame > .page-editor-wrap {
+  margin-top: 10px;
 }
 .markdown-body {
   width: 100%;
@@ -1297,6 +1298,31 @@ a:hover { text-decoration: underline; }
 .article-resize-handle:hover,
 .article-resize-handle.dragging {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* Small "drag me" affordance — two short vertical bars sit at the top
+   of the handle, aligned with the sticky toolbar row. Always visible
+   (subtle) so users discover the handle without having to hover. */
+.article-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 5px;
+  height: 14px;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(var(--text-3), var(--text-3)) 0 0 / 1.5px 100% no-repeat,
+    linear-gradient(var(--text-3), var(--text-3)) 100% 0 / 1.5px 100% no-repeat;
+  opacity: 0.55;
+  transition: opacity .12s, background .12s;
+  pointer-events: none;
+}
+.article-resize-handle:hover::before,
+.article-resize-handle.dragging::before {
+  opacity: 1;
+  background:
+    linear-gradient(var(--accent-strong), var(--accent-strong)) 0 0 / 1.5px 100% no-repeat,
+    linear-gradient(var(--accent-strong), var(--accent-strong)) 100% 0 / 1.5px 100% no-repeat;
 }
 /* Defensive cap: any inline image (`![](…)` or raw <img>) gets clamped
    to the article width regardless of an over-large width/height /

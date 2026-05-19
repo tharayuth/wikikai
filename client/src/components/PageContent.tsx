@@ -300,6 +300,7 @@ export function PageContent({ pageId, line, block }: Props) {
 
   return (
     <>
+      <div className="article-frame">
       <div className="page-id-header">
         <button
           className="page-id-badge"
@@ -489,31 +490,27 @@ export function PageContent({ pageId, line, block }: Props) {
       />
 
       {editing ? (
-        <div className="article-frame">
-          <div className="page-editor-wrap">
-            <PageEditor
-              ref={editorRef}
-              initial={draft}
-              onChange={setDraft}
-              theme={theme}
-              jumpToLine={jumpLine}
-              onJumped={() => setJumpLine(null)}
-            />
-          </div>
-          <ArticleResizeHandle />
+        <div className="page-editor-wrap">
+          <PageEditor
+            ref={editorRef}
+            initial={draft}
+            onChange={setDraft}
+            theme={theme}
+            jumpToLine={jumpLine}
+            onJumped={() => setJumpLine(null)}
+          />
         </div>
       ) : (
-        <div className="article-frame">
-          <article
-            className="markdown-body"
-            ref={bodyRef}
-            // Rendered HTML comes from server-side markdown-it (html: false) with
-            // fenced JSON blocks HTML-attr-escaped — safe to inject.
-            dangerouslySetInnerHTML={{ __html: rendered.data ?? "" }}
-          />
-          <ArticleResizeHandle />
-        </div>
+        <article
+          className="markdown-body"
+          ref={bodyRef}
+          // Rendered HTML comes from server-side markdown-it (html: false) with
+          // fenced JSON blocks HTML-attr-escaped — safe to inject.
+          dangerouslySetInnerHTML={{ __html: rendered.data ?? "" }}
+        />
       )}
+      <ArticleResizeHandle />
+      </div>
     </>
   );
 }
