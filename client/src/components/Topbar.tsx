@@ -75,6 +75,9 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
             {selectedProjects ? `${selectedProjects.length} project` : "All projects"}
           </span>
         </button>
+      </div>
+      <div className="topbar-right">
+        <KnowledgeInfo kid={activeKid} pid={activePid} />
         <button
           className="icon-btn"
           title="Refresh — reload knowledge list, pages, and revisions"
@@ -93,9 +96,6 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
         >
           ↻
         </button>
-      </div>
-      <div className="topbar-right">
-        <KnowledgeInfo kid={activeKid} pid={activePid} />
         <div className="topbar-controls">
           <div ref={wrapRef} className="topbar-search">
             <input
