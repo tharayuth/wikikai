@@ -553,10 +553,10 @@ function ArticleResizeHandle() {
     const onMove = (e: MouseEvent) => {
       const start = startRef.current;
       if (!start) return;
-      // Right edge moves by (cursor.x - startX); centered frame grows
-      // symmetrically so width grows by 2× that.
+      // Frame is left-aligned: dragging the right edge by N px grows
+      // (or shrinks) the width by N px — no 2× scaling.
       const delta = e.clientX - start.x;
-      const next = Math.max(480, Math.min(2000, start.width + delta * 2));
+      const next = Math.max(480, Math.min(2000, start.width + delta));
       document.documentElement.style.setProperty(
         "--article-w",
         `${Math.round(next)}px`,
