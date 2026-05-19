@@ -40,9 +40,9 @@ function initialTheme(): Theme {
   } catch {
     /* SSR / private mode */
   }
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    return "dark";
-  }
+  // First-time visitors land on light. The theme toggle still works
+  // and the choice persists to localStorage so returning users keep
+  // whatever they picked.
   return "light";
 }
 
