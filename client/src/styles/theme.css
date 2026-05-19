@@ -473,6 +473,16 @@ a:hover { text-decoration: underline; }
 }
 .sidebar-row.active-row .sidebar-pages {
   margin: 2px 8px 0 24px;
+  /* Inside the highlighted active-row frame the line goes fully
+     opaque accent so it reads as part of the selection. */
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      var(--accent) 8%,
+      var(--accent) 92%,
+      transparent 100%
+    ) left / 2px 100% no-repeat;
 }
 .sidebar-row.active-row .sidebar-page.active {
   background: var(--accent);
@@ -507,8 +517,19 @@ a:hover { text-decoration: underline; }
 
 .sidebar-pages {
   list-style: none;
-  margin: 2px 8px 6px 28px;
-  padding: 0;
+  margin: 2px 8px 6px 22px;
+  padding: 2px 0 2px 10px;
+  /* Soft vertical guide-line: a thin accent line that fades in at the
+     top and out at the bottom — connects sibling pages visually without
+     the harsh look of a solid border. */
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      color-mix(in srgb, var(--accent) 45%, transparent) 8%,
+      color-mix(in srgb, var(--accent) 45%, transparent) 92%,
+      transparent 100%
+    ) left / 2px 100% no-repeat;
 }
 .sidebar-pages li { margin: 0; }
 .sidebar-page {
