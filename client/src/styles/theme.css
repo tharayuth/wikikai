@@ -424,20 +424,14 @@ a:hover { text-decoration: underline; }
 }
 .group-chevron {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-2);
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1;
-  transform: rotate(0deg);
   transition: transform 0.15s, color 0.12s;
-}
-.sidebar-group-title.open .group-chevron {
-  transform: rotate(90deg);
-  color: var(--accent);
 }
 .sidebar-row { display: block; }
 .sidebar-item {

@@ -275,7 +275,7 @@ function ProjectGroup({
         onClick={() => setOpen((o) => !o)}
       >
         <span className="group-chevron" aria-hidden>
-          ▸
+          {open ? "📖" : "📕"}
         </span>
         <span className="group-name">{project}</span>
       </button>
