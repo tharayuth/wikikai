@@ -810,7 +810,15 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 0;
   z-index: 5;
-  margin: 0;
+  /* Mirror .article-frame so the toolbar (and its right-aligned
+     Delete / Refresh group) spans only the article column — not the
+     full viewer / viewport — and tracks the drag-resize handle. */
+  width: var(
+    --article-w,
+    min(calc(var(--app-max) - var(--sidebar-w) - 32px), calc(100% - 32px))
+  );
+  max-width: calc(100% - 32px);
+  margin: 0 16px;
   padding: 2px 12px;
   display: flex;
   align-items: center;
