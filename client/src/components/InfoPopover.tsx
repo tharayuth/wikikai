@@ -396,12 +396,11 @@ export function InfoPopover({ meta, activePage, onClose }: Props) {
           disabled={deleting}
           onClick={async () => {
             const title = meta.title;
-            const typed = window.prompt(
-              `⚠️ Delete knowledge "${title}" (&${meta.id}) — every page, revision, and any image used only by this knowledge will be removed permanently.\n\nType the title "${title}" to confirm:`,
-            );
-            if (typed == null) return;
-            if (typed.trim() !== title) {
-              dispatch(showToast({ message: "Cancelled — title did not match", kind: "info" }));
+            if (
+              !window.confirm(
+                `⚠️ Delete knowledge "${title}" (&${meta.id})?\n\nEvery page, revision, and any image used only by this knowledge will be removed permanently. This cannot be undone.`,
+              )
+            ) {
               return;
             }
             try {
