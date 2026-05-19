@@ -433,14 +433,29 @@ a:hover { text-decoration: underline; }
   line-height: 1;
   transition: transform 0.15s, color 0.12s;
 }
-.sidebar-row { display: block; }
+/* Each topic (knowledge) row is rendered as its own card — gives a
+   clear visual container around the title + (when expanded) its
+   pages list, and keeps cards from blending into each other on a
+   long sidebar. */
+.sidebar-row {
+  display: block;
+  margin: 3px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: border-color .12s, box-shadow .12s;
+}
+.sidebar-row:hover {
+  border-color: var(--border-strong);
+}
 .sidebar-item {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px 6px 4px;
-  margin: 1px 8px;
-  border-radius: 8px;
+  margin: 0;
+  border-radius: 0;
   cursor: pointer;
   color: var(--text);
   font-size: 13px;
@@ -456,33 +471,21 @@ a:hover { text-decoration: underline; }
   color: var(--accent-strong);
 }
 
-/* Active knowledge — frame the item + its pages list together so the
-   selection visually contains everything that belongs to it. */
+/* Active knowledge — the card lifts: accent border-left, slight
+   shadow, accent-light wash. */
 .sidebar-row.active-row {
-  margin: 2px 8px 8px;
-  border-radius: 8px;
+  border-color: var(--accent);
+  border-left-width: 3px;
   background: var(--accent-light);
-  border-left: 3px solid var(--accent);
-  padding-bottom: 4px;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 .sidebar-row.active-row .sidebar-item,
 .sidebar-row.active-row .sidebar-item.active {
-  margin: 0;
-  border-radius: 0;
   background: transparent;
 }
 .sidebar-row.active-row .sidebar-pages {
-  margin: 2px 8px 0 24px;
-  /* Inside the highlighted active-row frame the line goes fully
-     opaque accent so it reads as part of the selection. */
-  background:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--accent) 8%,
-      var(--accent) 92%,
-      transparent 100%
-    ) left / 2px 100% no-repeat;
+  margin: 0;
+  padding: 2px 6px 6px 24px;
 }
 .sidebar-row.active-row .sidebar-page.active {
   background: var(--accent);
@@ -517,19 +520,8 @@ a:hover { text-decoration: underline; }
 
 .sidebar-pages {
   list-style: none;
-  margin: 2px 8px 6px 22px;
-  padding: 2px 0 2px 10px;
-  /* Soft vertical guide-line: a thin accent line that fades in at the
-     top and out at the bottom — connects sibling pages visually without
-     the harsh look of a solid border. */
-  background:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      color-mix(in srgb, var(--accent) 45%, transparent) 8%,
-      color-mix(in srgb, var(--accent) 45%, transparent) 92%,
-      transparent 100%
-    ) left / 2px 100% no-repeat;
+  margin: 0;
+  padding: 2px 6px 6px 28px;
 }
 .sidebar-pages li { margin: 0; }
 .sidebar-page {
