@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Db } from "./db.js";
+import { emitEvent } from "../lib/events.js";
 
 export interface PageMetadata {
   id: number;
@@ -461,7 +462,7 @@ export class PageStore {
       const finalContent = this.writeContent(input.knowledge_id, id, input.content);
       this.syncFts(id, input.title.trim(), input.keywords ?? [], finalContent);
       this.saveRevision(id, 1, input.title.trim(), finalContent, input.summary ?? null, joinKeywords(input.keywords), now);
-      this.bumpKnowledge(input.knowledge_id);
+      this.bumpKnowledge(input.knowledge_id, id);
       return { id, position, created_at: now };
     })();
   }
@@ -536,7 +537,7 @@ export class PageStore {
 
     this.syncFts(pageId, newTitle, parseKeywords(newKeywords), content);
     this.saveRevision(pageId, nextVersion, newTitle, content, newSummary, newKeywords, now);
-    this.bumpKnowledge(meta.knowledge_id);
+    this.bumpKnowledge(meta.knowledge_id, pageId);
     return { id: pageId, version: nextVersion, updated_at: now };
   }
 
@@ -549,7 +550,7 @@ export class PageStore {
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
-    this.bumpKnowledge(meta.knowledge_id);
+    this.bumpKnowledge(meta.knowledge_id, pageId);
     return { id: pageId, version: r.version, new_line_count: countLines(next) };
   }
 
@@ -675,7 +676,7 @@ export class PageStore {
       joinKeywords(meta.keywords),
       now,
     );
-    this.bumpKnowledge(meta.knowledge_id);
+    this.bumpKnowledge(meta.knowledge_id, pageId);
     return { index, done, version: r.version, updated_at: now };
   }
 
@@ -720,6 +721,11 @@ export class PageStore {
         .run(meta.knowledge_id, meta.position);
       this.db.prepare(`DELETE FROM pages_fts WHERE rowid = ?`).run(pageId);
       this.bumpKnowledge(meta.knowledge_id);
+      emitEvent({
+        type: "page-deleted",
+        page_id: pageId,
+        knowledge_id: meta.knowledge_id,
+      });
     })();
   }
 
@@ -801,7 +807,7 @@ export class PageStore {
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
-    this.bumpKnowledge(meta.knowledge_id);
+    this.bumpKnowledge(meta.knowledge_id, pageId);
     return { id: pageId, version: r.version, new_line_count: countLines(next) };
   }
 
@@ -852,7 +858,7 @@ export class PageStore {
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
-    this.bumpKnowledge(meta.knowledge_id);
+    this.bumpKnowledge(meta.knowledge_id, pageId);
     return { id: pageId, version: r.version, new_line_count: countLines(next), replaced_lines: replacedLines };
   }
 
@@ -897,6 +903,12 @@ export class PageStore {
           joinKeywords(meta.keywords),
           new Date().toISOString(),
         );
+        // Per-page event so each affected page invalidates client-side.
+        emitEvent({
+          type: "page-changed",
+          page_id: meta.id,
+          knowledge_id: knowledgeId,
+        });
         result.push({ page_id: meta.id, page_title: meta.title, count: occurrences });
       }
       if (remaining <= 0) break;
@@ -1130,11 +1142,16 @@ export class PageStore {
     return { version: row?.version ?? 1 };
   }
 
-  private bumpKnowledge(knowledgeId: number): void {
+  private bumpKnowledge(knowledgeId: number, pageId?: number): void {
     const now = new Date().toISOString();
     this.db
       .prepare(`UPDATE knowledge SET updated_at = ?, version = version + 1 WHERE id = ?`)
       .run(now, knowledgeId);
+    emitEvent(
+      pageId != null
+        ? { type: "page-changed", page_id: pageId, knowledge_id: knowledgeId }
+        : { type: "knowledge-changed", knowledge_id: knowledgeId },
+    );
   }
 
   private syncFts(pageId: number, title: string, keywords: string[] | undefined, content: string): void {

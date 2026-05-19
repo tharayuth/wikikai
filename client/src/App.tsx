@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useHash } from "./hooks/useHash";
+import { useServerEvents } from "./hooks/useServerEvents";
 import { useAppSelector } from "./store";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
@@ -12,6 +13,7 @@ export function App() {
   const { location, navigate } = useHash();
   const theme = useAppSelector((s) => s.ui.theme);
   const [searchText, setSearchText] = useState("");
+  useServerEvents();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

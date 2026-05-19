@@ -1,4 +1,5 @@
 import type { Db } from "./db.js";
+import { emitEvent } from "../lib/events.js";
 
 export interface KnowledgeMetadata {
   id: number;
@@ -166,7 +167,9 @@ export class KnowledgeStore {
       author: input.author ?? null,
       now,
     });
-    return { id: Number(result.lastInsertRowid), created_at: now };
+    const id = Number(result.lastInsertRowid);
+    emitEvent({ type: "knowledge-changed" });
+    return { id, created_at: now };
   }
 
   get(id: number): KnowledgeMetadata | null {
@@ -215,6 +218,7 @@ export class KnowledgeStore {
         version: nextVersion,
       });
 
+    emitEvent({ type: "knowledge-changed", knowledge_id: id });
     return { id, version: nextVersion, updated_at: now };
   }
 
@@ -259,5 +263,6 @@ export class KnowledgeStore {
 
   remove(id: number): void {
     this.db.prepare(`DELETE FROM knowledge WHERE id = ?`).run(id);
+    emitEvent({ type: "knowledge-changed" });
   }
 }

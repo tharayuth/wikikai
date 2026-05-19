@@ -14,6 +14,7 @@ import type { PromptLogStore } from "../store/promptLog.js";
 import type { ToolHandlers } from "../mcp/handlers.js";
 import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
+import { onEvent } from "../lib/events.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -86,6 +87,41 @@ export function buildApp(opts: BuildAppOptions): Express {
       }
       next(e);
     }
+  });
+
+  // ─── Server-Sent Events ───
+  // One persistent text/event-stream per client; the server fans out
+  // store mutations from src/lib/events.ts so every open tab can
+  // invalidate the right RTK Query tags in real time. Lightweight —
+  // 25s keep-alive ping, JSON-encoded payload, no auth gate (same
+  // policy as the rest of /api which is meant to be network-protected).
+  app.get("/api/events", (req, res) => {
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+    res.write(`: connected\n\n`);
+    const ping = setInterval(() => {
+      try {
+        res.write(`: ping\n\n`);
+      } catch {
+        /* socket closed */
+      }
+    }, 25000);
+    const off = onEvent((e) => {
+      try {
+        res.write(`data: ${JSON.stringify(e)}\n\n`);
+      } catch {
+        /* socket closed */
+      }
+    });
+    req.on("close", () => {
+      clearInterval(ping);
+      off();
+    });
   });
 
   // ─── Knowledge API ───
