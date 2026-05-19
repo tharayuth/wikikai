@@ -77,25 +77,30 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
         </button>
       </div>
       <div className="topbar-right">
-        <KnowledgeInfo kid={activeKid} pid={activePid} />
-        <button
-          className="icon-btn"
-          title="Refresh — reload knowledge list, pages, and revisions"
-          onClick={() => {
-            dispatch(
-              portalApi.util.invalidateTags([
-                { type: "KnowledgeList", id: "LIST" },
-                "Knowledge",
-                "Page",
-                "PageRendered",
-                "Revisions",
-              ]),
-            );
-            dispatch(showToast("Refreshed"));
-          }}
-        >
-          ↻
-        </button>
+        <KnowledgeInfo
+          kid={activeKid}
+          pid={activePid}
+          titleSuffix={
+            <button
+              className="icon-btn ki-refresh"
+              title="Refresh — reload knowledge list, pages, and revisions"
+              onClick={() => {
+                dispatch(
+                  portalApi.util.invalidateTags([
+                    { type: "KnowledgeList", id: "LIST" },
+                    "Knowledge",
+                    "Page",
+                    "PageRendered",
+                    "Revisions",
+                  ]),
+                );
+                dispatch(showToast("Refreshed"));
+              }}
+            >
+              ↻
+            </button>
+          }
+        />
         <div className="topbar-controls">
           <div ref={wrapRef} className="topbar-search">
             <input

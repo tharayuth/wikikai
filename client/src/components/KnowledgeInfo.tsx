@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useGetKnowledgeQuery } from "../store/api";
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
@@ -7,9 +7,12 @@ import { InfoPopover } from "./InfoPopover";
 interface Props {
   kid: number | null;
   pid: number | null;
+  /** Rendered immediately after the title text (inside .ki-row-1).
+   *  Used by Topbar to pin Refresh right next to the topic name. */
+  titleSuffix?: ReactNode;
 }
 
-export function KnowledgeInfo({ kid, pid }: Props) {
+export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   const dispatch = useAppDispatch();
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: kid === null });
   const [infoOpen, setInfoOpen] = useState(false);
@@ -89,6 +92,7 @@ export function KnowledgeInfo({ kid, pid }: Props) {
           &amp;{meta.id}
         </button>
         <h2 className="ki-title">{meta.title}</h2>
+        {titleSuffix}
         {infoOpen && (
           <InfoPopover
             meta={meta}
