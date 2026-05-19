@@ -1249,9 +1249,22 @@ a:hover { text-decoration: underline; }
    The card is left-aligned in the viewer; text fills the card edge-to-edge
    (minus padding). Wide blocks (charts, mermaid, tables, embeds) still
    manage their own max-width from their own rules. */
+/* Wrapping frame around the article — owns the width that the user can
+   drag-resize via the right-edge handle. Default falls back to the old
+   formula so existing layouts don't shift; user pref overrides via the
+   --article-w custom property set in JS from localStorage. */
+.article-frame {
+  position: relative;
+  width: var(
+    --article-w,
+    min(calc(var(--app-max) - var(--sidebar-w) - 32px), calc(100% - 32px))
+  );
+  max-width: calc(100% - 32px);
+  margin: 10px auto 60px;
+  min-width: 0;
+}
 .markdown-body {
-  max-width: min(calc(var(--app-max) - var(--sidebar-w) - 32px), calc(100% - 32px));
-  margin: 10px 16px 60px;
+  width: 100%;
   padding: 24px 36px 40px;
   min-width: 0;
   font-size: 13.5px;
@@ -1260,6 +1273,22 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md), 0 4px 16px rgba(0,0,0,.04);
+}
+.article-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  border-radius: 4px;
+  transition: background .12s;
+  z-index: 2;
+}
+.article-resize-handle:hover,
+.article-resize-handle.dragging {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 /* Defensive cap: any inline image (`![](…)` or raw <img>) gets clamped
    to the article width regardless of an over-large width/height /

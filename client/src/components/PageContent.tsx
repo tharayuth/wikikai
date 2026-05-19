@@ -489,8 +489,9 @@ export function PageContent({ pageId, line, block }: Props) {
       />
 
       {editing ? (
-        <div className="page-editor-wrap">
-          <PageEditor
+        <div className="article-frame">
+          <div className="page-editor-wrap">
+            <PageEditor
               ref={editorRef}
               initial={draft}
               onChange={setDraft}
@@ -498,16 +499,107 @@ export function PageContent({ pageId, line, block }: Props) {
               jumpToLine={jumpLine}
               onJumped={() => setJumpLine(null)}
             />
+          </div>
+          <ArticleResizeHandle />
         </div>
       ) : (
-        <article
-          className="markdown-body"
-          ref={bodyRef}
-          // Rendered HTML comes from server-side markdown-it (html: false) with
-          // fenced JSON blocks HTML-attr-escaped — safe to inject.
-          dangerouslySetInnerHTML={{ __html: rendered.data ?? "" }}
-        />
+        <div className="article-frame">
+          <article
+            className="markdown-body"
+            ref={bodyRef}
+            // Rendered HTML comes from server-side markdown-it (html: false) with
+            // fenced JSON blocks HTML-attr-escaped — safe to inject.
+            dangerouslySetInnerHTML={{ __html: rendered.data ?? "" }}
+          />
+          <ArticleResizeHandle />
+        </div>
       )}
     </>
+  );
+}
+
+/**
+ * Drag handle pinned to the right edge of `.article-frame`. Updates a
+ * --article-w custom property on <html> (so the page-editor-wrap and the
+ * rendered article stay in lockstep). Persists to localStorage; restored
+ * once on first mount of any handle in the session.
+ */
+const STORAGE_KEY = "wikikai-article-w";
+let restoredFromStorage = false;
+function ArticleResizeHandle() {
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (restoredFromStorage) return;
+    restoredFromStorage = true;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const n = raw == null ? NaN : Number(raw);
+      if (Number.isFinite(n) && n >= 480 && n <= 2000) {
+        document.documentElement.style.setProperty("--article-w", `${n}px`);
+      }
+    } catch {
+      /* private mode / no storage */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      // Frame is centered (margin: auto), so width = 2 * (cursor.x - frame.left)
+      // keeps the centerline stable. Clamp 480..2000 so the handle can't
+      // disappear off-screen.
+      const frame = document.querySelector(".article-frame") as HTMLElement | null;
+      if (!frame) return;
+      const rect = frame.getBoundingClientRect();
+      const next = Math.max(
+        480,
+        Math.min(2000, Math.round((e.clientX - rect.left) * 2)),
+      );
+      document.documentElement.style.setProperty("--article-w", `${next}px`);
+    };
+    const onUp = () => {
+      setDragging(false);
+      const cur = document.documentElement.style.getPropertyValue("--article-w");
+      const n = parseInt(cur.replace("px", ""), 10);
+      if (Number.isFinite(n)) {
+        try {
+          localStorage.setItem(STORAGE_KEY, String(n));
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [dragging]);
+
+  return (
+    <div
+      className={`article-resize-handle${dragging ? " dragging" : ""}`}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDoubleClick={() => {
+        // Reset to default
+        document.documentElement.style.removeProperty("--article-w");
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+      }}
+      title="Drag to resize article width · double-click to reset"
+      aria-label="Resize article width"
+    />
   );
 }

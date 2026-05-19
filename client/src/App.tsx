@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useHash } from "./hooks/useHash";
 import { useServerEvents } from "./hooks/useServerEvents";
 import { useAppSelector } from "./store";
@@ -18,6 +18,20 @@ export function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // Restore the article width preference before first paint so the
+  // article doesn't jump from the default to the user's chosen size.
+  useLayoutEffect(() => {
+    try {
+      const raw = localStorage.getItem("wikikai-article-w");
+      const n = raw == null ? NaN : Number(raw);
+      if (Number.isFinite(n) && n >= 480 && n <= 2000) {
+        document.documentElement.style.setProperty("--article-w", `${n}px`);
+      }
+    } catch {
+      /* private mode */
+    }
+  }, []);
 
   return (
     <>
