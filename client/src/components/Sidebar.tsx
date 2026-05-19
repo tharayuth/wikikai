@@ -70,28 +70,37 @@ function KnowledgeRow({
       <a
         className={`sidebar-item${isActive ? " active" : ""}`}
         href={`/&${item.id}`}
+        aria-expanded={effectiveOpen}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
-          onPickKnowledge(item.id);
-          setOpen(true);
+          if (isActive) {
+            // Already navigated here — click acts as expand/collapse toggle.
+            // (Skipped when a page-filter is forcing the row open.)
+            if (pageFilter == null) setOpen((o) => !o);
+          } else {
+            onPickKnowledge(item.id);
+            setOpen(true);
+          }
         }}
       >
-        <button
-          type="button"
+        <span
           className={`sidebar-chevron${effectiveOpen ? " open" : ""}`}
-          aria-label={effectiveOpen ? "collapse pages" : "expand pages"}
-          aria-expanded={effectiveOpen}
-          disabled={pageFilter != null}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (pageFilter != null) return;
-            setOpen((o) => !o);
-          }}
+          aria-hidden
         >
-          ▸
-        </button>
+          <svg
+            viewBox="0 0 24 24"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="9 6 15 12 9 18" />
+          </svg>
+        </span>
         <div className="ki-body">
           <div className="title">{item.title}</div>
           <div className="meta">

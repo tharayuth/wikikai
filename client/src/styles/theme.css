@@ -504,25 +504,21 @@ a:hover { text-decoration: underline; }
 
 .sidebar-chevron {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  background: transparent;
-  border: none;
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 14px;
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  margin-top: 0;
   transform: rotate(0deg);
-  transition: transform 0.15s, color 0.12s, background 0.12s;
+  transition: transform 0.15s, color 0.12s;
+  pointer-events: none;
 }
 .sidebar-chevron.open { transform: rotate(90deg); }
-.sidebar-chevron:hover { color: var(--accent); background: var(--surface); }
+.sidebar-item:hover .sidebar-chevron { color: var(--text); }
 .sidebar-item.active .sidebar-chevron { color: var(--accent-strong); }
+.sidebar-chevron svg { display: block; }
 
 .sidebar-pages {
   list-style: none;
