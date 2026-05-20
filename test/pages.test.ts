@@ -923,6 +923,110 @@ describe("PageStore", () => {
     });
   });
 
+  describe("setHtmlEmbedImageSize", () => {
+    it("adds a style attr with max-width when none existed", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: "```html-embed\n<img src=\"/img/a.png\" alt=\"a\">\n```",
+      });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const blockId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      pages.setHtmlEmbedImageSize(id, blockId, 0, { width: 240 });
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw1).toContain(
+        '<img src="/img/a.png" alt="a" style="max-width:240px">',
+      );
+    });
+
+    it("preserves other style properties when updating max-width", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content:
+          "```html-embed\n<img src=\"/img/a.png\" style=\"border-radius:8px;border:1px solid red;max-width:100px\">\n```",
+      });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const blockId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      pages.setHtmlEmbedImageSize(id, blockId, 0, {
+        width: 400,
+        height: 300,
+      });
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      // Old max-width gone, new max-width + max-height added, border kept
+      expect(raw1).toContain("border-radius:8px");
+      expect(raw1).toContain("border:1px solid red");
+      expect(raw1).toContain("max-width:400px");
+      expect(raw1).toContain("max-height:300px");
+      // Only one max-width / max-height
+      const matches = raw1.match(/max-width/g);
+      expect(matches?.length).toBe(1);
+    });
+
+    it("targets the right occurrence inside a fence with multiple <img>", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: [
+          "```html-embed",
+          '<img src="/img/a.png">',
+          '<img src="/img/b.png">',
+          '<img src="/img/c.png">',
+          "```",
+        ].join("\n"),
+      });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const blockId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      // Resize the middle one (index 1)
+      pages.setHtmlEmbedImageSize(id, blockId, 1, { width: 200 });
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const lines = raw1.split("\n");
+      expect(lines.find((l) => l.includes("/img/a.png"))).toBe(
+        '<img src="/img/a.png">',
+      );
+      expect(lines.find((l) => l.includes("/img/b.png"))).toBe(
+        '<img src="/img/b.png" style="max-width:200px">',
+      );
+      expect(lines.find((l) => l.includes("/img/c.png"))).toBe(
+        '<img src="/img/c.png">',
+      );
+    });
+
+    it("throws when the block isn't an html-embed", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: '```stats\n[{"num":"1","label":"x"}]\n```',
+      });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const blockId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      expect(() =>
+        pages.setHtmlEmbedImageSize(id, blockId, 0, { width: 100 }),
+      ).toThrow(/not html-embed/);
+    });
+  });
+
   describe("cascade", () => {
     it("page rows are removed when knowledge is deleted (FK CASCADE)", () => {
       pages.add({ knowledge_id: kid, title: "A", content: "a" });

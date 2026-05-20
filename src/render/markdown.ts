@@ -111,6 +111,26 @@ function blockIdAttr(id: number | null): string {
   return id == null ? "" : ` data-block-id="${id}"`;
 }
 
+/**
+ * Inject `data-html-img-block` + `data-html-img-index` attributes into
+ * every `<img>` tag inside an `html-embed` fence's raw HTML, so the
+ * client's drag-resize hook can identify which `<img>` in which fence
+ * to update and the server can rewrite the matching inline `style` in
+ * source. When the fence has no block id (shouldn't happen after
+ * `injectBlockIds`), returns the content unchanged.
+ */
+function annotateHtmlEmbedImages(
+  content: string,
+  blockId: number | null,
+): string {
+  if (blockId == null) return content;
+  let idx = 0;
+  return content.replace(/<img\b([^>]*?)(\/?)>/gi, (_match, attrs, slash) => {
+    const i = idx++;
+    return `<img${attrs} data-html-img-block="${blockId}" data-html-img-index="${i}"${slash}>`;
+  });
+}
+
 function renderStats(jsonText: string, blockId: number | null = null): string {
   let items: StatItem[];
   try {
@@ -345,7 +365,12 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       // inside a wrapper div so authors can scope styles via
       // `.html-embed > X`. <script> tags are inert (mounted via
       // dangerouslySetInnerHTML → innerHTML, which doesn't run scripts).
-      return `<div class="html-embed"${blockIdAttr(blockId)}>\n${token.content}\n${blockBadge(blockId)}</div>\n`;
+      // We also stamp each `<img>` inside the embed with
+      // `data-html-img-block` + `data-html-img-index` so the client's
+      // drag-resize hook can target the Nth `<img>` in this specific
+      // fence and the server can update its inline `style` in source.
+      const annotated = annotateHtmlEmbedImages(token.content, blockId);
+      return `<div class="html-embed"${blockIdAttr(blockId)}>\n${annotated}\n${blockBadge(blockId)}</div>\n`;
     }
     return defaultFence(tokens, idx, options, env, self);
   };

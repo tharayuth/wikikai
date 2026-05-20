@@ -47,14 +47,14 @@ export function useImageResize(
       if (img.closest("figure.image-thumb")) continue;
       // Skip linked images — link click should win
       if (img.closest("a")) continue;
-      // Skip embedded HTML (html-embed) — Phase 2 / different surface
-      if (img.closest(".html-embed")) continue;
       // Skip if we've already wrapped this <img> on a previous run
       if (img.parentElement?.classList.contains("img-resize-wrap")) continue;
-      // Only inline markdown images carry data-img-src (the renderer
-      // stamps it). Without it we can't talk to the resize endpoint.
-      const src = img.getAttribute("data-img-src");
-      if (!src) continue;
+      // Must be one of the two recognised surfaces:
+      //   • Inline markdown img — carries `data-img-src`
+      //   • html-embed <img>    — carries `data-html-img-block`
+      const isMarkdown = img.hasAttribute("data-img-src");
+      const isHtmlEmbed = img.hasAttribute("data-html-img-block");
+      if (!isMarkdown && !isHtmlEmbed) continue;
 
       const wrap = document.createElement("span");
       wrap.className = "img-resize-wrap";
@@ -74,11 +74,13 @@ export function useImageResize(
       wraps.push({ wrap, img, handles });
     }
 
+    type DragTarget =
+      | { surface: "markdown"; src: string; occurrence: number }
+      | { surface: "html-embed"; blockId: number; index: number };
     type DragState = {
       kind: "right" | "bottom" | "corner";
       img: HTMLImageElement;
-      src: string;
-      occurrence: number;
+      target: DragTarget;
       startX: number;
       startY: number;
       startW: number;
@@ -123,13 +125,25 @@ export function useImageResize(
         d.finalH != null && Math.abs(d.finalH - d.startH) >= 2;
       if (!changedW && !changedH) return;
       try {
-        await resize({
-          pageId,
-          src: d.src,
-          occurrence: d.occurrence,
+        const dims = {
           width: changedW ? d.finalW : undefined,
           height: changedH ? d.finalH : undefined,
-        }).unwrap();
+        };
+        if (d.target.surface === "markdown") {
+          await resize({
+            pageId,
+            src: d.target.src,
+            occurrence: d.target.occurrence,
+            ...dims,
+          }).unwrap();
+        } else {
+          await resize({
+            pageId,
+            block_id: d.target.blockId,
+            index: d.target.index,
+            ...dims,
+          }).unwrap();
+        }
       } catch (err) {
         // Roll back the live preview on failure
         d.img.style.maxWidth = `${d.startW}px`;
@@ -154,11 +168,26 @@ export function useImageResize(
           e.preventDefault();
           e.stopPropagation();
           const rect = img.getBoundingClientRect();
+          const blockAttr = img.getAttribute("data-html-img-block");
+          const target: DragTarget = blockAttr
+            ? {
+                surface: "html-embed",
+                blockId: Number(blockAttr),
+                index: Number(
+                  img.getAttribute("data-html-img-index") ?? "0",
+                ),
+              }
+            : {
+                surface: "markdown",
+                src: img.getAttribute("data-img-src") ?? "",
+                occurrence: Number(
+                  img.getAttribute("data-img-occurrence") ?? "0",
+                ),
+              };
           drag = {
             kind,
             img,
-            src: img.getAttribute("data-img-src") ?? "",
-            occurrence: Number(img.getAttribute("data-img-occurrence") ?? "0"),
+            target,
             startX: e.clientX,
             startY: e.clientY,
             startW: Math.round(rect.width),

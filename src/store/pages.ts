@@ -125,6 +125,47 @@ function parseTableRow(line: string): string[] {
   return inner.split("|").map((c) => c.trim());
 }
 
+/**
+ * Rewrite the `style` attribute of an `<img>` tag's attribute string
+ * to express the given max-width / max-height — preserving every
+ * unrelated style property (border, padding, opacity, …) the author
+ * wrote. Pass `undefined` for an axis to drop that constraint.
+ * Returns the new attribute string (no leading space, ready to splice
+ * back into `<img${result}>`).
+ */
+function updateImgStyleAttr(
+  attrs: string,
+  width?: number,
+  height?: number,
+): string {
+  const styleRe = /\bstyle\s*=\s*"([^"]*)"/i;
+  const m = styleRe.exec(attrs);
+  const existing = m ? m[1] : "";
+  const props = existing
+    .split(";")
+    .map((s) => s.trim())
+    .filter(
+      (s) =>
+        s.length > 0 &&
+        !/^max-width\s*:/i.test(s) &&
+        !/^max-height\s*:/i.test(s),
+    );
+  if (width != null) props.push(`max-width:${width}px`);
+  if (height != null) props.push(`max-height:${height}px`);
+  const newStyle = props.join(";");
+  if (m) {
+    if (newStyle) {
+      return attrs.replace(styleRe, `style="${newStyle}"`);
+    }
+    // Both axes removed and no other style props left — drop the attr
+    return attrs.replace(/\s*\bstyle\s*=\s*"[^"]*"/i, "");
+  }
+  if (newStyle) {
+    return `${attrs.replace(/\s+$/, "")} style="${newStyle}"`;
+  }
+  return attrs;
+}
+
 export class PageStore {
   constructor(private db: Db, private itemsDir: string) {
     fs.mkdirSync(itemsDir, { recursive: true });
@@ -621,6 +662,77 @@ export class PageStore {
     );
     this.bumpKnowledge(meta.knowledge_id, pageId);
     return { id: pageId, version: r.version, updated_at: now };
+  }
+
+  /**
+   * Resize an `<img>` that lives inside an `html-embed` fence by
+   * rewriting its inline `style` attribute. `blockId` identifies the
+   * fence (its `{@N}`), `imgIndex` is the 0-based position of the
+   * `<img>` tag inside that fence (mirrors what the renderer stamps
+   * as `data-html-img-index`). Sizing is encoded as
+   * `max-width:Npx; max-height:Mpx` in the existing `style` attr —
+   * any pre-existing `max-width`/`max-height` tokens are removed
+   * before the new ones are written, while every other style
+   * property the author wrote (border, padding, …) is preserved.
+   * Pass `undefined` for an axis to remove that constraint.
+   */
+  setHtmlEmbedImageSize(
+    pageId: number,
+    blockId: number,
+    imgIndex: number,
+    opts: { width?: number; height?: number },
+  ): { id: number; version: number; updated_at: string } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const block = this.getBlock(blockId);
+    if (!block) throw new Error(`block @${blockId} not found`);
+    if (block.kind !== "html-embed") {
+      throw new Error(
+        `@${blockId} is a ${block.kind} block, not html-embed`,
+      );
+    }
+
+    let count = 0;
+    let found = false;
+    const newInner = block.inner.replace(
+      /<img\b([^>]*?)(\/?)>/gi,
+      (match, attrs, slash) => {
+        if (count !== imgIndex) {
+          count++;
+          return match;
+        }
+        count++;
+        found = true;
+        const newAttrs = updateImgStyleAttr(
+          attrs,
+          opts.width,
+          opts.height,
+        );
+        return `<img${newAttrs}${slash}>`;
+      },
+    );
+    if (!found) {
+      throw new Error(
+        `<img> index ${imgIndex} not found inside @${blockId}`,
+      );
+    }
+
+    // The fence body sits on lines [line_start+1 .. line_end-1] —
+    // line_start is the ```html-embed line and line_end is the
+    // closing ``` line.
+    const bodyStart = block.line_start + 1;
+    const bodyEnd = block.line_end - 1;
+    if (bodyEnd < bodyStart) {
+      // Defensive: an empty fence shouldn't have hit our regex anyway,
+      // but bail rather than corrupt the closing marker.
+      throw new Error(`@${blockId} body is empty`);
+    }
+    const r = this.editLines(pageId, bodyStart, bodyEnd, newInner);
+    return {
+      id: r.id,
+      version: r.version,
+      updated_at: new Date().toISOString(),
+    };
   }
 
   /**

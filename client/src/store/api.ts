@@ -312,16 +312,20 @@ export const portalApi = createApi({
       { id: number; version: number; updated_at: string },
       {
         pageId: number;
-        src: string;
-        occurrence: number;
+        /** Inline markdown image — pass src + occurrence. */
+        src?: string;
+        occurrence?: number;
+        /** html-embed `<img>` — pass block_id + index instead. */
+        block_id?: number;
+        index?: number;
         width?: number;
         height?: number;
       }
     >({
-      query: ({ pageId, src, occurrence, width, height }) => ({
+      query: ({ pageId, src, occurrence, block_id, index, width, height }) => ({
         url: `pages/${pageId}/image-size`,
         method: "POST",
-        body: { src, occurrence, width, height },
+        body: { src, occurrence, block_id, index, width, height },
       }),
       // Same pattern as toggleTask — bump Page + Revisions but NOT
       // PageRendered. The client already applied the new size to the

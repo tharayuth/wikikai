@@ -403,23 +403,59 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
-  // Resize an inline markdown image — used by the client-side drag
-  // handles on rendered <img> elements. Persists to the title slot
-  // (`![alt](src "WxH")`), keeping `alt` available for screen-reader
-  // / FTS text. Pass `null` for either dimension to remove that
-  // constraint; pass both as null/missing to clear sizing entirely.
+  // Resize an image via the client-side drag handles. Two flavours:
+  //
+  //   • Inline markdown img — pass `{ src, occurrence, width?, height? }`.
+  //     Persists to the title slot (`![alt](src "WxH")`), keeping `alt`
+  //     available for screen-reader / FTS text.
+  //   • <img> inside an `html-embed` fence — pass `{ block_id, index,
+  //     width?, height? }`. Persists to the `<img>` tag's inline
+  //     `style` attribute (`max-width:Npx;max-height:Mpx`), leaving
+  //     other style properties intact.
+  //
+  // Pass `null`/undefined for either dimension to remove that constraint;
+  // pass both empty to clear sizing entirely.
   app.post("/api/pages/:pid/image-size", (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);
       const body = req.body as {
         src?: unknown;
         occurrence?: unknown;
+        block_id?: unknown;
+        index?: unknown;
         width?: unknown;
         height?: unknown;
       };
+      const toDim = (v: unknown): number | undefined => {
+        if (v == null) return undefined;
+        if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+        if (v <= 0) return undefined;
+        return Math.round(v);
+      };
+      const dims = { width: toDim(body.width), height: toDim(body.height) };
+
+      // html-embed path takes precedence when block_id is present
+      if (body.block_id != null) {
+        const blockId =
+          typeof body.block_id === "number" ? body.block_id : Number(body.block_id);
+        if (!Number.isInteger(blockId) || blockId <= 0) {
+          res.status(400).json({ error: "invalid block_id" });
+          return;
+        }
+        const imgIndex = typeof body.index === "number" ? body.index : 0;
+        if (!Number.isInteger(imgIndex) || imgIndex < 0) {
+          res.status(400).json({ error: "invalid index" });
+          return;
+        }
+        res.json(
+          opts.pages.setHtmlEmbedImageSize(pid, blockId, imgIndex, dims),
+        );
+        return;
+      }
+
       const src = typeof body.src === "string" ? body.src : "";
       if (!src) {
-        res.status(400).json({ error: "src is required" });
+        res.status(400).json({ error: "src or block_id is required" });
         return;
       }
       const occRaw = body.occurrence;
@@ -428,18 +464,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(400).json({ error: "invalid occurrence" });
         return;
       }
-      const toDim = (v: unknown): number | undefined => {
-        if (v == null) return undefined;
-        if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
-        if (v <= 0) return undefined;
-        return Math.round(v);
-      };
-      res.json(
-        opts.pages.setInlineImageSize(pid, src, occurrence, {
-          width: toDim(body.width),
-          height: toDim(body.height),
-        }),
-      );
+      res.json(opts.pages.setInlineImageSize(pid, src, occurrence, dims));
     } catch (e) {
       next(e);
     }
