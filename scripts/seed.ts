@@ -420,7 +420,24 @@ Numbered:
 | Papaya | 35 | ✓ |
 | Durian | 200 | — |
 
-> ⚠️ **Plain markdown tables do not get \`@N\` ids** — if you want the AI to address a table by \`@N\`, ask for it as an HTML table inside an \`html-embed\` (see the HTML embed page).
+> ✨ **Tables get \`@N\` ids too.** The server appends a trailing \`{@N}\` line under every table on save (with one blank line in between) — the renderer attaches it as \`data-block-id\` on the \`<table>\`, so search-flash, deep links, and \`get_block\` / \`get_table_row\` / \`find_table_rows\` all work on plain markdown tables. No HTML wrapper needed.
+
+**What you can ask the AI:**
+
+- "Update @<N> — add a \`supplier\` column" → AI reads the table via \`get_block({ id: <N> })\` and rewrites it
+- "What's the price of Mango from @<N>?" → AI uses \`find_table_rows({ block_id: <N>, where: { Product: "Mango" } })\` — no need to dump the whole table
+- "How many rows does @<N> have?" → \`get_block({ id: <N>, summary: true })\` returns \`columns\` + \`row_count\` only (cheap probe)
+- "Drop the last row of @<N>" → \`get_table_row({ block_id: <N>, index: -1 })\` finds the line, then \`edit_lines\`
+
+**Interactive checkboxes inside table cells**
+
+| Step | Done | Owner |
+|------|------|-------|
+| Cut release branch | [x] | DevOps |
+| Smoke test staging | [ ] | QA |
+| Roll forward | [ ] | Release |
+
+> 💡 Drop \`[ ]\` or \`[x]\` anywhere in a cell — start, middle, or multiple per cell. Each becomes a clickable checkbox sharing the same task-index counter as the GFM list. To keep a literal \`[x]\` as text in a cell (e.g. when documenting the syntax), wrap it in backticks: \`\\\`[x]\\\`\`. See the Interactive checkboxes page for the full reference.
 
 ## Block quotes
 
