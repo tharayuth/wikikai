@@ -855,9 +855,18 @@ export class PageStore {
   toggleTaskAtIndex(
     pageId: number,
     index: number,
+    opts: { expectedVersion?: number } = {},
   ): { index: number; done: boolean; version: number; updated_at: string } {
     const meta = this.getMetadata(pageId);
     if (!meta) throw new Error(`page #${pageId} not found`);
+    if (
+      opts.expectedVersion !== undefined &&
+      opts.expectedVersion !== meta.version
+    ) {
+      throw new Error(
+        `page #${pageId} version mismatch: expected v${opts.expectedVersion}, current v${meta.version} — re-read the page and try again`,
+      );
+    }
     const content = this.readContent(meta.knowledge_id, pageId);
     const lines = content.split("\n");
     const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;

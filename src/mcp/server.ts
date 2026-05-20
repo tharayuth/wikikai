@@ -152,7 +152,15 @@ const toggleTaskShape = {
     .int()
     .min(0)
     .describe(
-      "0-based index of the GFM task on the page (counts `- [ ]` / `- [x]` lines top-down, skipping any inside fenced code blocks). The web UI exposes the same index in each rendered checkbox's `data-task-index`.",
+      "0-based index of the checkbox on the page, counted top-down in source order across GFM `- [ ]`/`- [x]` items, markdown-table cells (`[ ]`/`[x]` anywhere in a cell), and `<input type=\"checkbox\">` inside `html-embed`. Code fences other than `html-embed` are skipped. The web UI exposes the same index in each rendered checkbox's `data-task-index`.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Optional but recommended for AI workflows. Page `version` from the most recent `read_page` / `get_block`. The server rejects the toggle if the page has been edited since (another tool may have inserted / removed a checkbox earlier in the document, shifting all subsequent indices). Web UI clicks omit this (no race window between render and click). Read → toggle in the same turn? Pass `expected_version` from the read response.",
     ),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
@@ -629,6 +637,7 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
         "(b) `[ ]` / `[x]` anywhere inside a markdown-table cell — start, middle, or multiple per cell (e.g. `| [ ] one [ ] two | done |`). The bracket pair must be bounded by whitespace or the cell separator `|`, so `[abc]` and markdown links like `[link](url)` are not detected. Wrap literal `[x]` in backticks to keep it as text. " +
         "(c) `<input type=\"checkbox\">` markup inside an `html-embed` fence. " +
         "Tasks inside any non-`html-embed` fenced code block are skipped. Writes the new state back to the page source (bumps version, snapshots revision, reindexes FTS). Web UI calls this same endpoint when a user clicks a rendered checkbox. " +
+        "**Race-safety note for AI**: indices are recomputed top-down from current source on every call, so if another tool inserts / removes a checkbox earlier in the document between your `read_page` and your `toggle_task`, index N now points at a DIFFERENT checkbox. Pass `expected_version` from your most recent read to make the server reject the call instead of flipping the wrong box. Without `expected_version` you get the web UI's behaviour (immediate flip, no race check). " +
         "Use when the user says 'tick task 2 on page #19', 'mark the third checkbox done', or 'uncheck item 0'.",
       inputSchema: toggleTaskShape,
     },

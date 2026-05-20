@@ -222,7 +222,15 @@ export const ToggleTaskSchema = z.object({
     .int()
     .min(0)
     .describe(
-      "0-based index of the `- [ ]` / `- [x]` task on the page, counted top-down across all lists, ignoring tasks that sit inside fenced code blocks.",
+      "0-based index of the checkbox on the page, counted top-down in source order across all surfaces — GFM `- [ ]`/`- [x]` task items, `[ ]`/`[x]` inside markdown-table cells, and `<input type=\"checkbox\">` inside `html-embed` fences. Tasks inside any non-`html-embed` fenced code block are skipped.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Optional. The `version` value returned by the most recent `read_page` / `get_block` for this page. When provided, the server rejects the toggle if the page's current version doesn't match — guards against index drift if another tool inserted/removed a checkbox earlier in the document between read and toggle. Web UI clicks omit this (no race window). AI workflows that read → think → toggle SHOULD pass it.",
     ),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
@@ -1250,7 +1258,9 @@ export function buildToolHandlers(
       const parsed = ToggleTaskSchema.parse(input);
       const meta = pages.getMetadata(parsed.page_id);
       if (!meta) throw new Error(`page #${parsed.page_id} not found`);
-      const r = pages.toggleTaskAtIndex(parsed.page_id, parsed.index);
+      const r = pages.toggleTaskAtIndex(parsed.page_id, parsed.index, {
+        expectedVersion: parsed.expected_version,
+      });
       logIf(
         "toggle_task",
         parsed.user_prompt,

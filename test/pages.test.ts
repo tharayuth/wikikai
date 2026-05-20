@@ -465,6 +465,24 @@ describe("PageStore", () => {
       expect(lines[2]).toBe("| [ ] one [x] two [ ] three |");
     });
 
+    it("rejects toggle when expected_version doesn't match (race guard)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "race",
+        content: "- [ ] one\n- [ ] two\n",
+      });
+      // Page is v1 after add. Toggle once → v2.
+      const r1 = pages.toggleTaskAtIndex(p.id, 0, { expectedVersion: 1 });
+      expect(r1.version).toBe(2);
+      // Now toggle again with stale expectation v1 → must throw
+      expect(() =>
+        pages.toggleTaskAtIndex(p.id, 1, { expectedVersion: 1 }),
+      ).toThrow(/version mismatch/);
+      // Without expected_version it still works (backwards-compatible)
+      const r2 = pages.toggleTaskAtIndex(p.id, 1);
+      expect(r2.version).toBe(3);
+    });
+
     it("does NOT match `[xyz]` or markdown links — only `[ ]`/`[x]`/`[X]`", () => {
       const initial = [
         "| Cell |",
