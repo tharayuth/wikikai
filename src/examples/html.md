@@ -123,11 +123,11 @@ LIMIT 10;</pre>
 
 **Rule of thumb:** ถ้า declarative fence (chart/mermaid/stats/steps) ตอบโจทย์ — ใช้เลย เพราะสั้นและ template ง่าย. ถ้าต้องการเลย์เอาต์เฉพาะหรือสไตล์ที่ไม่อยู่ในชุดนั้น — `html-embed` คือคำตอบ
 
-## ตารางที่ต้องอ้างอิงด้วย `@N` → ต้องใช้ `html-embed`
+## ตาราง: ใช้ markdown ปกติเป็นค่าเริ่มต้น
 
-ทุก rich block (mermaid / chart / chart-grid / stats / steps / html-embed) ได้ **block id แบบ global** `@N` ติดมุม → user เรียก "อัพเดต @47" ได้.
+ทั้ง **ตาราง markdown ปกติ** (`| col | col |`) และ rich block อื่น ๆ (mermaid / chart / stats / steps / html-embed) ได้ **block id แบบ global** `@N` ทั้งหมด — server ใส่บรรทัด `{@N}` ใต้ทุกตารางอัตโนมัติตอน save (เว้น 1 บรรทัด). user เรียก "อัพเดต @47" ได้กับตารางด้วย.
 
-แต่ **ตาราง markdown ปกติ** (`| col | col |`) ไม่มี `@N` เพราะไม่ใช่ fence — เป็น text ธรรมดา. ดังนั้น:
+แนวทางเลือก:
 
-- ตารางที่อาจไม่ได้อ้างทีหลัง → markdown table ปกติ (อ่านง่ายใน source)
-- **ตารางที่ user/AI อาจอยากแก้/อ้างด้วย `@N` ทีหลัง → ใช้ `html-embed` กับ `<table>`** → ได้ `@N` + ตกแต่งได้ละเอียดเป็นโบนัส
+- **ตารางทั่วไป → markdown table ปกติ** (อ่านง่ายใน source, ใส่ `[ ]`/`[x]` ใน cell ได้, แก้ผ่าน `get_table_row` / `find_table_rows`)
+- **ตารางที่ต้อง styling พิเศษ** (gradient header, sticky col, badge, row coloring) → ใช้ `html-embed` กับ `<table>` — เพื่อความยืดหยุ่นของ HTML/CSS ล้วน ๆ ไม่ใช่เพื่อ `@N`

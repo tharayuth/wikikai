@@ -69,8 +69,12 @@ const addPageShape = {
   content: z.string().describe(
     "Markdown body. Custom fences for richer content: ```mermaid (diagrams), ```chart / ```chart-grid (Chart.js), ```stats (KPI cards), ```steps (numbered step cards), ```images (thumbnail gallery from add_image src paths), ```html-embed (raw HTML for flexible tables, layouts, SVG, iframes, AND `<img>` tags using add_image src paths). " +
       "Each rendered fenced block is auto-assigned a stable global id and annotated in source as ```mermaid {@123}; you can refer to it by `@N` thereafter (e.g. 'update @123'). " +
-      "Interactive checkboxes: write a GFM task list — `- [ ] thing to do` / `- [x] done` inside any bulleted list. The UI renders real clickable checkboxes that write back to source on click (server-side toggle, version-bumped, FTS-reindexed). Raw `<input type=\"checkbox\">` markup inside an ```html-embed block is also clickable — the renderer rewrites it with a shared task index — so styled tables / cards / status grids stay live too. AI can drive the same toggle via the `toggle_task` tool — pass `page_id` + the 0-based task index (counted top-down across both surfaces, skipping any inside other fenced code blocks). " +
-      "Plain markdown tables ARE supported but do NOT receive an `@N` id — if a table needs to be referenceable, write it as a `<table>` inside an ```html-embed block instead. " +
+      "Interactive checkboxes (three surfaces, all live, all flipped via the same `toggle_task` tool): " +
+      "(a) GFM task list `- [ ] thing` / `- [x] done` inside any bulleted list, " +
+      "(b) `[ ]` / `[x]` anywhere inside a markdown-table cell — e.g. `| Task | [ ] | Owner |` or `| Tests [x] Lint [x] Types [ ] |` (multiple per cell). The bracket pair must be bounded by whitespace or the cell separator `|`; wrap a literal `[x]` in backticks if you want to keep it as text, " +
+      "(c) raw `<input type=\"checkbox\">` markup inside an ```html-embed block (use only when you need full HTML/CSS control — for ordinary todo tables prefer (b)). " +
+      "The UI renders real clickable boxes that write back to source on click (server-side toggle, version-bumped, FTS-reindexed). `toggle_task` flips the Nth checkbox counted top-down across all three surfaces in source order (skipping any inside non-html-embed fenced code blocks). " +
+      "Plain markdown tables also receive an `@N` id — the server appends a trailing `{@N}` line under every table on save (one blank line above it). `get_block({ id })` / `get_table_row` / `find_table_rows` all work on tables; `get_block({ id, summary: true })` returns just `columns` + `row_count` for cheap schema probes on big tables. " +
       "Images: upload via `add_image` first, then embed the returned `src` in any of three ways: (a) plain markdown `![alt](/img/...)` — the most flexible, works in paragraphs, list items, AND markdown table cells; use this when the image is inline content. Optional sizing via the title slot — `![alt](src \"WxH\")` (e.g. `\"300x200\"`, `\"300x\"` width-only, `\"x200\"` height-only, or `\"caption w=300 h=200\"`); aspect ratio is always preserved. **Sizing guidance:** the rendered article column is ~860px wide on a typical 1440px screen and narrower on small viewports — keep inline images modest (width ≤ ~720px for full-bleed, smaller for inline thumbs). For a large reference / screenshot the user should be able to expand, use the ```images fence instead (it shows a small thumbnail and click → fullscreen lightbox, so the source can be any resolution). The CSS still clamps any over-large image to the article width as a safety net, but the source hint also belongs at a sane size. (b) Paste the `src` into an ```images fence for a thumbnail gallery with click-to-lightbox — preferred for large screenshots or showcase images. (c) `<img src='/img/...' />` inside an ```html-embed when the image is part of a custom HTML layout (flex row, `<details>`, custom width). All three surfaces are picked up by `read_page`'s `images_referenced` list. " +
       "See get_example for templates.",
   ),
@@ -285,8 +289,7 @@ const getExampleShape = {
     .describe(
       "Example flavor; default 'full' shows every fenced-block type. " +
         "Pick one to learn the template for that fence: full / minimal / mermaid / chart / stats / steps / er / html. " +
-        "Note: rendered rich blocks (mermaid/chart/chart-grid/stats/steps/html-embed) carry a `@N` id you can refer to later. " +
-        "Plain markdown tables don't — wrap a `<table>` in `html-embed` if you need to address the table by id.",
+        "Note: rendered rich blocks (mermaid/chart/chart-grid/stats/steps/html-embed/images) AND plain markdown tables all carry a `@N` id you can refer to later — tables get a trailing `{@N}` line auto-stamped under them on save.",
     ),
   outline_only: z
     .boolean()
@@ -471,7 +474,7 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
       title: "Read page (with parent knowledge context)",
       description:
         "Return page content + total line count + hash. The response also includes the parent knowledge (&) with all sibling pages, so you know where this page sits in the document without a separate get_knowledge call. " +
-        "The returned content includes `{@N}` annotations on every rich fenced block — that's the global block id the user (or you) can refer to by `@N` later. Plain markdown tables don't have one; if the user asks to update a table by `@N`, the table needs to be authored as `<table>` inside an `html-embed` fence first. " +
+        "The returned content includes `{@N}` annotations on every rich fenced block AND on every plain markdown table (as a trailing `{@N}` line under the table) — that's the global block id the user (or you) can refer to by `@N` later. `get_block({ id })` resolves either kind in one call. " +
         "If the page references any internal image (via an ```images fence OR a `<img src=\"/img/...\" />` inside an ```html-embed fence), the response carries `images_referenced` — a pre-parsed list of `{ src, alt?, caption?, block_id?, via }` where `via` is either 'images' or 'html-embed'. Use it with `get_image({ src })` to view the bytes inline instead of re-scanning the page yourself. " +
         "Optional line_start/line_end to read just a slice. Always re-read before `edit_lines` if you intend to use expected_hash.",
       inputSchema: readPageShape,
