@@ -239,8 +239,15 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   return (
     <aside className="sidebar" id="sidebar">
       {searchBox}
-      {groupByProject(matched).map(([project, list]) => (
-        <ProjectGroup key={project} project={project}>
+      {groupByProject(matched).map(([project, list]) => {
+        const containsActive =
+          activeKid != null && list.some((it) => it.id === activeKid);
+        return (
+        <ProjectGroup
+          key={project}
+          project={project}
+          containsActive={containsActive}
+        >
           {list.map((it) => {
             // Only narrow pages list when the knowledge appeared *because* a
             // page matched (i.e. its title / project did not match `q`).
@@ -262,35 +269,83 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
             );
           })}
         </ProjectGroup>
-      ))}
+        );
+      })}
     </aside>
   );
 }
 
+const PROJECT_OPEN_KEY = (project: string) =>
+  `wikikai.sidebar.project.${project}`;
+
+/** Read the stored open/closed preference for a project, or null if unset. */
+function readStoredOpen(project: string): boolean | null {
+  try {
+    const v = localStorage.getItem(PROJECT_OPEN_KEY(project));
+    if (v === "1") return true;
+    if (v === "0") return false;
+  } catch {
+    /* localStorage may be unavailable (private mode, SSR) */
+  }
+  return null;
+}
+
+function writeStoredOpen(project: string, open: boolean): void {
+  try {
+    localStorage.setItem(PROJECT_OPEN_KEY(project), open ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 function ProjectGroup({
   project,
+  containsActive,
   children,
 }: {
   project: string;
+  /** True when the currently-active knowledge belongs to this project.
+   *  Forces the group open so the user can see where they are even when
+   *  the group's manual preference is collapsed. */
+  containsActive: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(true);
+  // Default is COLLAPSED. localStorage remembers user toggle per project.
+  // Active project auto-expands on first render even when no preference
+  // is stored, so a brand-new visitor still sees their current location.
+  const [open, setOpen] = useState<boolean>(() => {
+    const stored = readStoredOpen(project);
+    if (stored != null) return stored;
+    return containsActive;
+  });
+
+  // When user navigates into a project that was manually collapsed, force
+  // it open so the active row is visible — but DON'T persist that, so the
+  // user's stored preference is restored next session.
+  const effectiveOpen = open || containsActive;
+
   return (
-    <div className={`sidebar-group${open ? "" : " collapsed"}`}>
+    <div className={`sidebar-group${effectiveOpen ? "" : " collapsed"}`}>
       <button
         type="button"
-        className={`sidebar-group-title${open ? " open" : ""}`}
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        className={`sidebar-group-title${effectiveOpen ? " open" : ""}`}
+        aria-expanded={effectiveOpen}
+        onClick={() => {
+          setOpen((o) => {
+            const next = !o;
+            writeStoredOpen(project, next);
+            return next;
+          });
+        }}
       >
         <span className="group-chevron" aria-hidden>
-          {open ? "📖" : "📕"}
+          {effectiveOpen ? "📖" : "📕"}
         </span>
         <span className="group-name">{project}</span>
       </button>
       {/* `hidden` rather than removing children — preserves each
           KnowledgeRow's local expand state across project collapse / re-open. */}
-      <div className="sidebar-group-body" hidden={!open}>
+      <div className="sidebar-group-body" hidden={!effectiveOpen}>
         {children}
       </div>
     </div>
