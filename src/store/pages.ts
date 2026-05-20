@@ -295,6 +295,162 @@ export class PageStore {
     };
   }
 
+  /**
+   * Search inside a markdown-table block. Returns matching rows as
+   * `{ row_index, columns, source_line }` objects.
+   *
+   *  - `q`       — substring search (case-insensitive, Unicode-aware via
+   *                `String.prototype.toLowerCase`); matched against every
+   *                cell unless `columns` narrows the candidate set.
+   *  - `where`   — exact column=value match. Multiple keys = AND.
+   *  - `columns` — restrict `q` to these columns only. Does not affect
+   *                `where`.
+   *  - `limit`   — cap returned rows (default 50, max 500). `total_matched`
+   *                always reflects the unrestricted match count so callers
+   *                know when results were truncated.
+   *
+   * Throws when the block isn't a table. `q`/`where`/`columns` are all
+   * optional — calling with none returns every row up to `limit` (useful
+   * for "give me the first N rows" probes).
+   */
+  findTableRows(
+    blockId: number,
+    opts: {
+      q?: string;
+      where?: Record<string, string>;
+      columns?: string[];
+      limit?: number;
+    } = {},
+  ): {
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    columns: string[];
+    matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+    }>;
+    total_matched: number;
+    truncated: boolean;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(`@${blockId} is a ${b.kind} block, not a table`);
+    }
+    const limit = Math.min(Math.max(Math.floor(opts.limit ?? 50), 1), 500);
+    const headers = parseTableRow(b.source.split("\n")[0]);
+    const dataLines = b.inner.split("\n").filter((l) => /\S/.test(l));
+    const qLower = opts.q ? opts.q.toLowerCase() : null;
+    const where = opts.where ?? null;
+    const colFilter =
+      opts.columns && opts.columns.length > 0
+        ? new Set(opts.columns)
+        : null;
+
+    const matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+    }> = [];
+    let totalMatched = 0;
+
+    for (let i = 0; i < dataLines.length; i++) {
+      const cells = parseTableRow(dataLines[i]);
+      const rowCols: Record<string, string> = {};
+      for (let j = 0; j < headers.length; j++) {
+        rowCols[headers[j]] = cells[j] ?? "";
+      }
+
+      // where (exact column match, AND across keys)
+      if (where) {
+        let ok = true;
+        for (const k of Object.keys(where)) {
+          if (rowCols[k] !== where[k]) {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok) continue;
+      }
+
+      // q (substring, case-insensitive, optionally restricted by columns)
+      if (qLower != null) {
+        let ok = false;
+        for (const name of headers) {
+          if (colFilter && !colFilter.has(name)) continue;
+          if (rowCols[name].toLowerCase().includes(qLower)) {
+            ok = true;
+            break;
+          }
+        }
+        if (!ok) continue;
+      }
+
+      totalMatched++;
+      if (matches.length < limit) {
+        matches.push({
+          row_index: i,
+          columns: rowCols,
+          source_line: b.line_start + 2 + i,
+        });
+      }
+    }
+
+    return {
+      block_id: blockId,
+      knowledge_id: b.knowledge_id,
+      page_id: b.page_id,
+      columns: headers,
+      matches,
+      total_matched: totalMatched,
+      truncated: totalMatched > matches.length,
+    };
+  }
+
+  /**
+   * Lightweight metadata for a block — used by `get_block({ summary: true })`.
+   * Returns the same context block as `getBlock` but without `source`/`inner`,
+   * and for tables also reports `columns` + `row_count` so callers can decide
+   * whether to fetch the full body or slice.
+   */
+  getBlockSummary(blockId: number): {
+    block_id: number;
+    kind: string;
+    line_start: number;
+    line_end: number;
+    page_id: number;
+    page_position: number;
+    page_title: string;
+    knowledge_id: number;
+    knowledge_title: string;
+    project: string | null;
+    columns?: string[];
+    row_count?: number;
+  } | null {
+    const b = this.getBlock(blockId);
+    if (!b) return null;
+    const base = {
+      block_id: b.block_id,
+      kind: b.kind,
+      line_start: b.line_start,
+      line_end: b.line_end,
+      page_id: b.page_id,
+      page_position: b.page_position,
+      page_title: b.page_title,
+      knowledge_id: b.knowledge_id,
+      knowledge_title: b.knowledge_title,
+      project: b.project,
+    };
+    if (b.kind === "table") {
+      const headers = parseTableRow(b.source.split("\n")[0]);
+      const row_count = b.inner.split("\n").filter((l) => /\S/.test(l)).length;
+      return { ...base, columns: headers, row_count };
+    }
+    return base;
+  }
+
   // ─────────── Block IDs (@N) ───────────
 
   /**

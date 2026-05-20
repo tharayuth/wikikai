@@ -312,6 +312,12 @@ export const GetBlockSchema = z.object({
     .describe(
       "Global block id (the `N` in `@N`). Returns the block's source + inner body + parent page/knowledge context in one call. `kind` is the fence language for rich blocks, or `\"table\"` when `@N` annotates a plain markdown table.",
     ),
+  summary: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, omit `source` and `inner` (no body bytes). For table blocks the response gains `columns: string[]` + `row_count: number` so you can probe a table's schema cheaply before deciding whether to fetch the full source or slice rows via get_table_row / find_table_rows. Use for large tables where the body would be expensive.",
+    ),
 });
 
 export const GetTableRowSchema = z.object({
@@ -326,6 +332,40 @@ export const GetTableRowSchema = z.object({
     .describe(
       "0-based data-row index (header + separator excluded). Negative wraps from the end: -1 = last row.",
     ),
+});
+
+export const FindTableRowsSchema = z.object({
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  q: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Substring search (case-insensitive). Matched against each cell of every row; restrict to specific columns via `columns`. Cheaper than pulling the whole table when you just need rows containing some text.",
+    ),
+  where: z
+    .record(z.string())
+    .optional()
+    .describe(
+      "Exact column=value match. Multiple keys are AND-ed. Case-sensitive (use `q` for fuzzy text search).",
+    ),
+  columns: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Restrict the `q` substring search to these column names. Has no effect on `where`. Omit to search all columns.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Cap on returned rows. Default 50, max 500. `total_matched` always reflects the full match count so callers know when results were truncated."),
 });
 
 export const GetExampleSchema = z.object({
@@ -370,6 +410,7 @@ export type ToolInputs = {
   search: z.infer<typeof SearchSchema>;
   get_block: z.infer<typeof GetBlockSchema>;
   get_table_row: z.infer<typeof GetTableRowSchema>;
+  find_table_rows: z.infer<typeof FindTableRowsSchema>;
   add_image: z.infer<typeof AddImageSchema>;
   get_image: z.infer<typeof GetImageSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
@@ -536,8 +577,10 @@ export interface ToolHandlers {
   get_block(input: ToolInputs["get_block"]): Promise<{
     block_id: number;
     kind: string;
-    source: string;
-    inner: string;
+    /** Omitted when `summary: true`. */
+    source?: string;
+    /** Omitted when `summary: true`. */
+    inner?: string;
     line_start: number;
     line_end: number;
     page_id: number;
@@ -547,6 +590,10 @@ export interface ToolHandlers {
     knowledge_title: string;
     project: string | null;
     url: string;
+    /** Present when `summary: true` AND `kind === "table"`. */
+    columns?: string[];
+    /** Present when `summary: true` AND `kind === "table"`. */
+    row_count?: number;
   }>;
 
   get_table_row(input: ToolInputs["get_table_row"]): Promise<{
@@ -557,6 +604,21 @@ export interface ToolHandlers {
     columns: Record<string, string>;
     source_line: number;
     url: string;
+  }>;
+
+  find_table_rows(input: ToolInputs["find_table_rows"]): Promise<{
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    columns: string[];
+    matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+      url: string;
+    }>;
+    total_matched: number;
+    truncated: boolean;
   }>;
 
   add_image(input: ToolInputs["add_image"]): Promise<{
@@ -1061,6 +1123,14 @@ export function buildToolHandlers(
 
     async get_block(input) {
       const parsed = GetBlockSchema.parse(input);
+      if (parsed.summary) {
+        const s = pages.getBlockSummary(parsed.id);
+        if (!s) throw new Error(`block @${parsed.id} not found`);
+        return {
+          ...s,
+          url: urlFor(ctx, s.knowledge_id, s.page_id, s.line_start),
+        };
+      }
       const b = pages.getBlock(parsed.id);
       if (!b) throw new Error(`block @${parsed.id} not found`);
       return {
@@ -1075,6 +1145,23 @@ export function buildToolHandlers(
       return {
         ...r,
         url: urlFor(ctx, r.knowledge_id, r.page_id, r.source_line),
+      };
+    },
+
+    async find_table_rows(input) {
+      const parsed = FindTableRowsSchema.parse(input);
+      const r = pages.findTableRows(parsed.block_id, {
+        q: parsed.q,
+        where: parsed.where,
+        columns: parsed.columns,
+        limit: parsed.limit,
+      });
+      return {
+        ...r,
+        matches: r.matches.map((m) => ({
+          ...m,
+          url: urlFor(ctx, r.knowledge_id, r.page_id, m.source_line),
+        })),
       };
     },
 

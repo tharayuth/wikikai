@@ -352,8 +352,9 @@ function McpGuideEn() {
         <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>search</code></td><td>SQLite FTS5 across content / title / keywords. Returns <code>{`{ kid, pid, line, snippet, url }`}</code> for every hit</td></tr>
-          <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Works for fenced rich blocks <em>and</em> markdown tables (where <code>{`{@N}`}</code> is a trailing line under the table). Use when the user says "อัพเดต @47" / "read @123" so you skip the FTS + read_page + fence-parsing dance</td></tr>
-          <tr><td><code>get_table_row</code></td><td>Get a single data row of a markdown-table block as a <code>{`{ columnName: cellText }`}</code> object. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> is 0-based; negative wraps from end (<code>-1</code> = last row). Returns <code>{`{ block_id, page_id, row_index, columns, source_line }`}</code>. Avoids line-arithmetic when you just want "the second row of @47"</td></tr>
+          <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Works for fenced rich blocks <em>and</em> markdown tables. Pass <code>summary: true</code> to skip the body — for tables you get <code>columns</code> + <code>row_count</code> instead, so you can probe a large table cheaply before deciding to fetch the full source</td></tr>
+          <tr><td><code>get_table_row</code></td><td>Get a single data row of a markdown-table block as a <code>{`{ columnName: cellText }`}</code> object. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> is 0-based; negative wraps from end (<code>-1</code> = last row). When you don't know the index, use <code>find_table_rows</code> instead</td></tr>
+          <tr><td><code>find_table_rows</code></td><td>Search inside a table without pulling the whole body. Args: <code>{`{ block_id, q?, where?, columns?, limit? }`}</code> — <code>q</code> = substring (case-insensitive), <code>where</code> = exact column=value (AND across keys), <code>columns</code> = restrict <code>q</code> to these columns, <code>limit</code> default 50 / max 500. Returns <code>{`{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`}</code></td></tr>
           <tr><td><code>get_example</code></td><td>Markdown reference. <strong>3 read modes</strong> to keep tokens low: <code>outline_only:true</code> (heading list only) · <code>line_start/line_end</code> (slice) · default (full). <code>kind</code> = full / minimal / mermaid / chart / stats / steps / er / html</td></tr>
           <tr><td><code>get_prompt_log</code></td><td>Read the rolling prompt log for a knowledge. Every mutation tool accepts an opt-in <code>user_prompt</code> field; when present it's truncated to 500 chars and stored against the resulting page + version. Returns <code>{`{ page_id?, page_version?, tool_name, prompt, created_at }`}</code> entries newest-first — use to answer "why did revision N happen?"</td></tr>
           <tr><td><code>toggle_task</code></td><td>Flip a plain <code>- [ ]</code> / <code>- [x]</code> task on a page. Args: <code>{`{ page_id, index }`}</code> where <code>index</code> is the 0-based position of the checkbox top-down (skipping any inside fenced code). Same write-back path the rendered UI uses</td></tr>
@@ -373,8 +374,14 @@ function McpGuideEn() {
 
 {@123}`}</pre>
       <p style={{ color: "var(--text-2)", fontSize: 12 }}>
-        The renderer attaches it as <code>data-block-id</code> on the <code>&lt;table&gt;</code> so search-flash works. <code>injectBlockIds</code> auto-inserts the annotation on save when missing. Read the table via <code>get_block({"{ id }"})</code> or pull one row with <code>get_table_row({"{ block_id, index }"})</code>.
+        The renderer attaches it as <code>data-block-id</code> on the <code>&lt;table&gt;</code> so search-flash works. <code>injectBlockIds</code> auto-inserts the annotation on save when missing. Three read tools, pick the cheapest:
       </p>
+      <ul>
+        <li><code>get_block({"{ id, summary: true }"})</code> — probe schema only (<code>columns</code> + <code>row_count</code>), no body</li>
+        <li><code>get_table_row({"{ block_id, index }"})</code> — one row by index (<code>-1</code> = last)</li>
+        <li><code>find_table_rows({"{ block_id, q?, where?, columns?, limit? }"})</code> — search inside the table (substring or exact column match) without pulling the whole body</li>
+        <li><code>get_block({"{ id }"})</code> — full source/inner. Use sparingly for tables &gt; ~100 rows</li>
+      </ul>
 
       <h3>Important fields</h3>
       <ul>
@@ -500,8 +507,9 @@ function McpGuideTh() {
         <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
         <tbody>
           <tr><td><code>search</code></td><td>SQLite FTS5 ค้นข้าม content/title/keywords. คืน <code>{`{ kid, pid, line, snippet, url }`}</code> ทุก hit</td></tr>
-          <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้ได้กับทั้ง fenced rich block <em>และ</em> markdown table (ที่มี <code>{`{@N}`}</code> เป็นบรรทัดท้ายตาราง). ใช้เมื่อ user บอก "อัพเดต @47" / "อ่าน @123" — ข้าม FTS + read_page + parse fence เอง</td></tr>
-          <tr><td><code>get_table_row</code></td><td>ดึง 1 แถวข้อมูลของ markdown-table block เป็น <code>{`{ columnName: cellText }`}</code>. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> เริ่มที่ 0; เลขลบนับจากท้าย (<code>-1</code> = แถวสุดท้าย). คืน <code>{`{ block_id, page_id, row_index, columns, source_line }`}</code> เลี่ยงการคำนวณ line offset เอง</td></tr>
+          <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้ได้ทั้ง fenced rich block <em>และ</em> markdown table. ส่ง <code>summary: true</code> เพื่อข้าม body — สำหรับตารางจะได้ <code>columns</code> + <code>row_count</code> มาแทน (probe ตารางใหญ่แบบประหยัด token ก่อนตัดสินใจดูดทั้งตัว)</td></tr>
+          <tr><td><code>get_table_row</code></td><td>ดึง 1 แถวข้อมูลของ markdown-table block เป็น <code>{`{ columnName: cellText }`}</code>. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> เริ่มที่ 0; เลขลบนับจากท้าย (<code>-1</code> = แถวสุดท้าย). ถ้าไม่รู้ index ใช้ <code>find_table_rows</code> แทน</td></tr>
+          <tr><td><code>find_table_rows</code></td><td>ค้นในตารางโดยไม่ต้องดูดทั้ง body. Args: <code>{`{ block_id, q?, where?, columns?, limit? }`}</code> — <code>q</code> = substring (case-insensitive), <code>where</code> = exact column=value (AND), <code>columns</code> = จำกัด <code>q</code> ให้ค้นแค่บางคอลัมน์, <code>limit</code> default 50 / max 500. คืน <code>{`{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`}</code></td></tr>
           <tr><td><code>get_example</code></td><td>ดูตัวอย่าง markdown. <strong>3 โหมดอ่าน</strong> เพื่อประหยัด token: <code>outline_only:true</code> (เห็นแค่ heading) · <code>line_start/line_end</code> (slice) · default (full). <code>kind</code> = full / minimal / mermaid / chart / stats / steps / er / html</td></tr>
           <tr><td><code>get_prompt_log</code></td><td>อ่าน log ของ <code>user_prompt</code> ใน knowledge. ทุก mutation tool รับ <code>user_prompt</code> เป็น opt-in — เมื่อส่งมา server ตัดที่ 500 ตัวอักษรแล้วผูกกับ page + version ที่เกิดจากคำสั่งนั้น. คืน entry แบบใหม่สุดก่อน (page_id?, page_version?, tool_name, prompt, created_at). ใช้ตอบ "ทำไม revision N ถึงเกิด"</td></tr>
           <tr><td><code>toggle_task</code></td><td>กลับสถานะ <code>- [ ]</code> / <code>- [x]</code> ที่หน้านั้น. Args: <code>{`{ page_id, index }`}</code> โดย <code>index</code> เป็นเลข 0-based นับจากบนลงล่าง (ข้าม task ใน fenced code). เส้นทางเดียวกับ web UI ตอนคลิก checkbox</td></tr>
@@ -521,8 +529,14 @@ function McpGuideTh() {
 
 {@123}`}</pre>
       <p style={{ color: "var(--text-2)", fontSize: 12 }}>
-        renderer แปะเป็น <code>data-block-id</code> บน <code>&lt;table&gt;</code> ให้ — search-flash ใช้งานได้. <code>injectBlockIds</code> เติม annotation ให้อัตโนมัติตอน save. อ่านตารางด้วย <code>get_block({"{ id }"})</code> หรือดึงทีละแถวด้วย <code>get_table_row({"{ block_id, index }"})</code>.
+        renderer แปะเป็น <code>data-block-id</code> บน <code>&lt;table&gt;</code> ให้ — search-flash ใช้งานได้. <code>injectBlockIds</code> เติม annotation ให้อัตโนมัติตอน save. มี 3 ทางอ่าน เลือกที่ประหยัด token ที่สุด:
       </p>
+      <ul>
+        <li><code>get_block({"{ id, summary: true }"})</code> — probe เฉพาะ schema (<code>columns</code> + <code>row_count</code>) ไม่มี body</li>
+        <li><code>get_table_row({"{ block_id, index }"})</code> — 1 แถวที่รู้ index (<code>-1</code> = แถวสุดท้าย)</li>
+        <li><code>find_table_rows({"{ block_id, q?, where?, columns?, limit? }"})</code> — ค้นในตาราง (substring หรือ exact column match) ไม่ดูดทั้ง body</li>
+        <li><code>get_block({"{ id }"})</code> — source/inner เต็ม. ระวังตารางใหญ่ ๆ (&gt; ~100 แถว)</li>
+      </ul>
 
       <h3>Fields สำคัญ</h3>
       <ul>

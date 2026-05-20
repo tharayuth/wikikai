@@ -216,6 +216,12 @@ const getBlockShape = {
     .describe(
       "Global block id — the `N` in `@N`. Each rendered rich fenced block (mermaid / chart / chart-grid / stats / steps / images / html-embed) is stamped with one of these in its fence info string. Plain markdown tables can also be annotated with a standalone `{@N}` line directly under the last row, in which case `kind` in the response is `\"table\"`.",
     ),
+  summary: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, omit `source` and `inner` (no body bytes). For table blocks the response gains `columns: string[]` + `row_count: number` so you can probe a table's schema cheaply before deciding whether to fetch the full source or slice rows via get_table_row / find_table_rows. Use this for large tables where the body would be expensive.",
+    ),
 };
 
 const getTableRowShape = {
@@ -228,6 +234,40 @@ const getTableRowShape = {
     .number()
     .int()
     .describe("0-based data-row index (header + separator excluded). Negative wraps from the end: -1 = last row, -2 = second-last, …"),
+};
+
+const findTableRowsShape = {
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  q: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Substring search (case-insensitive). Matched against every cell of every row, unless `columns` narrows the candidate set. Cheaper than pulling the whole table when you just need rows containing some text.",
+    ),
+  where: z
+    .record(z.string())
+    .optional()
+    .describe(
+      "Exact column=value match. Multiple keys are AND-ed. Case-sensitive — use `q` for fuzzy text search.",
+    ),
+  columns: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Restrict the `q` substring search to these column names. Has no effect on `where`. Omit to search all columns.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Cap on returned rows. Default 50, max 500. `total_matched` always reflects the full match count so callers know when results were truncated."),
 };
 
 const getExampleShape = {
@@ -501,10 +541,30 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
       title: "Read a single row from a markdown table by @N + index",
       description:
         "Returns one data row of a table block as a `{ columnName: cellText }` object. `block_id` is the table's `@N` (use `get_block` if you only know the page). `index` is the 0-based data-row position (the header row + separator row are NOT counted); pass a negative number to wrap from the end (`-1` = last row, `-2` = second-last). " +
-        "Also returns `source_line` — the 1-based line number of that row in the page source, handy for follow-up `edit_lines`. Throws if `@N` isn't a table or the index is out of range.",
+        "Also returns `source_line` — the 1-based line number of that row in the page source, handy for follow-up `edit_lines`. Throws if `@N` isn't a table or the index is out of range. " +
+        "When you don't know the index (e.g. 'find the row where name=Alice' / 'rows containing X'), use `find_table_rows` instead.",
       inputSchema: getTableRowShape,
     },
     async (input) => jsonContent(await handlers.get_table_row(input)),
+  );
+
+  server.registerTool(
+    "find_table_rows",
+    {
+      title: "Search rows inside a markdown table by text or column value",
+      description:
+        "Search for rows inside a markdown-table block without pulling the whole table. " +
+        "Returns `{ block_id, columns, matches: [{ row_index, columns, source_line, url }], total_matched, truncated }` where `columns` is the table's header list and each match is one data row as a `{ columnName: cellText }` object. " +
+        "Three filter modes (combine freely):\\n" +
+        "  • `q` — substring search (case-insensitive). Matched against every cell, unless `columns` narrows the candidate set.\\n" +
+        "  • `where` — exact column=value match. Multiple keys are AND-ed. Case-sensitive (use `q` for fuzzy).\\n" +
+        "  • `columns` — restrict the `q` search to these column names only. No effect on `where`.\\n" +
+        "Use this for 'rows mentioning X' / 'row where col=value' / 'first N rows of @47' (call with no filters + `limit`). " +
+        "`limit` defaults to 50, max 500; `total_matched` always reports the full count so you can detect truncation. " +
+        "Cheaper than `get_block` for large tables — only the matching rows + their source-line numbers come back, not the whole body.",
+      inputSchema: findTableRowsShape,
+    },
+    async (input) => jsonContent(await handlers.find_table_rows(input)),
   );
 
   // ─── Image upload ───

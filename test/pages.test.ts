@@ -435,6 +435,143 @@ describe("PageStore", () => {
       const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
       expect(() => pages.getTableRow(id, 0)).toThrow(/not a table/);
     });
+
+    it("getBlockSummary returns schema+row_count without source/inner for tables", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| name | age | city |\n|------|-----|------|\n| Alice | 30 | NY |\n| Bob | 25 | LA |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const s = pages.getBlockSummary(id);
+      expect(s).toBeTruthy();
+      expect(s!.kind).toBe("table");
+      expect(s!.columns).toEqual(["name", "age", "city"]);
+      expect(s!.row_count).toBe(2);
+      expect(s!.line_start).toBeGreaterThan(0);
+      expect(s!.line_end).toBeGreaterThanOrEqual(s!.line_start);
+      // No body bytes
+      expect((s as Record<string, unknown>).source).toBeUndefined();
+      expect((s as Record<string, unknown>).inner).toBeUndefined();
+    });
+
+    it("getBlockSummary omits columns/row_count for non-table blocks", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: '```stats\n[{"num":"1","label":"x"}]\n```\n',
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const s = pages.getBlockSummary(id);
+      expect(s!.kind).toBe("stats");
+      expect((s as Record<string, unknown>).columns).toBeUndefined();
+      expect((s as Record<string, unknown>).row_count).toBeUndefined();
+    });
+
+    it("findTableRows filters by q (substring, case-insensitive)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| name | role |\n|------|------|\n| Alice | admin |\n| Bob | viewer |\n| Carla | admin |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.findTableRows(id, { q: "ADMIN" });
+      expect(r.total_matched).toBe(2);
+      expect(r.truncated).toBe(false);
+      expect(r.columns).toEqual(["name", "role"]);
+      expect(r.matches.map((m) => m.columns.name)).toEqual(["Alice", "Carla"]);
+      // source_line is the absolute page line of the data row
+      expect(r.matches[0].row_index).toBe(0);
+      expect(r.matches[1].row_index).toBe(2);
+    });
+
+    it("findTableRows filters by where (exact, multi-key AND)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| name | role | city |\n|------|------|------|\n| Alice | admin | NY |\n| Bob | admin | LA |\n| Carla | admin | NY |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.findTableRows(id, {
+        where: { role: "admin", city: "NY" },
+      });
+      expect(r.matches.map((m) => m.columns.name)).toEqual(["Alice", "Carla"]);
+    });
+
+    it("findTableRows respects columns filter on q", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| name | bio |\n|------|-----|\n| Alice | likes admin tools |\n| admin-bot | runs jobs |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      // q across all cols matches both rows
+      expect(pages.findTableRows(id, { q: "admin" }).total_matched).toBe(2);
+      // q restricted to `name` only matches the admin-bot row
+      const onlyName = pages.findTableRows(id, {
+        q: "admin",
+        columns: ["name"],
+      });
+      expect(onlyName.matches.map((m) => m.columns.name)).toEqual(["admin-bot"]);
+    });
+
+    it("findTableRows truncates and reports total_matched", () => {
+      const rows = Array.from({ length: 10 }, (_, i) => `| r${i} | v${i} |`).join(
+        "\n",
+      );
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: `| name | val |\n|------|-----|\n${rows}\n`,
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.findTableRows(id, { limit: 3 });
+      expect(r.total_matched).toBe(10);
+      expect(r.matches).toHaveLength(3);
+      expect(r.truncated).toBe(true);
+    });
+
+    it("findTableRows throws when the block isn't a table", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: '```stats\n[{"num":"1","label":"x"}]\n```\n',
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() => pages.findTableRows(id, { q: "x" })).toThrow(/not a table/);
+    });
   });
 
   describe("cascade", () => {
