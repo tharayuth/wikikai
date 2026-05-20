@@ -242,14 +242,28 @@ describe("renderMarkdown", () => {
     expect(out).not.toMatch(/>\s*\[x\]\s*</);
   });
 
-  it("does NOT convert `[x]` mid-sentence in a table cell", async () => {
+  it("converts `[ ]`/`[x]` anywhere in a table cell (not just at the start)", async () => {
     const out = await renderMarkdown(
-      "| Note | OK |\n|------|----|\n| see [x] in docs | [ ] |\n",
+      "| Note | OK |\n|------|----|\n| Step 1 [x] more | [ ] |\n",
     );
-    // The mid-cell `[x]` must remain literal text (one of these matches is OK)
-    expect(out).toContain("[x] in docs");
-    // The right cell becomes a checkbox
-    expect(out).toMatch(/<input type="checkbox"[^>]*data-task-index="0"/);
+    // Mid-cell [x] gets converted to checkbox idx=0 (left-most in source)
+    expect(out).toMatch(/<input type="checkbox"[^>]*data-task-index="0"[^>]*checked/);
+    // Right cell [ ] is idx=1
+    expect(out).toMatch(/<input type="checkbox"[^>]*data-task-index="1"(?![^>]*checked)/);
+    // The literal `[x]` text must NOT survive
+    expect(out).not.toContain("[x] more");
+    // But the surrounding text does
+    expect(out).toMatch(/Step 1\s*<input/);
+    expect(out).toMatch(/<\/?input[^>]*>\s*more/);
+  });
+
+  it("leaves `[xyz]` and markdown links alone — only `[ ]`/`[x]`/`[X]` become checkboxes", async () => {
+    const out = await renderMarkdown(
+      "| Cell |\n|------|\n| see [link](http://x) and [abc] |\n",
+    );
+    expect(out).not.toMatch(/<input type="checkbox"/);
+    expect(out).toContain("[abc]");
+    expect(out).toContain('href="http://x"');
   });
 
   it("wraps the annotated table with a positioning container + block badge", async () => {

@@ -862,12 +862,13 @@ export class PageStore {
     const lines = content.split("\n");
     const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
     const tableRowRe = /^\s*\|.*\|\s*$/;
-    // Match `[ ]` / `[x]` / `[X]` that appears at the start of a table cell:
-    // a pipe, optional whitespace, then the bracket pair, followed by either
-    // whitespace OR another pipe (so we don't pick up `[x]` mid-sentence).
-    // The renderer enforces the same "start of cell" rule, so the global
-    // index ordering stays consistent.
-    const cellTaskRe = /\|(\s*)\[([ xX])\](?=\s|\|)/g;
+    // Match `[ ]` / `[x]` / `[X]` anywhere inside a table-row cell.
+    // The boundary lookahead `(?=\s|\|)` keeps us from matching
+    // `[xyz]` and ensures the cell ends after the bracket (a pipe `|`
+    // is the cell separator). The renderer uses the equivalent
+    // `(?=\s|$)` check against parsed cell text — same set of matches,
+    // same order, so the global index counter stays consistent.
+    const cellTaskRe = /\[([ xX])\](?=\s|\|)/g;
     const htmlCheckboxRe = /<input\b([^>]*)>/gi;
     type GfmTarget = { kind: "gfm"; line: number; match: RegExpExecArray };
     type HtmlTarget = {
@@ -907,19 +908,19 @@ export class PageStore {
           count++;
           continue;
         }
-        // Markdown-table row — pick up any `| [ ] |` / `| [x] |` cells.
+        // Markdown-table row — pick up every `[ ]` / `[x]` cell checkbox.
         if (tableRowRe.test(lines[i])) {
           cellTaskRe.lastIndex = 0;
           let cm: RegExpExecArray | null;
           while ((cm = cellTaskRe.exec(lines[i])) !== null) {
-            // Offset of `[` = match start + `|` + leading whitespace
-            const bracketOffset = cm.index + 1 + cm[1].length;
+            // `cm.index` is the offset of `[` directly (the regex no
+            // longer consumes a leading `|`).
             if (count === index) {
               target = {
                 kind: "cell",
                 line: i,
-                offset: bracketOffset,
-                char: cm[2],
+                offset: cm.index,
+                char: cm[1],
               };
               break;
             }

@@ -429,22 +429,59 @@ describe("PageStore", () => {
       expect(lines[9]).toBe("- [ ] after list");
     });
 
-    it("ignores `[x]` mid-sentence in a table cell (must follow `|` directly)", () => {
+    it("matches `[ ]`/`[x]` anywhere in a cell (not just at the start)", () => {
       const initial = [
         "| Note | Status |",
         "|------|--------|",
-        "| see [x] in docs | [ ] |",
+        "| Step 1 [ ] more | [x] |",
       ].join("\n");
       const p = pages.add({ knowledge_id: kid, title: "n", content: initial });
-      // Only one valid checkbox (the second cell). Toggling index 0 hits it.
+      // Two checkboxes: 0 = mid-cell `[ ]`, 1 = right-cell `[x]`
+      pages.toggleTaskAtIndex(p.id, 0);
+      pages.toggleTaskAtIndex(p.id, 1);
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const lines = after.split("\n");
+      expect(lines[2]).toBe("| Step 1 [x] more | [ ] |");
+    });
+
+    it("counts multiple `[ ]` markers in the same cell", () => {
+      const initial = [
+        "| Items |",
+        "|-------|",
+        "| [ ] one [ ] two [x] three |",
+      ].join("\n");
+      const p = pages.add({ knowledge_id: kid, title: "m", content: initial });
+      // Flip middle [ ] (index 1) and last [x] (index 2)
+      pages.toggleTaskAtIndex(p.id, 1);
+      pages.toggleTaskAtIndex(p.id, 2);
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const lines = after.split("\n");
+      expect(lines[2]).toBe("| [ ] one [x] two [ ] three |");
+    });
+
+    it("does NOT match `[xyz]` or markdown links — only `[ ]`/`[x]`/`[X]`", () => {
+      const initial = [
+        "| Cell |",
+        "|------|",
+        "| see [link](http://x) and [abc] and [x] |",
+      ].join("\n");
+      const p = pages.add({ knowledge_id: kid, title: "v", content: initial });
       pages.toggleTaskAtIndex(p.id, 0);
       const after = fs.readFileSync(
         path.join(tmpDir, String(kid), `${p.id}.md`),
         "utf8",
       );
       const lines = after.split("\n");
-      expect(lines[2]).toBe("| see [x] in docs | [x] |");
-      // Index 1 doesn't exist
+      // Only the [x] gets toggled — link and [abc] left alone
+      expect(lines[2]).toBe(
+        "| see [link](http://x) and [abc] and [ ] |",
+      );
       expect(() => pages.toggleTaskAtIndex(p.id, 1)).toThrow();
     });
   });

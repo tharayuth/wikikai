@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import type Token from "markdown-it/lib/token.mjs";
 import anchor from "markdown-it-anchor";
 import { createHighlighter, type Highlighter } from "shiki";
 
@@ -396,29 +397,57 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     for (let i = 0; i < tokens.length; i++) {
       const tok = tokens[i];
 
-      // ─── Markdown table cell — `[ ]`/`[x]` at the start of a cell ───
-      // Matches `| [ ] |` and `| [ ] label |`. The cell's first text child
-      // must start with the bracket (after optional whitespace) so we don't
-      // mistakenly convert literal `[x]` text mid-sentence into a checkbox.
+      // ─── Markdown table cell — `[ ]`/`[x]` anywhere in a cell ───
+      // We walk EVERY text child of the cell's inline token and rewrite
+      // each `[ ]` / `[x]` / `[X]` that's followed by whitespace or
+      // end-of-cell-text into a clickable checkbox. The boundary check
+      // (`(?=\s|$)`) prevents `[xyz]` and the body of a markdown link
+      // (`[link](url)`) from being mis-detected — the bracket pair must
+      // contain exactly one space/x/X. To keep literal `[x]` as text in
+      // a cell (e.g. when documenting the syntax), wrap it in backticks:
+      // the cell `` `[x]` `` becomes a `code_inline` token and is skipped.
       if (tok.type === "inline") {
         const prev = tokens[i - 1];
         if (prev && (prev.type === "td_open" || prev.type === "th_open")) {
-          const first = tok.children?.[0];
-          if (first && first.type === "text") {
-            const m = /^(\s*)\[([ xX])\](\s|$)/.exec(first.content);
-            if (m) {
-              const done = m[2].toLowerCase() === "x";
-              const myIdx = idx++;
-              // Drop the `[ ]` (and the leading whitespace) but keep the
-              // trailing separator the regex captured (\s or empty).
-              const consumed = m[1].length + 3; // [ ]
-              first.content = first.content.slice(consumed);
-              const checkbox = new state.Token("html_inline", "", 0);
-              checkbox.content = `<input type="checkbox" class="task-list-item-checkbox" data-task-index="${myIdx}"${done ? " checked" : ""}>`;
-              tok.children = [checkbox, ...tok.children!];
+          const cellRe = /\[([ xX])\](?=\s|$)/g;
+          const newChildren: Token[] = [];
+          let cellChanged = false;
+          for (const child of tok.children ?? []) {
+            if (child.type !== "text" || !/\[[ xX]\]/.test(child.content)) {
+              newChildren.push(child);
               continue;
             }
+            cellRe.lastIndex = 0;
+            let lastEnd = 0;
+            let matched = false;
+            let m: RegExpExecArray | null;
+            while ((m = cellRe.exec(child.content)) !== null) {
+              matched = true;
+              if (m.index > lastEnd) {
+                const t = new state.Token("text", "", 0);
+                t.content = child.content.slice(lastEnd, m.index);
+                newChildren.push(t);
+              }
+              const done = m[1].toLowerCase() === "x";
+              const myIdx = idx++;
+              const cb = new state.Token("html_inline", "", 0);
+              cb.content = `<input type="checkbox" class="task-list-item-checkbox" data-task-index="${myIdx}"${done ? " checked" : ""}>`;
+              newChildren.push(cb);
+              lastEnd = m.index + m[0].length;
+            }
+            if (matched) {
+              if (lastEnd < child.content.length) {
+                const t = new state.Token("text", "", 0);
+                t.content = child.content.slice(lastEnd);
+                newChildren.push(t);
+              }
+              cellChanged = true;
+            } else {
+              newChildren.push(child);
+            }
           }
+          if (cellChanged) tok.children = newChildren;
+          continue;
         }
       }
 
