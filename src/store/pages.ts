@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Db } from "./db.js";
 import { emitEvent } from "../lib/events.js";
+import { formatImageTitle, parseImageSize } from "../lib/imageSize.js";
 
 export interface PageMetadata {
   id: number;
@@ -548,6 +549,78 @@ export class PageStore {
       }
     }
     return lines.join("\n");
+  }
+
+  /**
+   * Resize an inline markdown image (`![alt](src "WxH")`) by updating
+   * its title slot in the page source. `src` + `occurrence` (the
+   * 0-based count of this same src on the page, top-down) identifies
+   * which image to change. Both `width` and `height` are optional —
+   * pass `undefined` for either axis to remove that constraint (image
+   * becomes fluid on that side). Passing neither removes the title
+   * sizing entirely.
+   *
+   * Drives the drag-resize handles in the web client. The persistence
+   * lives in the markdown title slot, not in `alt` — keeping `alt` for
+   * its real purpose (screen-reader / FTS text).
+   */
+  setInlineImageSize(
+    pageId: number,
+    src: string,
+    occurrence: number,
+    opts: { width?: number; height?: number },
+  ): { id: number; version: number; updated_at: string } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const content = this.readContent(meta.knowledge_id, pageId);
+
+    // Standard inline image syntax — alt may contain anything except `]`;
+    // title is the quoted slot after the URL (whitespace-separated). We
+    // don't try to handle escaped brackets in the alt; rare in practice.
+    const IMAGE_RE =
+      /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"((?:[^"\\]|\\.)*)")?\)/g;
+    let count = 0;
+    let found = false;
+    const next = content.replace(IMAGE_RE, (match, alt, matchSrc, title) => {
+      if (matchSrc !== src) return match;
+      if (count !== occurrence) {
+        count++;
+        return match;
+      }
+      count++;
+      found = true;
+      let caption = "";
+      if (title) {
+        const parsed = parseImageSize(title);
+        caption = parsed ? parsed.rest : title;
+      }
+      const newTitle = formatImageTitle(caption, opts.width, opts.height);
+      return newTitle
+        ? `![${alt}](${matchSrc} "${newTitle}")`
+        : `![${alt}](${matchSrc})`;
+    });
+
+    if (!found) {
+      throw new Error(
+        `image src=${src} occurrence=${occurrence} not found on page #${pageId}`,
+      );
+    }
+
+    const finalContent = this.writeContent(meta.knowledge_id, pageId, next);
+    const r = this.bumpVersion(pageId);
+    const now = new Date().toISOString();
+    this.syncFts(pageId, meta.title, meta.keywords, finalContent);
+    this.saveRevision(
+      pageId,
+      r.version,
+      meta.title,
+      finalContent,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      now,
+    );
+    this.bumpKnowledge(meta.knowledge_id, pageId);
+    return { id: pageId, version: r.version, updated_at: now };
   }
 
   /**

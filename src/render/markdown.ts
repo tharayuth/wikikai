@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
+import { parseImageSize } from "../lib/imageSize.js";
 import anchor from "markdown-it-anchor";
 import { createHighlighter, type Highlighter } from "shiki";
 
@@ -375,6 +376,17 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
         tok.attrSet("style", parts.join(";"));
       }
     }
+    // Per-`src` 0-based occurrence index so the drag-resize endpoint
+    // (POST /api/pages/:pid/image-size) can target the correct source
+    // line when the same image appears multiple times on a page.
+    const srcIdx = tok.attrIndex("src");
+    if (srcIdx >= 0) {
+      const src = tok.attrs![srcIdx][1];
+      env.__imgCounts = env.__imgCounts ?? Object.create(null);
+      const n = (env.__imgCounts[src] = (env.__imgCounts[src] ?? 0) + 1) - 1;
+      tok.attrSet("data-img-occurrence", String(n));
+      tok.attrSet("data-img-src", src);
+    }
     return defaultImage
       ? defaultImage(tokens, idx, options, env, self)
       : self.renderToken(tokens, idx, options);
@@ -575,38 +587,6 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
  * Extract optional w/h constraints from an image title.
  * Returns null if the title carries no size hint.
  */
-function parseImageSize(
-  title: string,
-): { width?: number; height?: number; rest: string } | null {
-  const trimmed = title.trim();
-  // Compact "WxH" / "Wx" / "xH"
-  const m1 = /^(\d+)?x(\d+)?$/.exec(trimmed);
-  if (m1 && (m1[1] || m1[2])) {
-    return {
-      width: m1[1] ? Number(m1[1]) : undefined,
-      height: m1[2] ? Number(m1[2]) : undefined,
-      rest: "",
-    };
-  }
-  // Verbose "w=N" / "h=N" tokens (may co-exist with caption text)
-  const tokenRe = /\b(w|width|h|height)=(\d+)\b/gi;
-  let width: number | undefined;
-  let height: number | undefined;
-  let matched = false;
-  for (let m: RegExpExecArray | null; (m = tokenRe.exec(trimmed)) !== null; ) {
-    matched = true;
-    const k = m[1].toLowerCase();
-    if (k === "w" || k === "width") width = Number(m[2]);
-    else height = Number(m[2]);
-  }
-  if (!matched) return null;
-  const rest = trimmed
-    .replace(/\b(?:w|width|h|height)=\d+\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return { width, height, rest };
-}
-
 export async function renderMarkdown(source: string): Promise<string> {
   const highlighter = await getHighlighter();
   const md = buildMd(highlighter);

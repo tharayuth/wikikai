@@ -403,6 +403,48 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Resize an inline markdown image — used by the client-side drag
+  // handles on rendered <img> elements. Persists to the title slot
+  // (`![alt](src "WxH")`), keeping `alt` available for screen-reader
+  // / FTS text. Pass `null` for either dimension to remove that
+  // constraint; pass both as null/missing to clear sizing entirely.
+  app.post("/api/pages/:pid/image-size", (req, res, next) => {
+    try {
+      const pid = parseId(req.params.pid);
+      const body = req.body as {
+        src?: unknown;
+        occurrence?: unknown;
+        width?: unknown;
+        height?: unknown;
+      };
+      const src = typeof body.src === "string" ? body.src : "";
+      if (!src) {
+        res.status(400).json({ error: "src is required" });
+        return;
+      }
+      const occRaw = body.occurrence;
+      const occurrence = typeof occRaw === "number" ? occRaw : 0;
+      if (!Number.isInteger(occurrence) || occurrence < 0) {
+        res.status(400).json({ error: "invalid occurrence" });
+        return;
+      }
+      const toDim = (v: unknown): number | undefined => {
+        if (v == null) return undefined;
+        if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+        if (v <= 0) return undefined;
+        return Math.round(v);
+      };
+      res.json(
+        opts.pages.setInlineImageSize(pid, src, occurrence, {
+          width: toDim(body.width),
+          height: toDim(body.height),
+        }),
+      );
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // ─── Search ───
   app.get("/api/search", async (req, res, next) => {
     try {

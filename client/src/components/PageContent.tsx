@@ -12,6 +12,7 @@ import { useAppDispatch, useAppSelector } from "../store";
 import { showToast } from "../store/uiSlice";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { useChecklistToggles } from "../hooks/useChecklistToggles";
+import { useImageResize } from "../hooks/useImageResize";
 import { navigateTo } from "../hooks/useHash";
 import { PageEditor, type PageEditorHandle } from "./PageEditor";
 import { PageDiffModal } from "./PageDiffModal";
@@ -113,6 +114,7 @@ export function PageContent({ pageId, line, block }: Props) {
     pageId,
   );
   useChecklistToggles();
+  useImageResize(bodyRef, viewVersion == null && !editing ? pageId : null);
 
   // Reset to latest + exit edit mode whenever the current page changes.
   useEffect(() => {

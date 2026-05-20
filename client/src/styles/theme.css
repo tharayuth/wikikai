@@ -1813,6 +1813,72 @@ a:hover { text-decoration: underline; }
 }
 .image-lightbox .lb-close:hover { background: rgba(255, 255, 255, 0.25); }
 
+/* Inline-markdown image resize wrapper.
+   Wraps each rendered `<img>` produced by markdown (i.e. NOT the gallery
+   thumbs that already live in `<figure class="image-thumb">` and NOT
+   images inside html-embed). Acts as a positioning context for three
+   drag handles (right edge, bottom edge, bottom-right corner) that
+   adjust the image's max-width / max-height. On mouseup the new size
+   is persisted to the source markdown's title slot. */
+.markdown-body .img-resize-wrap {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  /* Cursor + ring hint that the image is interactive */
+  cursor: zoom-in;
+}
+.markdown-body .img-resize-wrap > img {
+  display: block;
+  /* The img keeps whatever max-*/auto sizing the renderer (or a recent
+     drag) gave it; the wrapper hugs that box exactly. */
+}
+.markdown-body .img-resize-wrap > img.img-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  cursor: nwse-resize;
+}
+.markdown-body .img-resize-handle {
+  position: absolute;
+  background: var(--accent);
+  border-radius: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+  z-index: 4;
+  box-shadow: 0 0 0 1px var(--surface);
+}
+.markdown-body .img-resize-handle.right {
+  top: 50%;
+  right: -4px;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 32px;
+  cursor: ew-resize;
+}
+.markdown-body .img-resize-handle.bottom {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.markdown-body .img-resize-handle.corner {
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  cursor: nwse-resize;
+}
+.markdown-body .img-resize-wrap:hover .img-resize-handle {
+  opacity: 0.85;
+  pointer-events: auto;
+}
+.markdown-body .img-resize-handle:hover {
+  opacity: 1;
+}
+
 /* Chart wrap — capped width, centered, fixed height ≤ 50vh */
 .chart-wrap {
   background: var(--surface);

@@ -821,6 +821,108 @@ describe("PageStore", () => {
     });
   });
 
+  describe("setInlineImageSize", () => {
+    it("adds a title slot with WxH when none existed", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: "before\n\n![cat](/img/cat.png)\n\nafter",
+      });
+      const r = pages.setInlineImageSize(id, "/img/cat.png", 0, {
+        width: 300,
+        height: 200,
+      });
+      expect(r.version).toBe(2);
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw).toContain('![cat](/img/cat.png "300x200")');
+    });
+
+    it("updates an existing WxH title", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: '![cat](/img/cat.png "100x80")',
+      });
+      pages.setInlineImageSize(id, "/img/cat.png", 0, {
+        width: 400,
+        height: 250,
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw).toContain('![cat](/img/cat.png "400x250")');
+    });
+
+    it("preserves caption text and uses w=/h= tokens when caption is present", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: '![cat](/img/cat.png "my cat photo")',
+      });
+      pages.setInlineImageSize(id, "/img/cat.png", 0, {
+        width: 300,
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw).toContain('![cat](/img/cat.png "my cat photo w=300")');
+    });
+
+    it("drops the title slot when both dimensions are removed", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: '![cat](/img/cat.png "300x200")',
+      });
+      pages.setInlineImageSize(id, "/img/cat.png", 0, {});
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw.trim()).toBe("![cat](/img/cat.png)");
+    });
+
+    it("targets the right occurrence when src appears multiple times", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: [
+          "first ![](/img/x.png)",
+          "",
+          "second ![](/img/x.png)",
+          "",
+          "third ![](/img/x.png)",
+        ].join("\n"),
+      });
+      // Resize the middle one
+      pages.setInlineImageSize(id, "/img/x.png", 1, { width: 250 });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const lines = raw.split("\n");
+      expect(lines[0]).toBe("first ![](/img/x.png)");
+      expect(lines[2]).toBe('second ![](/img/x.png "250x")');
+      expect(lines[4]).toBe("third ![](/img/x.png)");
+    });
+
+    it("throws when the src doesn't exist on the page", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: "![cat](/img/cat.png)",
+      });
+      expect(() =>
+        pages.setInlineImageSize(id, "/img/missing.png", 0, { width: 100 }),
+      ).toThrow(/not found/);
+    });
+  });
+
   describe("cascade", () => {
     it("page rows are removed when knowledge is deleted (FK CASCADE)", () => {
       pages.add({ knowledge_id: kid, title: "A", content: "a" });

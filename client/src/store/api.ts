@@ -308,6 +308,31 @@ export const portalApi = createApi({
       ],
     }),
 
+    resizeInlineImage: builder.mutation<
+      { id: number; version: number; updated_at: string },
+      {
+        pageId: number;
+        src: string;
+        occurrence: number;
+        width?: number;
+        height?: number;
+      }
+    >({
+      query: ({ pageId, src, occurrence, width, height }) => ({
+        url: `pages/${pageId}/image-size`,
+        method: "POST",
+        body: { src, occurrence, width, height },
+      }),
+      // Same pattern as toggleTask — bump Page + Revisions but NOT
+      // PageRendered. The client already applied the new size to the
+      // live <img> during the drag, so a render-refetch would just
+      // scroll-jump for no visible difference.
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Page", id: arg.pageId },
+        { type: "Revisions", id: arg.pageId },
+      ],
+    }),
+
     search: builder.query<
       SearchResponse,
       { q: string; limit?: number; projects?: string[] }
@@ -346,4 +371,5 @@ export const {
   useRemoveProjectMutation,
   useGetPromptLogQuery,
   useToggleTaskAtIndexMutation,
+  useResizeInlineImageMutation,
 } = portalApi;
