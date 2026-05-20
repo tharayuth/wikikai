@@ -192,7 +192,11 @@ export const EditLinesSchema = z.object({
 export const EditSectionSchema = z.object({
   page_id: z.number().int().positive(),
   heading: z.string().min(1).describe("Heading line exactly as it appears, e.g. '## 3. Performance'"),
-  new_content: z.string(),
+  new_content: z
+    .string()
+    .describe(
+      "Body to put under the heading. The heading itself is preserved automatically; if you accidentally include it as the first line of new_content, the server strips it (and one optional blank line after) so the heading isn't emitted twice.",
+    ),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 

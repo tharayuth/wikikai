@@ -305,47 +305,55 @@ function ProjectGroup({
 }: {
   project: string;
   /** True when the currently-active knowledge belongs to this project.
-   *  Forces the group open so the user can see where they are even when
-   *  the group's manual preference is collapsed. */
+   *  Used as the default initial state and to auto-open when the user
+   *  navigates into the group — but NEVER as a hard force-open, so the
+   *  toggle button always works. */
   containsActive: boolean;
   children: React.ReactNode;
 }) {
-  // Default is COLLAPSED. localStorage remembers user toggle per project.
-  // Active project auto-expands on first render even when no preference
-  // is stored, so a brand-new visitor still sees their current location.
+  // Default is COLLAPSED unless this group contains the active knowledge.
+  // localStorage remembers the user's explicit toggle per project and
+  // always wins over the default.
   const [open, setOpen] = useState<boolean>(() => {
     const stored = readStoredOpen(project);
     if (stored != null) return stored;
     return containsActive;
   });
 
-  // When user navigates into a project that was manually collapsed, force
-  // it open so the active row is visible — but DON'T persist that, so the
-  // user's stored preference is restored next session.
-  const effectiveOpen = open || containsActive;
+  // When `containsActive` flips false → true (user navigates into this
+  // project), auto-open the group so the active row is visible — but
+  // only when the user hasn't explicitly stored a preference, so a
+  // manually-collapsed group stays collapsed on navigation.
+  useEffect(() => {
+    if (containsActive && readStoredOpen(project) == null) {
+      setOpen(true);
+    }
+  }, [containsActive, project]);
+
+  const toggle = () => {
+    setOpen((o) => {
+      const next = !o;
+      writeStoredOpen(project, next);
+      return next;
+    });
+  };
 
   return (
-    <div className={`sidebar-group${effectiveOpen ? "" : " collapsed"}`}>
+    <div className={`sidebar-group${open ? "" : " collapsed"}`}>
       <button
         type="button"
-        className={`sidebar-group-title${effectiveOpen ? " open" : ""}`}
-        aria-expanded={effectiveOpen}
-        onClick={() => {
-          setOpen((o) => {
-            const next = !o;
-            writeStoredOpen(project, next);
-            return next;
-          });
-        }}
+        className={`sidebar-group-title${open ? " open" : ""}`}
+        aria-expanded={open}
+        onClick={toggle}
       >
         <span className="group-chevron" aria-hidden>
-          {effectiveOpen ? "📖" : "📕"}
+          {open ? "📖" : "📕"}
         </span>
         <span className="group-name">{project}</span>
       </button>
       {/* `hidden` rather than removing children — preserves each
           KnowledgeRow's local expand state across project collapse / re-open. */}
-      <div className="sidebar-group-body" hidden={!effectiveOpen}>
+      <div className="sidebar-group-body" hidden={!open}>
         {children}
       </div>
     </div>

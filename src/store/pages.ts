@@ -1136,7 +1136,28 @@ export class PageStore {
       }
     }
     const replacedLines = endIdx - startIdx;
-    const newSlice = (heading.trim() + "\n" + newContent.replace(/^\n+|\n+$/g, "")).split("\n");
+    // Auto-strip the duplicate-heading footgun: callers (especially LLMs)
+    // often paste back a section verbatim, heading included. Without this
+    // guard the naive `heading + "\n" + body` concat below would emit the
+    // heading twice. If the first non-blank line of `newContent` matches
+    // the heading we keep, silently drop it (plus one optional blank
+    // line right after it, which is the canonical authoring style).
+    const bodyLines = newContent.split("\n");
+    let cursor = 0;
+    while (cursor < bodyLines.length && bodyLines[cursor].trim() === "") {
+      cursor++;
+    }
+    if (
+      cursor < bodyLines.length &&
+      bodyLines[cursor].trim() === targetHeadingText
+    ) {
+      bodyLines.splice(0, cursor + 1);
+      if (bodyLines.length > 0 && bodyLines[0].trim() === "") {
+        bodyLines.shift();
+      }
+    }
+    const body = bodyLines.join("\n").replace(/^\n+|\n+$/g, "");
+    const newSlice = (heading.trim() + (body ? "\n" + body : "")).split("\n");
     const draft = [
       ...lines.slice(0, startIdx),
       ...newSlice,

@@ -126,7 +126,7 @@ const editLinesShape = {
 const editSectionShape = {
   page_id: z.number().int().positive(),
   heading: z.string().min(1).describe('Exact heading line, e.g. "## 3. Performance" — section ends at next equal-or-higher heading'),
-  new_content: z.string().describe("Body to put under the heading (heading itself is kept)"),
+  new_content: z.string().describe("Body to put under the heading. The heading line itself is kept automatically — if you accidentally include it as the first line of new_content the server silently strips it (along with one optional blank line after) to avoid duplication."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
 

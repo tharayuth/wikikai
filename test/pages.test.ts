@@ -207,6 +207,36 @@ describe("PageStore", () => {
       const { id } = pages.add({ knowledge_id: kid, title: "T", content: "# x" });
       expect(() => pages.editSection(id, "## Missing", "x")).toThrow();
     });
+
+    it("strips the heading when callers accidentally include it in new_content", () => {
+      const content = ["# Title", "", "## B", "old"].join("\n");
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content });
+      // Caller passes the heading + blank + body — common LLM pattern when
+      // they paste back a section verbatim.
+      pages.editSection(id, "## B", "## B\n\nfresh body");
+      const got = pages.get(id)!.content;
+      // Heading appears EXACTLY once
+      expect((got.match(/^## B$/gm) ?? []).length).toBe(1);
+      expect(got).toContain("## B\nfresh body");
+    });
+
+    it("strips the heading even with leading blank lines in new_content", () => {
+      const content = ["## X", "old"].join("\n");
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content });
+      pages.editSection(id, "## X", "\n\n## X\nbody");
+      const got = pages.get(id)!.content;
+      expect((got.match(/^## X$/gm) ?? []).length).toBe(1);
+      expect(got).toContain("## X\nbody");
+    });
+
+    it("does NOT strip a deeper heading at the top of new_content", () => {
+      const content = ["## Outer", "old"].join("\n");
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content });
+      // A deeper subheading is legitimate body content — must NOT be stripped
+      pages.editSection(id, "## Outer", "### Sub\nbody");
+      const got = pages.get(id)!.content;
+      expect(got).toContain("## Outer\n### Sub\nbody");
+    });
   });
 
   describe("replaceText", () => {
