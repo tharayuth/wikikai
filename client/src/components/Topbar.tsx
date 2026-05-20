@@ -58,8 +58,15 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
     <header className="topbar">
       <div className="topbar-left">
         <h1>
-          <span className="dot" />
-          WikiKai
+          <a href="/" aria-label="WikiKai — home">
+            <img
+              src="/wikikai-logo.png"
+              alt="WikiKai"
+              className="brand-logo"
+              width="853"
+              height="278"
+            />
+          </a>
         </h1>
         <button
           type="button"

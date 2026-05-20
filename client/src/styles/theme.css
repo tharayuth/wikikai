@@ -164,12 +164,40 @@ a:hover { text-decoration: underline; }
   line-height: 1.4;
 }
 .topbar-left h1 {
-  font-size: 14px; font-weight: 700;
-  display: flex; align-items: center; gap: 8px;
+  /* The logo image carries the wordmark, so the h1 itself is just a
+     positioning slot — keep margin/padding zero and let the image
+     dictate the visual height. */
+  margin: 0;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  display: flex;
+  align-items: center;
 }
-.topbar-left h1 .dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--accent);
+.topbar-left h1 > a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  border-radius: 6px;
+  /* A tiny inset hover ring so the click target reads as interactive
+     without competing with the image itself */
+  transition: background .12s;
+}
+.topbar-left h1 > a:hover {
+  background: var(--surface-2);
+}
+.topbar-left .brand-logo {
+  display: block;
+  height: 32px;
+  width: auto;
+  /* Keep the SVG crisp on high-DPI displays */
+  image-rendering: -webkit-optimize-contrast;
+}
+[data-theme="dark"] .topbar-left .brand-logo {
+  /* Logo is dark-on-transparent — invert near-black wordmark on dark
+     theme so it stays legible. Keeps colour gradients of the icon
+     mostly intact (hue rotation cancels via 360 cycle). */
+  filter: brightness(0.92) invert(0.92) hue-rotate(180deg);
 }
 .topbar-right {
   display: flex;
