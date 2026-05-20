@@ -9,7 +9,7 @@
 ```
 ┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
 │                               │  HTTP   │  /mcp        ← MCP tools         │
-│  24 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
+│  23 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
 │  read_page, edit_section,     │         │  /           ← React SPA         │
 │  add_image, toggle_task,      │         │  /mermaid/.. ← fullscreen viewer │
 │  get_prompt_log, search, …    │         │  /chart/..   ← fullscreen viewer │
@@ -82,7 +82,7 @@ Knowledge (&N)  ──┬── Page (#N) ──┬── Markdown content
 
 URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, near line 42.
 
-### MCP tool surface (24 tools)
+### MCP tool surface (23 tools)
 
 **Knowledge** — `add_knowledge` · `edit_knowledge` · `list_knowledge` · `get_knowledge` · `delete_knowledge` · `get_outline`
 
@@ -137,13 +137,26 @@ Open <http://localhost:5173> for the dev UI (HMR + proxied API), or <http://loca
 }
 ```
 
-Restart Claude Code; all 24 tools appear automatically. Try:
+Restart Claude Code; all 23 tools appear automatically. Try:
 
 > Save what we just discussed as a knowledge titled "Postgres timeout fix", project "infra-notes".
 
 > Open the document we made last week and append a new page called "Rollback procedure".
 
 > Tick @118 item 1 — done.
+
+### Install the Claude skill (recommended)
+
+The MCP tools alone leave it to Claude to guess **when** to use WikiKai. A small skill file shipped in this repo at [`docs/skill/SKILL.md`](docs/skill/SKILL.md) gives Claude Code explicit triggers — "save this", "บันทึก", `&N` / `#N` references, the recommended creation / search / edit / reference workflows, and the do-/don't-list for token-efficient calls.
+
+```bash
+mkdir -p ~/.claude/skills/wikikai
+cp docs/skill/SKILL.md ~/.claude/skills/wikikai/SKILL.md
+# Or symlink so it stays in sync as you pull new versions:
+#   ln -s "$(pwd)/docs/skill/SKILL.md" ~/.claude/skills/wikikai/SKILL.md
+```
+
+Restart Claude Code once more. The skill is announced at session start and will invoke itself when its keyword triggers fire — you can also force it with `/wikikai` if your client supports skill commands.
 
 ## Requirements
 
@@ -197,7 +210,7 @@ src/
     images.ts         content-addressed image storage
     promptLog.ts      rolling per-knowledge prompt log (capped at 500 chars)
   mcp/
-    server.ts         registers all 24 tools on the MCP SDK
+    server.ts         registers all 23 tools on the MCP SDK
     handlers.ts       Zod schemas + tool implementations (single source of truth)
     examples/         markdown reference content served via get_example
   web/
