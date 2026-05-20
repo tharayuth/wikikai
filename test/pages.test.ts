@@ -377,6 +377,76 @@ describe("PageStore", () => {
       // The first html row is checked again
       expect(inputs[0]).toMatch(/\bchecked\b/);
     });
+
+    it("flips `[ ]`/`[x]` inside markdown table cells", () => {
+      const initial = [
+        "| Step | Done | Owner |",
+        "|------|------|-------|",
+        "| Cut release | [x] | DevOps |",
+        "| Smoke test | [ ] | QA |",
+        "| Roll forward | [ ] | Release |",
+      ].join("\n");
+      const p = pages.add({ knowledge_id: kid, title: "rel", content: initial });
+      // Indices: 0 = first [x], 1 = first [ ], 2 = second [ ]
+      pages.toggleTaskAtIndex(p.id, 1); // tick QA
+      pages.toggleTaskAtIndex(p.id, 0); // uncheck DevOps
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const rows = after.split("\n");
+      expect(rows[2]).toBe("| Cut release | [ ] | DevOps |");
+      expect(rows[3]).toBe("| Smoke test | [x] | QA |");
+      expect(rows[4]).toBe("| Roll forward | [ ] | Release |");
+    });
+
+    it("preserves index continuity across GFM list + table cells", () => {
+      const initial = [
+        "- [ ] before list",
+        "",
+        "| Task | Done |",
+        "|------|------|",
+        "| Build | [ ] |",
+        "| Ship | [ ] |",
+        "",
+        "- [ ] after list",
+      ].join("\n");
+      const p = pages.add({ knowledge_id: kid, title: "mix", content: initial });
+      // Order: 0=before, 1=Build cell, 2=Ship cell, 3=after
+      pages.toggleTaskAtIndex(p.id, 2); // Ship
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const lines = after.split("\n");
+      expect(lines[0]).toBe("- [ ] before list");
+      expect(lines[4]).toBe("| Build | [ ] |");
+      expect(lines[5]).toBe("| Ship | [x] |");
+      // Server injects a blank + `{@N}` line under the table on save —
+      // the "after list" line shifts to index 9.
+      expect(lines[6]).toBe("");
+      expect(lines[7]).toMatch(/^\{@\d+\}$/);
+      expect(lines[9]).toBe("- [ ] after list");
+    });
+
+    it("ignores `[x]` mid-sentence in a table cell (must follow `|` directly)", () => {
+      const initial = [
+        "| Note | Status |",
+        "|------|--------|",
+        "| see [x] in docs | [ ] |",
+      ].join("\n");
+      const p = pages.add({ knowledge_id: kid, title: "n", content: initial });
+      // Only one valid checkbox (the second cell). Toggling index 0 hits it.
+      pages.toggleTaskAtIndex(p.id, 0);
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const lines = after.split("\n");
+      expect(lines[2]).toBe("| see [x] in docs | [x] |");
+      // Index 1 doesn't exist
+      expect(() => pages.toggleTaskAtIndex(p.id, 1)).toThrow();
+    });
   });
 
   describe("table @N annotation", () => {

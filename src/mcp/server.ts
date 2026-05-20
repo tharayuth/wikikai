@@ -622,11 +622,13 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
   server.registerTool(
     "toggle_task",
     {
-      title: "Toggle a `- [ ]` task checkbox on a page",
+      title: "Toggle an interactive checkbox on a page",
       description:
-        "Flip a GFM-style task checkbox written as `- [ ] task` or `- [x] task` in a list. " +
-        "Identifies the target by `page_id` + a 0-based `index` counted top-down across all such lines on the page (tasks inside fenced code blocks are skipped). " +
-        "Writes the new `[ ]` / `[x]` marker back to the page source (bumps version, snapshots revision, reindexes FTS). The web UI calls this same endpoint when a user clicks a rendered checkbox. " +
+        "Flip an interactive checkbox by `page_id` + a 0-based `index` counted top-down across the page in source order. Three surfaces are detected, sharing the same counter: " +
+        "(a) GFM task items `- [ ] thing` / `- [x] thing` inside a list, " +
+        "(b) `[ ]` / `[x]` at the START of a markdown-table cell, e.g. `| Task | [ ] | Owner |` (mid-sentence `[x]` is left alone, so docs that mention the syntax don't break), " +
+        "(c) `<input type=\"checkbox\">` markup inside an `html-embed` fence. " +
+        "Tasks inside any non-`html-embed` fenced code block are skipped. Writes the new state back to the page source (bumps version, snapshots revision, reindexes FTS). Web UI calls this same endpoint when a user clicks a rendered checkbox. " +
         "Use when the user says 'tick task 2 on page #19', 'mark the third checkbox done', or 'uncheck item 0'.",
       inputSchema: toggleTaskShape,
     },

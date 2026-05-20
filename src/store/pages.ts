@@ -861,6 +861,13 @@ export class PageStore {
     const content = this.readContent(meta.knowledge_id, pageId);
     const lines = content.split("\n");
     const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
+    const tableRowRe = /^\s*\|.*\|\s*$/;
+    // Match `[ ]` / `[x]` / `[X]` that appears at the start of a table cell:
+    // a pipe, optional whitespace, then the bracket pair, followed by either
+    // whitespace OR another pipe (so we don't pick up `[x]` mid-sentence).
+    // The renderer enforces the same "start of cell" rule, so the global
+    // index ordering stays consistent.
+    const cellTaskRe = /\|(\s*)\[([ xX])\](?=\s|\|)/g;
     const htmlCheckboxRe = /<input\b([^>]*)>/gi;
     type GfmTarget = { kind: "gfm"; line: number; match: RegExpExecArray };
     type HtmlTarget = {
@@ -870,11 +877,18 @@ export class PageStore {
       raw: string;
       attrs: string;
     };
+    type CellTarget = {
+      kind: "cell";
+      line: number;
+      /** Offset of the `[` character in the line. */
+      offset: number;
+      char: string;
+    };
     let inFence = false;
     let fenceLang = "";
     let fenceMarker = "";
     let count = 0;
-    let target: GfmTarget | HtmlTarget | null = null;
+    let target: GfmTarget | HtmlTarget | CellTarget | null = null;
     for (let i = 0; i < lines.length && !target; i++) {
       if (!inFence) {
         const open = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)?/.exec(lines[i]);
@@ -885,12 +899,33 @@ export class PageStore {
           continue;
         }
         const m = taskRe.exec(lines[i]);
-        if (!m) continue;
-        if (count === index) {
-          target = { kind: "gfm", line: i, match: m };
-          break;
+        if (m) {
+          if (count === index) {
+            target = { kind: "gfm", line: i, match: m };
+            break;
+          }
+          count++;
+          continue;
         }
-        count++;
+        // Markdown-table row — pick up any `| [ ] |` / `| [x] |` cells.
+        if (tableRowRe.test(lines[i])) {
+          cellTaskRe.lastIndex = 0;
+          let cm: RegExpExecArray | null;
+          while ((cm = cellTaskRe.exec(lines[i])) !== null) {
+            // Offset of `[` = match start + `|` + leading whitespace
+            const bracketOffset = cm.index + 1 + cm[1].length;
+            if (count === index) {
+              target = {
+                kind: "cell",
+                line: i,
+                offset: bracketOffset,
+                char: cm[2],
+              };
+              break;
+            }
+            count++;
+          }
+        }
       } else {
         const closeRe = new RegExp(`^\\s*${fenceMarker}+\\s*$`);
         if (closeRe.test(lines[i])) {
@@ -932,6 +967,15 @@ export class PageStore {
         taskRe,
         `$1[${newMark}]`,
       );
+    } else if (target.kind === "cell") {
+      const wasChecked = target.char.toLowerCase() === "x";
+      done = !wasChecked;
+      const newMark = wasChecked ? " " : "x";
+      const line = lines[target.line];
+      lines[target.line] =
+        line.substring(0, target.offset) +
+        `[${newMark}]` +
+        line.substring(target.offset + 3);
     } else {
       const wasChecked = /\bchecked\b/i.test(target.attrs);
       done = !wasChecked;

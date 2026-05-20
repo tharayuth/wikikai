@@ -396,6 +396,32 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     for (let i = 0; i < tokens.length; i++) {
       const tok = tokens[i];
 
+      // ─── Markdown table cell — `[ ]`/`[x]` at the start of a cell ───
+      // Matches `| [ ] |` and `| [ ] label |`. The cell's first text child
+      // must start with the bracket (after optional whitespace) so we don't
+      // mistakenly convert literal `[x]` text mid-sentence into a checkbox.
+      if (tok.type === "inline") {
+        const prev = tokens[i - 1];
+        if (prev && (prev.type === "td_open" || prev.type === "th_open")) {
+          const first = tok.children?.[0];
+          if (first && first.type === "text") {
+            const m = /^(\s*)\[([ xX])\](\s|$)/.exec(first.content);
+            if (m) {
+              const done = m[2].toLowerCase() === "x";
+              const myIdx = idx++;
+              // Drop the `[ ]` (and the leading whitespace) but keep the
+              // trailing separator the regex captured (\s or empty).
+              const consumed = m[1].length + 3; // [ ]
+              first.content = first.content.slice(consumed);
+              const checkbox = new state.Token("html_inline", "", 0);
+              checkbox.content = `<input type="checkbox" class="task-list-item-checkbox" data-task-index="${myIdx}"${done ? " checked" : ""}>`;
+              tok.children = [checkbox, ...tok.children!];
+              continue;
+            }
+          }
+        }
+      }
+
       // ─── GFM task list item ───
       if (tok.type === "inline") {
         const prev1 = tokens[i - 1];

@@ -227,6 +227,31 @@ describe("renderMarkdown", () => {
     expect(out).not.toContain("{@77}");
   });
 
+  it("converts `[ ]`/`[x]` at the start of a table cell to clickable checkboxes", async () => {
+    const out = await renderMarkdown(
+      "| Step | Done |\n|------|------|\n| Build | [x] |\n| Ship | [ ] |\n",
+    );
+    expect(out).toMatch(
+      /<td[^>]*>\s*<input type="checkbox"[^>]*data-task-index="0"[^>]*checked/,
+    );
+    expect(out).toMatch(
+      /<td[^>]*>\s*<input type="checkbox"[^>]*data-task-index="1"(?![^>]*checked)/,
+    );
+    // Raw `[ ]` / `[x]` should not survive in the cell text
+    expect(out).not.toMatch(/>\s*\[\s*\]\s*</);
+    expect(out).not.toMatch(/>\s*\[x\]\s*</);
+  });
+
+  it("does NOT convert `[x]` mid-sentence in a table cell", async () => {
+    const out = await renderMarkdown(
+      "| Note | OK |\n|------|----|\n| see [x] in docs | [ ] |\n",
+    );
+    // The mid-cell `[x]` must remain literal text (one of these matches is OK)
+    expect(out).toContain("[x] in docs");
+    // The right cell becomes a checkbox
+    expect(out).toMatch(/<input type="checkbox"[^>]*data-task-index="0"/);
+  });
+
   it("wraps the annotated table with a positioning container + block badge", async () => {
     const out = await renderMarkdown(
       "| a | b |\n|---|---|\n| 1 | 2 |\n\n{@88}",
