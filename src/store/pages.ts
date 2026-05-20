@@ -116,6 +116,14 @@ export function hashRange(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
 }
 
+/** Split one markdown-table row into trimmed cells. Strips the outer
+ *  `|` delimiters, splits on the rest, trims whitespace per cell. Does
+ *  not handle escaped `\|` in cell content — rare in our use case. */
+function parseTableRow(line: string): string[] {
+  const inner = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return inner.split("|").map((c) => c.trim());
+}
+
 export class PageStore {
   constructor(private db: Db, private itemsDir: string) {
     fs.mkdirSync(itemsDir, { recursive: true });
@@ -159,6 +167,20 @@ export class PageStore {
     if (!meta) return null;
     const content = this.readContent(meta.knowledge_id, row.page_id);
     const lines = content.split("\n");
+    const knowledge = this.db
+      .prepare(`SELECT title, project FROM knowledge WHERE id = ?`)
+      .get(meta.knowledge_id) as { title: string; project: string | null } | undefined;
+    const ctx = {
+      block_id: blockId,
+      page_id: row.page_id,
+      page_position: meta.position,
+      page_title: meta.title,
+      knowledge_id: meta.knowledge_id,
+      knowledge_title: knowledge?.title ?? "",
+      project: knowledge?.project ?? null,
+    };
+
+    // ─── Path A: `{@N}` inline on a fence-open line ───
     let startIdx = -1;
     let kind = "";
     let fenceMarker = "";
@@ -171,34 +193,105 @@ export class PageStore {
         break;
       }
     }
-    if (startIdx === -1) return null;
-    let endIdx = -1;
-    const closeRe = new RegExp(`^\\s*${fenceMarker.replace(/`/g, "`")}+\\s*$`);
-    for (let i = startIdx + 1; i < lines.length; i++) {
-      if (closeRe.test(lines[i])) {
-        endIdx = i;
-        break;
+    if (startIdx !== -1) {
+      let endIdx = -1;
+      const closeRe = new RegExp(`^\\s*${fenceMarker.replace(/`/g, "`")}+\\s*$`);
+      for (let i = startIdx + 1; i < lines.length; i++) {
+        if (closeRe.test(lines[i])) {
+          endIdx = i;
+          break;
+        }
       }
+      if (endIdx === -1) return null;
+      return {
+        ...ctx,
+        kind,
+        source: lines.slice(startIdx, endIdx + 1).join("\n"),
+        inner: lines.slice(startIdx + 1, endIdx).join("\n"),
+        line_start: startIdx + 1,
+        line_end: endIdx + 1,
+      };
     }
-    if (endIdx === -1) return null;
-    const source = lines.slice(startIdx, endIdx + 1).join("\n");
-    const inner = lines.slice(startIdx + 1, endIdx).join("\n");
-    const knowledge = this.db
-      .prepare(`SELECT title, project FROM knowledge WHERE id = ?`)
-      .get(meta.knowledge_id) as { title: string; project: string | null } | undefined;
+
+    // ─── Path B: `{@N}` on its own line, attached to a markdown table
+    // sitting immediately above. Walk back over contiguous table-pipe
+    // lines and require at least header + separator. ───
+    const TABLE_ROW = /^\s*\|.*\|\s*$/;
+    const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^\s*\{@(\d+)\}\s*$/.exec(lines[i]);
+      if (!m || Number(m[1]) !== blockId) continue;
+      // Optional single blank line between the table and the annotation.
+      let cursor = i - 1;
+      if (cursor >= 0 && lines[cursor].trim() === "") cursor--;
+      const lastRow = cursor; // inclusive index of last table row (if any)
+      let start = cursor;
+      while (start >= 0 && TABLE_ROW.test(lines[start])) start--;
+      start++;
+      // Need at least header + separator (2 lines).
+      if (lastRow - start + 1 < 2) continue;
+      if (!TABLE_SEP.test(lines[start + 1])) continue;
+      return {
+        ...ctx,
+        kind: "table",
+        source: lines.slice(start, lastRow + 1).join("\n"),
+        // inner = data rows only (skip header + separator)
+        inner: lines.slice(start + 2, lastRow + 1).join("\n"),
+        line_start: start + 1,
+        line_end: lastRow + 1, // last table row (1-based), not the annotation line
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Return a single data row of a markdown-table block as a
+   * `{ columnName: cellText }` object. `index` is 0-based; negative
+   * wraps from the end (`-1` = last row). Throws when the block isn't
+   * a table or the index is out of range.
+   */
+  getTableRow(
+    blockId: number,
+    index: number,
+  ): {
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    row_index: number;
+    columns: Record<string, string>;
+    source_line: number;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(`@${blockId} is a ${b.kind} block, not a table`);
+    }
+    const dataRows = b.inner.split("\n").filter((l) => /\S/.test(l));
+    const N = dataRows.length;
+    const idx = index < 0 ? N + index : index;
+    if (idx < 0 || idx >= N) {
+      throw new Error(
+        `row ${index} out of range (table @${blockId} has ${N} data row${
+          N === 1 ? "" : "s"
+        })`,
+      );
+    }
+    const headerLine = b.source.split("\n")[0];
+    const headers = parseTableRow(headerLine);
+    const cells = parseTableRow(dataRows[idx]);
+    const columns: Record<string, string> = {};
+    for (let j = 0; j < headers.length; j++) {
+      columns[headers[j]] = cells[j] ?? "";
+    }
     return {
       block_id: blockId,
-      kind,
-      source,
-      inner,
-      line_start: startIdx + 1,
-      line_end: endIdx + 1,
-      page_id: row.page_id,
-      page_position: meta.position,
-      page_title: meta.title,
-      knowledge_id: meta.knowledge_id,
-      knowledge_title: knowledge?.title ?? "",
-      project: knowledge?.project ?? null,
+      knowledge_id: b.knowledge_id,
+      page_id: b.page_id,
+      row_index: idx,
+      columns,
+      // header (line_start) + separator (+1) + idx
+      source_line: b.line_start + 2 + idx,
     };
   }
 
@@ -218,9 +311,12 @@ export class PageStore {
 
   /**
    * Scan markdown for rich fenced blocks (mermaid/chart/chart-grid/stats/
-   * steps/html-embed) and ensure each has a `{@N}` annotation in its info
-   * string. Blocks that already have one are left as-is. Returns the
-   * possibly-modified content.
+   * steps/html-embed/images) AND plain markdown tables, and ensure each
+   * has a `{@N}` annotation:
+   *   • Rich fences get the annotation appended to the info string.
+   *   • Tables get a standalone `{@N}` line inserted immediately below
+   *     the last data row.
+   * Blocks that already have one are left as-is.
    */
   private injectBlockIds(content: string): string {
     const lines = content.split("\n");
@@ -233,6 +329,8 @@ export class PageStore {
       "html-embed",
       "images",
     ]);
+    const TABLE_ROW = /^\s*\|.*\|\s*$/;
+    const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;
     let inFence = false;
     let fenceMarker = "";
     for (let i = 0; i < lines.length; i++) {
@@ -247,6 +345,41 @@ export class PageStore {
             const newId = this.allocBlockId();
             // Preserve any other trailing tokens by appending the annotation
             lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} {@${newId}}`;
+          }
+          continue;
+        }
+        // Table detection: header row immediately followed by separator.
+        if (
+          TABLE_ROW.test(line) &&
+          i + 1 < lines.length &&
+          TABLE_SEP.test(lines[i + 1])
+        ) {
+          let end = i + 1; // separator
+          for (let j = i + 2; j < lines.length; j++) {
+            if (TABLE_ROW.test(lines[j])) end = j;
+            else break;
+          }
+          // Markdown-it requires a blank line between a GFM table and a
+          // following paragraph — otherwise `{@N}` is parsed as another
+          // row. The canonical form is therefore: <table> + blank + {@N}.
+          const peek1 = end + 1 < lines.length ? lines[end + 1] : null;
+          const peek2 = end + 2 < lines.length ? lines[end + 2] : null;
+          const hasAnnotation =
+            (peek1 != null && /^\s*\{@\d+\}\s*$/.test(peek1)) ||
+            (peek1 != null &&
+              peek1.trim() === "" &&
+              peek2 != null &&
+              /^\s*\{@\d+\}\s*$/.test(peek2));
+          if (!hasAnnotation) {
+            const newId = this.allocBlockId();
+            // Insert blank line + annotation, so the canonical form is
+            // always present even if the author wrote `{@N}` directly
+            // under the last row.
+            lines.splice(end + 1, 0, "", `{@${newId}}`);
+            i = end + 2;
+          } else {
+            // Skip past the table + (optional blank +) annotation
+            i = peek1 != null && peek1.trim() === "" ? end + 2 : end + 1;
           }
         }
       } else {

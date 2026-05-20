@@ -310,7 +310,21 @@ export const GetBlockSchema = z.object({
     .int()
     .positive()
     .describe(
-      "Global block id (the `N` in `@N`). Returns the fenced block's source + inner body + parent page/knowledge context in one call.",
+      "Global block id (the `N` in `@N`). Returns the block's source + inner body + parent page/knowledge context in one call. `kind` is the fence language for rich blocks, or `\"table\"` when `@N` annotates a plain markdown table.",
+    ),
+});
+
+export const GetTableRowSchema = z.object({
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  index: z
+    .number()
+    .int()
+    .describe(
+      "0-based data-row index (header + separator excluded). Negative wraps from the end: -1 = last row.",
     ),
 });
 
@@ -355,6 +369,7 @@ export type ToolInputs = {
   replace_text: z.infer<typeof ReplaceTextSchema>;
   search: z.infer<typeof SearchSchema>;
   get_block: z.infer<typeof GetBlockSchema>;
+  get_table_row: z.infer<typeof GetTableRowSchema>;
   add_image: z.infer<typeof AddImageSchema>;
   get_image: z.infer<typeof GetImageSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
@@ -531,6 +546,16 @@ export interface ToolHandlers {
     knowledge_id: number;
     knowledge_title: string;
     project: string | null;
+    url: string;
+  }>;
+
+  get_table_row(input: ToolInputs["get_table_row"]): Promise<{
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    row_index: number;
+    columns: Record<string, string>;
+    source_line: number;
     url: string;
   }>;
 
@@ -1041,6 +1066,15 @@ export function buildToolHandlers(
       return {
         ...b,
         url: urlFor(ctx, b.knowledge_id, b.page_id, b.line_start),
+      };
+    },
+
+    async get_table_row(input) {
+      const parsed = GetTableRowSchema.parse(input);
+      const r = pages.getTableRow(parsed.block_id, parsed.index);
+      return {
+        ...r,
+        url: urlFor(ctx, r.knowledge_id, r.page_id, r.source_line),
       };
     },
 

@@ -217,6 +217,21 @@ describe("renderMarkdown", () => {
     expect(out).toContain("<pre");
     expect(out).toContain("hello");
   });
+
+  it("attaches data-block-id to a table when followed by a {@N} paragraph", async () => {
+    const out = await renderMarkdown(
+      "| a | b |\n|---|---|\n| 1 | 2 |\n\n{@77}",
+    );
+    expect(out).toMatch(/<table[^>]+data-block-id="77"/);
+    // The annotation paragraph must not leak into the rendered output
+    expect(out).not.toContain("{@77}");
+  });
+
+  it("renders a stray {@N} as a normal paragraph when not preceded by a table", async () => {
+    const out = await renderMarkdown("Just some text.\n\n{@42}");
+    expect(out).toContain("{@42}");
+    expect(out).not.toMatch(/data-block-id="42"/);
+  });
 });
 
 describe("buildToc", () => {

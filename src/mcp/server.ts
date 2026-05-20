@@ -214,8 +214,20 @@ const getBlockShape = {
     .int()
     .positive()
     .describe(
-      "Global block id — the `N` in `@N`. Each rendered rich fenced block (mermaid / chart / chart-grid / stats / steps / html-embed) is stamped with one of these and the source carries it as ```mermaid {@N}.",
+      "Global block id — the `N` in `@N`. Each rendered rich fenced block (mermaid / chart / chart-grid / stats / steps / images / html-embed) is stamped with one of these in its fence info string. Plain markdown tables can also be annotated with a standalone `{@N}` line directly under the last row, in which case `kind` in the response is `\"table\"`.",
     ),
+};
+
+const getTableRowShape = {
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`) — the table annotated with `{@N}` on the line directly below its last row."),
+  index: z
+    .number()
+    .int()
+    .describe("0-based data-row index (header + separator excluded). Negative wraps from the end: -1 = last row, -2 = second-last, …"),
 };
 
 const getExampleShape = {
@@ -472,14 +484,27 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
   server.registerTool(
     "get_block",
     {
-      title: "Fetch a rich block by its @N id",
+      title: "Fetch a rich block or annotated table by its @N id",
       description:
-        "Locate the page containing the given `@N` block id, parse the wrapping fence, and return the block's source + inner body + line range + parent page/knowledge in one call. " +
+        "Locate the page containing the given `@N` block id, parse the surrounding block, and return its source + inner body + line range + parent page/knowledge in one call. " +
+        "Resolves both: (a) rich fenced blocks (mermaid / chart / chart-grid / stats / steps / images / html-embed) where `{@N}` lives in the fence info string, and (b) plain markdown tables annotated with a standalone `{@N}` line directly below the last data row — in that case `kind === \"table\"`, `source` is the header + separator + data rows, and `inner` is the data rows only. " +
         "Use this when the user references a block by id (e.g. 'update @47' / 'read @123') so you don't need to FTS + read_page + parse boundaries yourself. " +
         "Throws if the id isn't found. After reading, edit with `edit_lines({page_id, line_start, line_end, new_text, expected_hash})` from a fresh `read_page`, or rewrite the whole page section with `edit_section`.",
       inputSchema: getBlockShape,
     },
     async (input) => jsonContent(await handlers.get_block(input)),
+  );
+
+  server.registerTool(
+    "get_table_row",
+    {
+      title: "Read a single row from a markdown table by @N + index",
+      description:
+        "Returns one data row of a table block as a `{ columnName: cellText }` object. `block_id` is the table's `@N` (use `get_block` if you only know the page). `index` is the 0-based data-row position (the header row + separator row are NOT counted); pass a negative number to wrap from the end (`-1` = last row, `-2` = second-last). " +
+        "Also returns `source_line` — the 1-based line number of that row in the page source, handy for follow-up `edit_lines`. Throws if `@N` isn't a table or the index is out of range.",
+      inputSchema: getTableRowShape,
+    },
+    async (input) => jsonContent(await handlers.get_table_row(input)),
   );
 
   // ─── Image upload ───

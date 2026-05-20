@@ -169,7 +169,7 @@ function UserGuideEn() {
         <li><strong>Inline image (markdown)</strong> — once an image is uploaded, the same <code>/img/&lt;hash&gt;.&lt;ext&gt;</code> path works in any plain markdown context via <code>![alt](/img/…)</code>: paragraphs, list items, AND markdown table cells. Use this when you want an image inline with prose or sitting in one column of a regular table — no <code>images</code> / <code>html-embed</code> wrapper needed. Optional sizing via the title slot — <code>![alt](src "WxH")</code> e.g. <code>"300x200"</code> fits both, <code>"300x"</code> width-only, <code>"x200"</code> height-only, or <code>"caption w=300 h=200"</code> to mix with a caption. Aspect ratio is always preserved (max-width + max-height, never stretched)</li>
         <li><strong>Interactive checkboxes</strong> — write a GFM task list <code>- [ ] item</code> / <code>- [x] item</code> anywhere a markdown list goes; the renderer turns each into a real clickable checkbox. Raw <code>&lt;input type="checkbox"&gt;</code> markup inside <code>html-embed</code> tables/cards is also clickable (the renderer rewrites it with a shared task index). <em>Clicking a box writes back to the source immediately</em> (page version bumped, revision snapshot, FTS reindexed). AI flips them via the <code>toggle_task</code> MCP tool — e.g. "tick task 3 on this page"</li>
         <li><strong>Images in HTML embed</strong> — alternatively, write <code>&lt;img src="/img/..." /&gt;</code> (or any external URL) inside an <code>html-embed</code> block when the image needs to sit beside text in a custom flex/grid layout. External URLs are also OK but only internal <code>/img/</code> paths are recoverable + visible to <code>get_image</code></li>
-        <li><strong>Block ids <code>@N</code></strong> — every rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) gets a globally-unique id, shown as a small pill in the block's corner. Click to open a small menu — copy <code>@N</code> or jump straight into the editor at this block. <em>Plain markdown tables don't have an id</em> — if you need to refer to a table by <code>@N</code>, author it as a <code>&lt;table&gt;</code> inside an <code>html-embed</code> block</li>
+        <li><strong>Block ids <code>@N</code></strong> — every rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) gets a globally-unique id, shown as a small pill in the block's corner. Click to open a small menu — copy <code>@N</code> or jump straight into the editor at this block. <strong>Plain markdown tables</strong> also get an id via a trailing <code>{`{@N}`}</code> line under the table (blank line in between); the renderer attaches it as <code>data-block-id</code> on the <code>&lt;table&gt;</code> so <code>search</code> / <code>get_block</code> / the new <code>get_table_row</code> tool all work on tables too</li>
         <li><strong>Tables and code blocks</strong> — standard markdown plus Shiki syntax highlighting</li>
         <li><strong>Heading anchors</strong> — hover a heading to reveal <code>#</code> for copying a deep link to that section</li>
       </ul>
@@ -271,7 +271,7 @@ function UserGuideTh() {
         <li><strong>Inline image (markdown)</strong> — ภาพที่อัปโหลดแล้วใช้ path <code>/img/&lt;hash&gt;.&lt;ext&gt;</code> ฝังในเนื้อ markdown ปกติได้ทันทีด้วย <code>![alt](/img/…)</code>: ใน paragraph, list item หรือ <em>cell ของ markdown table ธรรมดา</em>. ใช้เมื่ออยากให้ภาพอยู่ inline กับเนื้อหา หรืออยู่ใน column หนึ่งของตารางปกติ — ไม่ต้องห่อด้วย <code>images</code> หรือ <code>html-embed</code>. กำหนดขนาดได้ผ่าน title slot — <code>![alt](src "WxH")</code> เช่น <code>"300x200"</code> (กรอบ 300×200), <code>"300x"</code> (กว้างไม่เกิน 300), <code>"x200"</code> (สูงไม่เกิน 200), หรือผสม caption ได้ <code>"caption w=300 h=200"</code>. <em>Aspect ratio รักษาเสมอ</em> — ใช้ max-width + max-height ภาพไม่ยืดเพี้ยน</li>
         <li><strong>Interactive checkbox</strong> — เขียน GFM task list <code>- [ ] item</code> / <code>- [x] item</code> ใน list ปกติ; renderer แปลงเป็น checkbox จริงคลิกได้. <code>&lt;input type="checkbox"&gt;</code> ใน <code>html-embed</code> table/card ก็คลิกได้เหมือนกัน (renderer ฝัง task index ให้). <em>คลิกแล้ว save กลับ markdown ทันที</em> (bump page version + revision snapshot + FTS reindex). AI ใช้ MCP tool <code>toggle_task</code> ก็ได้ผลเดียวกัน (เช่น "tick task 3")</li>
         <li><strong>Image ใน HTML embed</strong> — หรือใช้ <code>&lt;img src="/img/..." /&gt;</code> (หรือ URL ภายนอก) ใน <code>html-embed</code> เมื่อต้องการภาพคู่กับ text ใน layout เอง. URL ภายนอกก็ได้ แต่เฉพาะ <code>/img/</code> ภายในที่ <code>get_image</code> ดูได้ + กู้คืนได้</li>
-        <li><strong>Block id <code>@N</code></strong> — rich block ทุกชนิด (mermaid / chart / chart-grid / stats / steps / html-embed / images) ได้เลข <code>@N</code> ระดับ global ติดมุมขวาบน คลิกเพื่อเปิดเมนู — copy <code>@N</code> หรือเข้า editor ที่ block นั้นเลย. <em>ตาราง markdown ปกติไม่มี <code>@N</code></em> — ถ้าต้องการอ้างตารางด้วย <code>@N</code> ให้เขียนเป็น <code>&lt;table&gt;</code> ใน <code>html-embed</code> แทน</li>
+        <li><strong>Block id <code>@N</code></strong> — rich block ทุกชนิด (mermaid / chart / chart-grid / stats / steps / html-embed / images) ได้เลข <code>@N</code> ระดับ global ติดมุมขวาบน คลิกเพื่อเปิดเมนู — copy <code>@N</code> หรือเข้า editor ที่ block นั้นเลย. <strong>ตาราง markdown</strong> ก็ได้ <code>@N</code> ผ่านบรรทัด <code>{`{@N}`}</code> ใต้ตาราง (เว้น 1 บรรทัดก่อน) — renderer จะแปะเป็น <code>data-block-id</code> บน <code>&lt;table&gt;</code> ทำให้ <code>search</code> / <code>get_block</code> / tool ใหม่ <code>get_table_row</code> ใช้กับตารางได้</li>
         <li><strong>Tables, code blocks</strong> — markdown ปกติ + syntax highlight (Shiki)</li>
         <li><strong>Heading anchor</strong> — hover ที่ heading จะมี <code>#</code> สำหรับ copy URL ของหัวข้อ</li>
       </ul>
@@ -352,7 +352,8 @@ function McpGuideEn() {
         <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>search</code></td><td>SQLite FTS5 across content / title / keywords. Returns <code>{`{ kid, pid, line, snippet, url }`}</code> for every hit</td></tr>
-          <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Use when the user says "อัพเดต @47" / "read @123" so you skip the FTS + read_page + fence-parsing dance</td></tr>
+          <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Works for fenced rich blocks <em>and</em> markdown tables (where <code>{`{@N}`}</code> is a trailing line under the table). Use when the user says "อัพเดต @47" / "read @123" so you skip the FTS + read_page + fence-parsing dance</td></tr>
+          <tr><td><code>get_table_row</code></td><td>Get a single data row of a markdown-table block as a <code>{`{ columnName: cellText }`}</code> object. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> is 0-based; negative wraps from end (<code>-1</code> = last row). Returns <code>{`{ block_id, page_id, row_index, columns, source_line }`}</code>. Avoids line-arithmetic when you just want "the second row of @47"</td></tr>
           <tr><td><code>get_example</code></td><td>Markdown reference. <strong>3 read modes</strong> to keep tokens low: <code>outline_only:true</code> (heading list only) · <code>line_start/line_end</code> (slice) · default (full). <code>kind</code> = full / minimal / mermaid / chart / stats / steps / er / html</td></tr>
           <tr><td><code>get_prompt_log</code></td><td>Read the rolling prompt log for a knowledge. Every mutation tool accepts an opt-in <code>user_prompt</code> field; when present it's truncated to 500 chars and stored against the resulting page + version. Returns <code>{`{ page_id?, page_version?, tool_name, prompt, created_at }`}</code> entries newest-first — use to answer "why did revision N happen?"</td></tr>
           <tr><td><code>toggle_task</code></td><td>Flip a plain <code>- [ ]</code> / <code>- [x]</code> task on a page. Args: <code>{`{ page_id, index }`}</code> where <code>index</code> is the 0-based position of the checkbox top-down (skipping any inside fenced code). Same write-back path the rendered UI uses</td></tr>
@@ -361,10 +362,18 @@ function McpGuideEn() {
 
       <h3>Block ids (<code>@N</code>)</h3>
       <p>
-        Every rendered rich block (mermaid / chart / chart-grid / stats / steps / html-embed) is stamped with a globally-unique id. The source carries it as <code>```mermaid {`{@123}`}</code>; the UI shows a small <code>@123</code> pill in the block's top-left corner on hover (click for a menu: copy or jump-to-edit). Users can then say "อัพเดต @47" and you can <code>get_block({"{ id: 47 }"})</code> directly without searching.
+        Every rendered rich block (mermaid / chart / chart-grid / stats / steps / html-embed) is stamped with a globally-unique id. The source carries it as <code>```mermaid {`{@123}`}</code>; the UI shows a small <code>@123</code> pill in the block's top-left corner on hover (click for a menu: copy or jump-to-edit). Users can then say "update @47" and you can <code>get_block({"{ id: 47 }"})</code> directly without searching.
       </p>
+      <p>
+        <strong>Plain markdown tables</strong> also get an id — author it as a trailing <code>{`{@N}`}</code> line under the table (with one blank line in between):
+      </p>
+      <pre style={{ fontSize: 12, lineHeight: 1.4 }}>{`| col a | col b |
+|-------|-------|
+| 1     | 2     |
+
+{@123}`}</pre>
       <p style={{ color: "var(--text-2)", fontSize: 12 }}>
-        ⚠️ Plain markdown tables don't get an <code>@N</code>. If a table needs to be referenceable, author it as a <code>&lt;table&gt;</code> inside an <code>html-embed</code> block (which is a rich block and does get an id).
+        The renderer attaches it as <code>data-block-id</code> on the <code>&lt;table&gt;</code> so search-flash works. <code>injectBlockIds</code> auto-inserts the annotation on save when missing. Read the table via <code>get_block({"{ id }"})</code> or pull one row with <code>get_table_row({"{ block_id, index }"})</code>.
       </p>
 
       <h3>Important fields</h3>
@@ -491,7 +500,8 @@ function McpGuideTh() {
         <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
         <tbody>
           <tr><td><code>search</code></td><td>SQLite FTS5 ค้นข้าม content/title/keywords. คืน <code>{`{ kid, pid, line, snippet, url }`}</code> ทุก hit</td></tr>
-          <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้เมื่อ user บอก "อัพเดต @47" / "อ่าน @123" — ข้าม FTS + read_page + parse fence เอง</td></tr>
+          <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้ได้กับทั้ง fenced rich block <em>และ</em> markdown table (ที่มี <code>{`{@N}`}</code> เป็นบรรทัดท้ายตาราง). ใช้เมื่อ user บอก "อัพเดต @47" / "อ่าน @123" — ข้าม FTS + read_page + parse fence เอง</td></tr>
+          <tr><td><code>get_table_row</code></td><td>ดึง 1 แถวข้อมูลของ markdown-table block เป็น <code>{`{ columnName: cellText }`}</code>. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> เริ่มที่ 0; เลขลบนับจากท้าย (<code>-1</code> = แถวสุดท้าย). คืน <code>{`{ block_id, page_id, row_index, columns, source_line }`}</code> เลี่ยงการคำนวณ line offset เอง</td></tr>
           <tr><td><code>get_example</code></td><td>ดูตัวอย่าง markdown. <strong>3 โหมดอ่าน</strong> เพื่อประหยัด token: <code>outline_only:true</code> (เห็นแค่ heading) · <code>line_start/line_end</code> (slice) · default (full). <code>kind</code> = full / minimal / mermaid / chart / stats / steps / er / html</td></tr>
           <tr><td><code>get_prompt_log</code></td><td>อ่าน log ของ <code>user_prompt</code> ใน knowledge. ทุก mutation tool รับ <code>user_prompt</code> เป็น opt-in — เมื่อส่งมา server ตัดที่ 500 ตัวอักษรแล้วผูกกับ page + version ที่เกิดจากคำสั่งนั้น. คืน entry แบบใหม่สุดก่อน (page_id?, page_version?, tool_name, prompt, created_at). ใช้ตอบ "ทำไม revision N ถึงเกิด"</td></tr>
           <tr><td><code>toggle_task</code></td><td>กลับสถานะ <code>- [ ]</code> / <code>- [x]</code> ที่หน้านั้น. Args: <code>{`{ page_id, index }`}</code> โดย <code>index</code> เป็นเลข 0-based นับจากบนลงล่าง (ข้าม task ใน fenced code). เส้นทางเดียวกับ web UI ตอนคลิก checkbox</td></tr>
@@ -502,8 +512,16 @@ function McpGuideTh() {
       <p>
         ทุก rich block (mermaid / chart / chart-grid / stats / steps / html-embed) ที่ render จะได้เลข <code>@N</code> แบบ global. ใน source markdown ติดเป็น <code>```mermaid {`{@123}`}</code>; UI แสดง pill <code>@123</code> มุมซ้ายบนของ block ตอน hover (คลิกเปิดเมนู: copy หรือเข้า editor ที่ block นั้น). User บอก "อัพเดต @47" → <code>get_block({"{ id: 47 }"})</code> ได้เลย ไม่ต้องค้นเอง.
       </p>
+      <p>
+        <strong>ตาราง markdown</strong> ก็ได้ <code>@N</code> เหมือนกัน — เขียนเป็นบรรทัด <code>{`{@N}`}</code> ใต้ตาราง (เว้น 1 บรรทัดก่อน):
+      </p>
+      <pre style={{ fontSize: 12, lineHeight: 1.4 }}>{`| col a | col b |
+|-------|-------|
+| 1     | 2     |
+
+{@123}`}</pre>
       <p style={{ color: "var(--text-2)", fontSize: 12 }}>
-        ⚠️ ตาราง markdown ปกติไม่มี <code>@N</code> — ถ้าตารางต้องอ้างอิงด้วย <code>@N</code> ให้เขียนเป็น <code>&lt;table&gt;</code> ใน <code>html-embed</code> แทน (เป็น rich block จะได้ id)
+        renderer แปะเป็น <code>data-block-id</code> บน <code>&lt;table&gt;</code> ให้ — search-flash ใช้งานได้. <code>injectBlockIds</code> เติม annotation ให้อัตโนมัติตอน save. อ่านตารางด้วย <code>get_block({"{ id }"})</code> หรือดึงทีละแถวด้วย <code>get_table_row({"{ block_id, index }"})</code>.
       </p>
 
       <h3>Fields สำคัญ</h3>

@@ -457,6 +457,44 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     return false;
   });
 
+  // ─── Table block ids ───
+  // Look for `{@N}` sitting on its own paragraph line immediately AFTER
+  // a markdown table. Transfer the id to the matching `table_open`
+  // token as `data-block-id="N"` and remove the annotation paragraph
+  // from the token stream so it doesn't render as a stray text line.
+  md.core.ruler.after("task-checkboxes", "table-block-ids", (state) => {
+    const tokens = state.tokens;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].type !== "table_close") continue;
+      const pOpen = tokens[i + 1];
+      const inline = tokens[i + 2];
+      const pClose = tokens[i + 3];
+      if (
+        !pOpen || pOpen.type !== "paragraph_open" ||
+        !inline || inline.type !== "inline" ||
+        !pClose || pClose.type !== "paragraph_close"
+      ) continue;
+      const m = /^\s*\{@(\d+)\}\s*$/.exec(inline.content);
+      if (!m) continue;
+      // Walk back to the matching table_open (handle nesting in case of
+      // any future composite table renderers).
+      let depth = 1;
+      for (let j = i - 1; j >= 0; j--) {
+        const t = tokens[j];
+        if (t.type === "table_close") depth++;
+        else if (t.type === "table_open") {
+          depth--;
+          if (depth === 0) {
+            t.attrSet("data-block-id", m[1]);
+            break;
+          }
+        }
+      }
+      tokens.splice(i + 1, 3);
+    }
+    return false;
+  });
+
   return md;
 }
 

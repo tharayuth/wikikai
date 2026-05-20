@@ -349,6 +349,94 @@ describe("PageStore", () => {
     });
   });
 
+  describe("table @N annotation", () => {
+    it("appends a {@N} line under a table on save (injectBlockIds)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "intro\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nafter table",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      // Canonical form: <last row> + blank line + {@N}
+      expect(raw).toMatch(/\| 1 \| 2 \|\n\n\{@\d+\}\n\nafter table/);
+    });
+
+    it("leaves an existing {@N} alone", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| a |\n|---|\n| 1 |\n{@99999}\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      // The existing id is preserved; no extra annotation appended.
+      expect(raw).toContain("{@99999}");
+      // Count {@...} lines — exactly one
+      expect((raw.match(/^\{@\d+\}/gm) ?? []).length).toBe(1);
+    });
+
+    it("getBlock returns kind:'table' with header+sep+rows source", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| col1 | col2 |\n|------|------|\n| a    | b    |\n| c    | d    |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const b = pages.getBlock(id);
+      expect(b).toBeTruthy();
+      expect(b!.kind).toBe("table");
+      expect(b!.source).toContain("| col1 | col2 |");
+      expect(b!.source).toContain("|------|------|");
+      expect(b!.inner).not.toContain("col1");
+      expect(b!.inner).toContain("| a    | b    |");
+      // line_end is the last row, not the annotation line
+      const sourceLines = b!.source.split("\n");
+      expect(b!.line_end - b!.line_start + 1).toBe(sourceLines.length);
+    });
+
+    it("getTableRow returns the requested row as {col: value}", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| name | age |\n|------|-----|\n| Alice | 30 |\n| Bob   | 25 |\n| Cara  | 40 |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(pages.getTableRow(id, 0).columns).toEqual({ name: "Alice", age: "30" });
+      expect(pages.getTableRow(id, 1).columns).toEqual({ name: "Bob", age: "25" });
+      expect(pages.getTableRow(id, -1).columns).toEqual({ name: "Cara", age: "40" });
+      expect(pages.getTableRow(id, -1).row_index).toBe(2);
+      expect(() => pages.getTableRow(id, 99)).toThrow(/out of range/);
+    });
+
+    it("getTableRow throws when the block isn't a table", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "```stats\n[{\"num\":\"1\",\"label\":\"x\"}]\n```\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() => pages.getTableRow(id, 0)).toThrow(/not a table/);
+    });
+  });
+
   describe("cascade", () => {
     it("page rows are removed when knowledge is deleted (FK CASCADE)", () => {
       pages.add({ knowledge_id: kid, title: "A", content: "a" });
