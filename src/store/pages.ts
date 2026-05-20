@@ -4,6 +4,11 @@ import path from "node:path";
 import type { Db } from "./db.js";
 import { emitEvent } from "../lib/events.js";
 import { formatImageTitle, parseImageSize } from "../lib/imageSize.js";
+import {
+  formatAnnotation,
+  parseAllAnnotations,
+  parseAnnotation,
+} from "../lib/blockAnnotation.js";
 
 export interface PageMetadata {
   id: number;
@@ -186,6 +191,8 @@ export class PageStore {
   getBlock(blockId: number): {
     block_id: number;
     kind: string;
+    /** Optional caption from the `{@N "caption"}` annotation. */
+    caption: string | null;
     source: string;
     inner: string;
     line_start: number;
@@ -197,7 +204,9 @@ export class PageStore {
     knowledge_title: string;
     project: string | null;
   } | null {
-    const annotation = `{@${blockId}}`;
+    const annotation = `{@${blockId}`; // trigram FTS treats `{` / `@` as
+    // continuation, so the bare `{@N` prefix matches both `{@N}` and
+    // `{@N "..."}`. Subsequent in-page scan re-parses precisely.
     const row = this.db
       .prepare(
         `SELECT pages_fts.rowid AS page_id FROM pages_fts
@@ -222,18 +231,21 @@ export class PageStore {
       project: knowledge?.project ?? null,
     };
 
-    // ─── Path A: `{@N}` inline on a fence-open line ───
+    // ─── Path A: `{@N "caption"?}` inline on a fence-open line ───
     let startIdx = -1;
     let kind = "";
     let fenceMarker = "";
+    let caption: string | null = null;
     for (let i = 0; i < lines.length; i++) {
-      const m = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)[^\n]*?\{@(\d+)\}/.exec(lines[i]);
-      if (m && Number(m[4]) === blockId) {
-        startIdx = i;
-        kind = m[3].toLowerCase();
-        fenceMarker = m[2];
-        break;
-      }
+      const m = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)([^\n]*)$/.exec(lines[i]);
+      if (!m) continue;
+      const ann = parseAnnotation(m[4]);
+      if (!ann || ann.id !== blockId) continue;
+      startIdx = i;
+      kind = m[3].toLowerCase();
+      fenceMarker = m[2];
+      caption = ann.caption;
+      break;
     }
     if (startIdx !== -1) {
       let endIdx = -1;
@@ -248,6 +260,7 @@ export class PageStore {
       return {
         ...ctx,
         kind,
+        caption,
         source: lines.slice(startIdx, endIdx + 1).join("\n"),
         inner: lines.slice(startIdx + 1, endIdx).join("\n"),
         line_start: startIdx + 1,
@@ -255,14 +268,17 @@ export class PageStore {
       };
     }
 
-    // ─── Path B: `{@N}` on its own line, attached to a markdown table
-    // sitting immediately above. Walk back over contiguous table-pipe
-    // lines and require at least header + separator. ───
+    // ─── Path B: `{@N "caption"?}` on its own line, attached to a
+    // markdown table sitting immediately above. Walk back over
+    // contiguous table-pipe lines and require at least header +
+    // separator. ───
     const TABLE_ROW = /^\s*\|.*\|\s*$/;
     const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;
     for (let i = 0; i < lines.length; i++) {
-      const m = /^\s*\{@(\d+)\}\s*$/.exec(lines[i]);
-      if (!m || Number(m[1]) !== blockId) continue;
+      const trimmed = lines[i].trim();
+      const ann = parseAnnotation(trimmed);
+      if (!ann || ann.start !== 0 || ann.end !== trimmed.length) continue;
+      if (ann.id !== blockId) continue;
       // Optional single blank line between the table and the annotation.
       let cursor = i - 1;
       if (cursor >= 0 && lines[cursor].trim() === "") cursor--;
@@ -276,6 +292,7 @@ export class PageStore {
       return {
         ...ctx,
         kind: "table",
+        caption: ann.caption,
         source: lines.slice(start, lastRow + 1).join("\n"),
         // inner = data rows only (skip header + separator)
         inner: lines.slice(start + 2, lastRow + 1).join("\n"),
@@ -460,6 +477,7 @@ export class PageStore {
   getBlockSummary(blockId: number): {
     block_id: number;
     kind: string;
+    caption: string | null;
     line_start: number;
     line_end: number;
     page_id: number;
@@ -476,6 +494,7 @@ export class PageStore {
     const base = {
       block_id: b.block_id,
       kind: b.kind,
+      caption: b.caption,
       line_start: b.line_start,
       line_end: b.line_end,
       page_id: b.page_id,
@@ -539,7 +558,7 @@ export class PageStore {
           const [, indent, marker, lang, rest] = open;
           inFence = true;
           fenceMarker = marker;
-          if (RICH.has(lang.toLowerCase()) && !/\{@\d+\}/.test(rest)) {
+          if (RICH.has(lang.toLowerCase()) && !/\{@\d+/.test(rest)) {
             const newId = this.allocBlockId();
             // Preserve any other trailing tokens by appending the annotation
             lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} {@${newId}}`;
@@ -562,12 +581,13 @@ export class PageStore {
           // row. The canonical form is therefore: <table> + blank + {@N}.
           const peek1 = end + 1 < lines.length ? lines[end + 1] : null;
           const peek2 = end + 2 < lines.length ? lines[end + 2] : null;
+          const annRe = /^\s*\{@\d+(?:\s+"(?:[^"\\]|\\.)*")?\}\s*$/;
           const hasAnnotation =
-            (peek1 != null && /^\s*\{@\d+\}\s*$/.test(peek1)) ||
+            (peek1 != null && annRe.test(peek1)) ||
             (peek1 != null &&
               peek1.trim() === "" &&
               peek2 != null &&
-              /^\s*\{@\d+\}\s*$/.test(peek2));
+              annRe.test(peek2));
           if (!hasAnnotation) {
             const newId = this.allocBlockId();
             // Insert blank line + annotation, so the canonical form is
@@ -665,6 +685,78 @@ export class PageStore {
   }
 
   /**
+   * Set or clear the caption on a block annotated with `{@N}`. Rewrites
+   * the annotation in place to `{@N "new caption"}` (or back to `{@N}`
+   * when `caption` is null/empty). Works for both fence-info annotations
+   * (rich blocks) and trailing-line annotations (markdown tables).
+   * Bumps page version + snapshots revision like any other edit.
+   */
+  setBlockCaption(
+    blockId: number,
+    caption: string | null,
+  ): {
+    block_id: number;
+    page_id: number;
+    knowledge_id: number;
+    caption: string | null;
+    version: number;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    const content = this.readContent(b.knowledge_id, b.page_id);
+    const lines = content.split("\n");
+    const trimmedCaption =
+      caption == null ? null : caption.trim() === "" ? null : caption.trim();
+    const targetText = formatAnnotation(blockId, trimmedCaption);
+
+    let changed = false;
+    for (let i = 0; i < lines.length; i++) {
+      const matches = parseAllAnnotations(lines[i]);
+      for (const m of matches) {
+        if (m.id !== blockId) continue;
+        lines[i] =
+          lines[i].slice(0, m.start) + targetText + lines[i].slice(m.end);
+        changed = true;
+        break;
+      }
+      if (changed) break;
+    }
+    if (!changed) {
+      throw new Error(
+        `annotation {@${blockId}} not found in page source — out of sync`,
+      );
+    }
+
+    const meta = this.getMetadata(b.page_id);
+    if (!meta) throw new Error(`page #${b.page_id} not found`);
+    const finalContent = this.writeContent(
+      b.knowledge_id,
+      b.page_id,
+      lines.join("\n"),
+    );
+    const r = this.bumpVersion(b.page_id);
+    const now = new Date().toISOString();
+    this.syncFts(b.page_id, meta.title, meta.keywords, finalContent);
+    this.saveRevision(
+      b.page_id,
+      r.version,
+      meta.title,
+      finalContent,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      now,
+    );
+    this.bumpKnowledge(b.knowledge_id, b.page_id);
+    return {
+      block_id: blockId,
+      page_id: b.page_id,
+      knowledge_id: b.knowledge_id,
+      caption: trimmedCaption,
+      version: r.version,
+    };
+  }
+
+  /**
    * Resize an `<img>` that lives inside an `html-embed` fence by
    * rewriting its inline `style` attribute. `blockId` identifies the
    * fence (its `{@N}`), `imgIndex` is the 0-based position of the
@@ -756,18 +848,20 @@ export class PageStore {
    * are no ids to preserve or the new region already covers them.
    */
   private preserveBlockIds(oldRegion: string, newRegion: string): string {
-    const oldIds = new Set<number>();
-    for (const m of oldRegion.matchAll(/\{@(\d+)\}/g)) {
-      oldIds.add(Number(m[1]));
+    // Pull every {@N "caption"?} from the OLD region — captions follow
+    // their id through the conversion so a markdown table → html-embed
+    // (or stats → mermaid, etc.) doesn't silently lose either the id
+    // OR the caption.
+    const oldAnnotations = new Map<number, string | null>();
+    for (const a of parseAllAnnotations(oldRegion)) {
+      if (!oldAnnotations.has(a.id)) oldAnnotations.set(a.id, a.caption);
     }
-    if (oldIds.size === 0) return newRegion;
+    if (oldAnnotations.size === 0) return newRegion;
     const newIds = new Set<number>();
-    for (const m of newRegion.matchAll(/\{@(\d+)\}/g)) {
-      newIds.add(Number(m[1]));
-    }
-    const missing: number[] = [];
-    for (const id of oldIds) {
-      if (!newIds.has(id)) missing.push(id);
+    for (const a of parseAllAnnotations(newRegion)) newIds.add(a.id);
+    const missing: { id: number; caption: string | null }[] = [];
+    for (const [id, caption] of oldAnnotations) {
+      if (!newIds.has(id)) missing.push({ id, caption });
     }
     if (missing.length === 0) return newRegion;
 
@@ -786,9 +880,9 @@ export class PageStore {
           const [, indent, marker, lang, rest] = open;
           inFence = true;
           fenceMarker = marker;
-          if (!/\{@\d+\}/.test(rest)) {
-            const id = missing.shift()!;
-            lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} {@${id}}`;
+          if (!/\{@\d+/.test(rest)) {
+            const { id, caption } = missing.shift()!;
+            lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} ${formatAnnotation(id, caption)}`;
           }
           i++;
           continue;
@@ -807,12 +901,12 @@ export class PageStore {
           }
           const peek1 = lines[end + 1] ?? "";
           const peek2 = lines[end + 2] ?? "";
+          const annRe = /^\s*\{@\d+/;
           const alreadyAnnotated =
-            /^\s*\{@\d+\}\s*$/.test(peek1) ||
-            (peek1.trim() === "" && /^\s*\{@\d+\}\s*$/.test(peek2));
+            annRe.test(peek1) || (peek1.trim() === "" && annRe.test(peek2));
           if (!alreadyAnnotated) {
-            const id = missing.shift()!;
-            lines.splice(end + 1, 0, "", `{@${id}}`);
+            const { id, caption } = missing.shift()!;
+            lines.splice(end + 1, 0, "", formatAnnotation(id, caption));
             i = end + 3;
           } else {
             i = peek1.trim() === "" ? end + 3 : end + 2;

@@ -923,6 +923,118 @@ describe("PageStore", () => {
     });
   });
 
+  describe("block captions", () => {
+    it("getBlock returns the caption from a fence annotation", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content:
+          '```stats {@5555 "Q1 KPIs at a glance"}\n[{"num":"1","label":"x"}]\n```',
+      });
+      // The user-supplied id stays through injectBlockIds (already
+      // present) — pages.getBlock should find it.
+      const b = pages.getBlock(5555);
+      expect(b).toBeTruthy();
+      expect(b!.kind).toBe("stats");
+      expect(b!.caption).toBe("Q1 KPIs at a glance");
+      // Sanity: page_id matches the just-created page
+      expect(b!.page_id).toBe(id);
+    });
+
+    it("getBlock returns the caption from a markdown-table trailing annotation", () => {
+      const { id: pid } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content:
+          '| a | b |\n|---|---|\n| 1 | 2 |\n\n{@6666 "Tiny demo table"}',
+      });
+      const b = pages.getBlock(6666);
+      expect(b).toBeTruthy();
+      expect(b!.kind).toBe("table");
+      expect(b!.caption).toBe("Tiny demo table");
+      expect(b!.page_id).toBe(pid);
+    });
+
+    it("getBlockSummary returns caption alongside columns/row_count", () => {
+      pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content:
+          '| name | age |\n|------|-----|\n| Alice | 30 |\n\n{@7777 "User roster"}',
+      });
+      const s = pages.getBlockSummary(7777);
+      expect(s!.caption).toBe("User roster");
+      expect(s!.columns).toEqual(["name", "age"]);
+      expect(s!.row_count).toBe(1);
+    });
+
+    it("setBlockCaption sets, updates, and clears the caption", () => {
+      const { id: pid } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content: '```mermaid {@8888}\nflowchart TD\n  A --> B\n```',
+      });
+      // Set
+      let r = pages.setBlockCaption(8888, "Initial caption");
+      expect(r.caption).toBe("Initial caption");
+      let raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${pid}.md`),
+        "utf8",
+      );
+      expect(raw).toContain('```mermaid {@8888 "Initial caption"}');
+      // Update
+      r = pages.setBlockCaption(8888, "Updated caption");
+      raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${pid}.md`),
+        "utf8",
+      );
+      expect(raw).toContain('```mermaid {@8888 "Updated caption"}');
+      // Clear
+      r = pages.setBlockCaption(8888, null);
+      expect(r.caption).toBeNull();
+      raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${pid}.md`),
+        "utf8",
+      );
+      expect(raw).toContain("```mermaid {@8888}");
+    });
+
+    it("preserveBlockIds carries caption across block-type conversions", () => {
+      const content = [
+        "## chart",
+        "",
+        "| a | b |",
+        "|---|---|",
+        "| 1 | 2 |",
+        "",
+        '{@9999 "Quarterly revenue"}',
+      ].join("\n");
+      const { id: pid } = pages.add({
+        knowledge_id: kid,
+        title: "T",
+        content,
+      });
+      // AI converts the table to an html-embed WITHOUT carrying either
+      // the id OR the caption — server should preserve both.
+      pages.editSection(
+        pid,
+        "## chart",
+        "```html-embed\n<table><tr><td>a</td><td>b</td></tr></table>\n```",
+      );
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${pid}.md`),
+        "utf8",
+      );
+      expect(raw).toContain('```html-embed {@9999 "Quarterly revenue"}');
+    });
+
+    it("setBlockCaption rejects when block id doesn't exist", () => {
+      expect(() => pages.setBlockCaption(123456789, "x")).toThrow(
+        /not found/,
+      );
+    });
+  });
+
   describe("setHtmlEmbedImageSize", () => {
     it("adds a style attr with max-width when none existed", () => {
       const { id } = pages.add({

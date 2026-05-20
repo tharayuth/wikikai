@@ -252,6 +252,18 @@ const getTableRowShape = {
     .describe("0-based data-row index (header + separator excluded). Negative wraps from the end: -1 = last row, -2 = second-last, …"),
 };
 
+const setBlockCaptionShape = {
+  id: z.number().int().positive().describe("Block id (the N in @N)."),
+  caption: z
+    .string()
+    .max(500)
+    .nullable()
+    .describe(
+      "Caption text — short human description of what the block IS (like an HTML `<figcaption>` / Word figure caption: \"Architecture: API → DB\", \"Monthly revenue 2024 by region\", \"Q1 inventory by SKU\"). Pass an empty string or null to remove the caption. Max 500 chars.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
 const findTableRowsShape = {
   block_id: z
     .number()
@@ -580,6 +592,19 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
       inputSchema: findTableRowsShape,
     },
     async (input) => jsonContent(await handlers.find_table_rows(input)),
+  );
+
+  server.registerTool(
+    "set_block_caption",
+    {
+      title: "Set or clear a block's caption (figcaption)",
+      description:
+        "Update the `caption` text on the annotation of a rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) or a markdown table. The caption is the same idea as an HTML `<figcaption>` or a Word figure caption — short human description of what the block IS, rendered as small italic text directly below the block. " +
+        "Captions are recommended on every non-trivial block so the AI can answer 'what is @47?' via `get_block({ id: 47, summary: true })` (returns the caption without fetching the body — a ~10× token saving on large mermaid/chart bodies). " +
+        "Source-level form: `{@N \"caption text\"}` for fences, or the trailing-line annotation under a table. Pass `null` or empty string to remove an existing caption. Bumps page version + snapshots revision like any other edit.",
+      inputSchema: setBlockCaptionShape,
+    },
+    async (input) => jsonContent(await handlers.set_block_caption(input)),
   );
 
   // ─── Image upload ───

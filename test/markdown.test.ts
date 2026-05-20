@@ -266,6 +266,36 @@ describe("renderMarkdown", () => {
     expect(out).toContain('href="http://x"');
   });
 
+  it("renders block-caption div for a fenced rich block with a quoted caption", async () => {
+    const out = await renderMarkdown(
+      '```stats {@77 "Q1 KPIs at a glance"}\n[{"num":"42","label":"answer"}]\n```',
+    );
+    expect(out).toMatch(
+      /<div class="block-caption">Q1 KPIs at a glance<\/div>/,
+    );
+    // Caption should NOT survive as literal text in the fence info / cards
+    expect(out).not.toContain("{@77");
+  });
+
+  it("renders block-caption div on a markdown table with caption annotation", async () => {
+    const out = await renderMarkdown(
+      '| a | b |\n|---|---|\n| 1 | 2 |\n\n{@88 "Sample 2-row table"}',
+    );
+    expect(out).toMatch(
+      /<div class="block-caption">Sample 2-row table<\/div>/,
+    );
+    expect(out).not.toContain("{@88");
+  });
+
+  it("escapes HTML in block-caption text", async () => {
+    const out = await renderMarkdown(
+      '```mermaid {@99 "Architecture: <api> → DB"}\nflowchart TD\nA --> B\n```',
+    );
+    expect(out).toContain(
+      '<div class="block-caption">Architecture: &lt;api&gt; → DB</div>',
+    );
+  });
+
   it("wraps the annotated table with a positioning container + block badge", async () => {
     const out = await renderMarkdown(
       "| a | b |\n|---|---|\n| 1 | 2 |\n\n{@88}",

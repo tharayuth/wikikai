@@ -350,6 +350,22 @@ export const GetTableRowSchema = z.object({
     ),
 });
 
+export const SetBlockCaptionSchema = z.object({
+  id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Block id (the N in @N)."),
+  caption: z
+    .string()
+    .max(500)
+    .nullable()
+    .describe(
+      "Caption text — short human description of what the block IS (like an HTML `<figcaption>` / a Word figure caption). Pass an empty string or null to remove the caption. Max 500 chars.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
 export const FindTableRowsSchema = z.object({
   block_id: z
     .number()
@@ -427,6 +443,7 @@ export type ToolInputs = {
   get_block: z.infer<typeof GetBlockSchema>;
   get_table_row: z.infer<typeof GetTableRowSchema>;
   find_table_rows: z.infer<typeof FindTableRowsSchema>;
+  set_block_caption: z.infer<typeof SetBlockCaptionSchema>;
   add_image: z.infer<typeof AddImageSchema>;
   get_image: z.infer<typeof GetImageSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
@@ -593,6 +610,11 @@ export interface ToolHandlers {
   get_block(input: ToolInputs["get_block"]): Promise<{
     block_id: number;
     kind: string;
+    /** Optional human-readable caption from the `{@N "caption"}`
+     *  annotation. Same idea as an HTML `<figcaption>` — short text
+     *  describing what the block IS. Use when probing with
+     *  `summary: true` to answer "what is @N?" cheaply. */
+    caption: string | null;
     /** Omitted when `summary: true`. */
     source?: string;
     /** Omitted when `summary: true`. */
@@ -635,6 +657,15 @@ export interface ToolHandlers {
     }>;
     total_matched: number;
     truncated: boolean;
+  }>;
+
+  set_block_caption(input: ToolInputs["set_block_caption"]): Promise<{
+    block_id: number;
+    page_id: number;
+    knowledge_id: number;
+    caption: string | null;
+    version: number;
+    url: string;
   }>;
 
   add_image(input: ToolInputs["add_image"]): Promise<{
@@ -1178,6 +1209,22 @@ export function buildToolHandlers(
           ...m,
           url: urlFor(ctx, r.knowledge_id, r.page_id, m.source_line),
         })),
+      };
+    },
+
+    async set_block_caption(input) {
+      const parsed = SetBlockCaptionSchema.parse(input);
+      const r = pages.setBlockCaption(parsed.id, parsed.caption);
+      logIf(
+        "set_block_caption",
+        parsed.user_prompt,
+        r.knowledge_id,
+        r.page_id,
+        null,
+      );
+      return {
+        ...r,
+        url: urlFor(ctx, r.knowledge_id, r.page_id),
       };
     },
 

@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import { parseImageSize } from "../lib/imageSize.js";
+import { parseAnnotation } from "../lib/blockAnnotation.js";
 import anchor from "markdown-it-anchor";
 import { createHighlighter, type Highlighter } from "shiki";
 
@@ -94,12 +95,29 @@ const COLOR_WHITELIST = new Set([
   "cyan",
 ]);
 
-/** Extract the `{@N}` annotation from a fence info string and return both
- *  the annotation (HTML attrs + visible badge) and the cleaned-up info. */
-function extractBlockId(info: string): { id: number | null; rest: string } {
-  const m = /\{@(\d+)\}/.exec(info);
-  if (!m) return { id: null, rest: info };
-  return { id: Number(m[1]), rest: info.replace(/\s*\{@\d+\}\s*/, " ").trim() };
+/** Extract the `{@N "caption"?}` annotation from a fence info string and
+ *  return the id, the optional caption, and the cleaned-up info. */
+function extractBlockId(info: string): {
+  id: number | null;
+  caption: string | null;
+  rest: string;
+} {
+  const p = parseAnnotation(info);
+  if (!p) return { id: null, caption: null, rest: info };
+  const rest = (info.slice(0, p.start) + info.slice(p.end))
+    .replace(/\s+/g, " ")
+    .trim();
+  return { id: p.id, caption: p.caption, rest };
+}
+
+function blockCaption(caption: string | null): string {
+  if (!caption) return "";
+  // Small italic caption rendered directly below the block, like a
+  // `<figcaption>` in a `<figure>`. Source of truth lives in the
+  // `{@N "..."}` annotation on the fence / table — this is just the
+  // human-visible echo. AI consumers read the caption via
+  // `get_block({ summary: true })` instead of scraping the DOM.
+  return `<div class="block-caption">${escapeHtml(caption)}</div>`;
 }
 
 function blockBadge(id: number | null): string {
@@ -131,7 +149,11 @@ function annotateHtmlEmbedImages(
   });
 }
 
-function renderStats(jsonText: string, blockId: number | null = null): string {
+function renderStats(
+  jsonText: string,
+  blockId: number | null = null,
+  caption: string | null = null,
+): string {
   let items: StatItem[];
   try {
     const parsed = JSON.parse(jsonText);
@@ -151,10 +173,14 @@ function renderStats(jsonText: string, blockId: number | null = null): string {
       return `<div class="stat-card${color}"><div class="num${color}">${num}</div><div class="label">${label}</div></div>`;
     })
     .join("");
-  return `<div class="stats-bar"${blockIdAttr(blockId)}>${cards}${blockBadge(blockId)}</div>`;
+  return `<div class="stats-bar"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
 }
 
-function renderChart(jsonText: string, blockId: number | null = null): string {
+function renderChart(
+  jsonText: string,
+  blockId: number | null = null,
+  caption: string | null = null,
+): string {
   let cfg: unknown;
   try {
     cfg = JSON.parse(jsonText);
@@ -164,10 +190,15 @@ function renderChart(jsonText: string, blockId: number | null = null): string {
     )}</div>`;
   }
   const safe = escapeAttr(JSON.stringify(cfg));
-  return `<div class="chart-wrap"${blockIdAttr(blockId)}><canvas class="chart" data-chart="${safe}"></canvas>${blockBadge(blockId)}</div>`;
+  return `<div class="chart-wrap"${blockIdAttr(blockId)}><canvas class="chart" data-chart="${safe}"></canvas>${blockCaption(caption)}${blockBadge(blockId)}</div>`;
 }
 
-function renderSteps(jsonText: string, md: MarkdownIt, blockId: number | null = null): string {
+function renderSteps(
+  jsonText: string,
+  md: MarkdownIt,
+  blockId: number | null = null,
+  caption: string | null = null,
+): string {
   let items: unknown;
   try {
     items = JSON.parse(jsonText);
@@ -206,7 +237,7 @@ function renderSteps(jsonText: string, md: MarkdownIt, blockId: number | null = 
       );
     })
     .join("");
-  return `<div class="steps-grid"${blockIdAttr(blockId)}>${cards}${blockBadge(blockId)}</div>`;
+  return `<div class="steps-grid"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
 }
 
 interface ImageEntry {
@@ -219,7 +250,11 @@ interface ImageEntry {
   height?: number;
 }
 
-function renderImages(jsonText: string, blockId: number | null = null): string {
+function renderImages(
+  jsonText: string,
+  blockId: number | null = null,
+  caption: string | null = null,
+): string {
   let items: unknown;
   try {
     items = JSON.parse(jsonText);
@@ -271,10 +306,14 @@ function renderImages(jsonText: string, blockId: number | null = null): string {
     })
     .join("");
   const layoutClass = arr.length === 1 ? "image-grid solo" : "image-grid";
-  return `<div class="${layoutClass}"${blockIdAttr(blockId)}>${figures}${blockBadge(blockId)}</div>`;
+  return `<div class="${layoutClass}"${blockIdAttr(blockId)}>${figures}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
 }
 
-function renderChartGrid(jsonText: string, blockId: number | null = null): string {
+function renderChartGrid(
+  jsonText: string,
+  blockId: number | null = null,
+  caption: string | null = null,
+): string {
   let items: unknown;
   try {
     items = JSON.parse(jsonText);
@@ -300,7 +339,7 @@ function renderChartGrid(jsonText: string, blockId: number | null = null): strin
       return `<div class="chart-card">${titleHtml}<canvas class="chart" data-chart="${safe}"></canvas></div>`;
     })
     .join("");
-  return `<div class="chart-grid"${blockIdAttr(blockId)}>${cards}${blockBadge(blockId)}</div>`;
+  return `<div class="chart-grid"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
 }
 
 function buildMd(highlighter: Highlighter): MarkdownIt {
@@ -337,27 +376,27 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     const rawInfo = (token.info || "").trim();
-    const { id: blockId, rest } = extractBlockId(rawInfo);
+    const { id: blockId, caption, rest } = extractBlockId(rawInfo);
     const info = rest.split(/\s+/)[0].toLowerCase();
     if (info === "mermaid") {
       // Mermaid wipes its host's innerHTML when rendering, so the badge has
       // to live in a wrapper sibling rather than inside <pre class="mermaid">.
-      return `<div class="rich-block-mermaid"${blockIdAttr(blockId)}><pre class="mermaid">${escapeHtml(token.content)}</pre>${blockBadge(blockId)}</div>\n`;
+      return `<div class="rich-block-mermaid"${blockIdAttr(blockId)}><pre class="mermaid">${escapeHtml(token.content)}</pre>${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
     }
     if (info === "chart") {
-      return renderChart(token.content, blockId) + "\n";
+      return renderChart(token.content, blockId, caption) + "\n";
     }
     if (info === "chart-grid") {
-      return renderChartGrid(token.content, blockId) + "\n";
+      return renderChartGrid(token.content, blockId, caption) + "\n";
     }
     if (info === "stats") {
-      return renderStats(token.content, blockId) + "\n";
+      return renderStats(token.content, blockId, caption) + "\n";
     }
     if (info === "steps") {
-      return renderSteps(token.content, md, blockId) + "\n";
+      return renderSteps(token.content, md, blockId, caption) + "\n";
     }
     if (info === "images") {
-      return renderImages(token.content, blockId) + "\n";
+      return renderImages(token.content, blockId, caption) + "\n";
     }
     if (info === "html-embed") {
       // Raw HTML for flexible content — richer tables, custom layouts,
@@ -370,7 +409,7 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       // drag-resize hook can target the Nth `<img>` in this specific
       // fence and the server can update its inline `style` in source.
       const annotated = annotateHtmlEmbedImages(token.content, blockId);
-      return `<div class="html-embed"${blockIdAttr(blockId)}>\n${annotated}\n${blockBadge(blockId)}</div>\n`;
+      return `<div class="html-embed"${blockIdAttr(blockId)}>\n${annotated}\n${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
     }
     return defaultFence(tokens, idx, options, env, self);
   };
@@ -568,8 +607,13 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
         !inline || inline.type !== "inline" ||
         !pClose || pClose.type !== "paragraph_close"
       ) continue;
-      const m = /^\s*\{@(\d+)\}\s*$/.exec(inline.content);
-      if (!m) continue;
+      // The annotation paragraph may carry an optional caption:
+      //   `{@123}` or `{@123 "caption text"}`.
+      const ann = parseAnnotation(inline.content.trim());
+      if (!ann || ann.start !== 0 || ann.end !== inline.content.trim().length) {
+        // Not a pure annotation paragraph — leave it alone.
+        continue;
+      }
       // Walk back to the matching table_open (handle nesting in case of
       // any future composite table renderers).
       let openIdx = -1;
@@ -580,7 +624,7 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
         else if (t.type === "table_open") {
           depth--;
           if (depth === 0) {
-            t.attrSet("data-block-id", m[1]);
+            t.attrSet("data-block-id", String(ann.id));
             openIdx = j;
             break;
           }
@@ -588,11 +632,11 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       }
       if (openIdx < 0) continue;
 
-      const id = Number(m[1]);
+      const id = ann.id;
       // Replace the 3-token annotation paragraph with a single html_block
-      // that emits the badge + closing wrapper `</div>`.
+      // that emits the optional caption + badge + closing wrapper `</div>`.
       const closeHtml = new state.Token("html_block", "", 0);
-      closeHtml.content = `${blockBadge(id)}</div>\n`;
+      closeHtml.content = `${blockCaption(ann.caption)}${blockBadge(id)}</div>\n`;
       tokens.splice(i + 1, 3, closeHtml);
       // Insert the opening wrapper just before `table_open`. Splicing at
       // an index ≤ i shifts everything past it by +1, so bump our loop
