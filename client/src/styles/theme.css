@@ -1511,8 +1511,15 @@ a:hover { text-decoration: underline; }
 .markdown-body .steps-grid,
 .markdown-body .html-embed,
 .markdown-body .image-grid,
-.markdown-body .rich-block-mermaid {
+.markdown-body .rich-block-mermaid,
+.markdown-body .table-wrap {
   position: relative;
+}
+/* The table wrapper exists only as a positioning context for the
+   `@N` badge — it should not affect the table's layout. */
+.markdown-body .table-wrap {
+  display: block;
+  margin: 0;
 }
 
 .markdown-body .block-badge {
@@ -1545,7 +1552,8 @@ a:hover { text-decoration: underline; }
 .markdown-body .steps-grid:hover .block-badge,
 .markdown-body .html-embed:hover .block-badge,
 .markdown-body .image-grid:hover .block-badge,
-.markdown-body .rich-block-mermaid:hover .block-badge {
+.markdown-body .rich-block-mermaid:hover .block-badge,
+.markdown-body .table-wrap:hover .block-badge {
   opacity: 1;
   pointer-events: auto;
 }

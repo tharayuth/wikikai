@@ -460,8 +460,10 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
   // ─── Table block ids ───
   // Look for `{@N}` sitting on its own paragraph line immediately AFTER
   // a markdown table. Transfer the id to the matching `table_open`
-  // token as `data-block-id="N"` and remove the annotation paragraph
-  // from the token stream so it doesn't render as a stray text line.
+  // token as `data-block-id="N"`, wrap the table in a positioning
+  // container, and emit the same hover-revealed `block-badge` button
+  // that every other rich block has — so users can copy `@N` / jump to
+  // editor from the table corner just like a chart or a stats card.
   md.core.ruler.after("task-checkboxes", "table-block-ids", (state) => {
     const tokens = state.tokens;
     for (let i = 0; i < tokens.length; i++) {
@@ -478,6 +480,7 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       if (!m) continue;
       // Walk back to the matching table_open (handle nesting in case of
       // any future composite table renderers).
+      let openIdx = -1;
       let depth = 1;
       for (let j = i - 1; j >= 0; j--) {
         const t = tokens[j];
@@ -486,11 +489,26 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
           depth--;
           if (depth === 0) {
             t.attrSet("data-block-id", m[1]);
+            openIdx = j;
             break;
           }
         }
       }
-      tokens.splice(i + 1, 3);
+      if (openIdx < 0) continue;
+
+      const id = Number(m[1]);
+      // Replace the 3-token annotation paragraph with a single html_block
+      // that emits the badge + closing wrapper `</div>`.
+      const closeHtml = new state.Token("html_block", "", 0);
+      closeHtml.content = `${blockBadge(id)}</div>\n`;
+      tokens.splice(i + 1, 3, closeHtml);
+      // Insert the opening wrapper just before `table_open`. Splicing at
+      // an index ≤ i shifts everything past it by +1, so bump our loop
+      // cursor accordingly.
+      const openHtml = new state.Token("html_block", "", 0);
+      openHtml.content = `<div class="table-wrap">`;
+      tokens.splice(openIdx, 0, openHtml);
+      i += 1;
     }
     return false;
   });

@@ -227,6 +227,16 @@ describe("renderMarkdown", () => {
     expect(out).not.toContain("{@77}");
   });
 
+  it("wraps the annotated table with a positioning container + block badge", async () => {
+    const out = await renderMarkdown(
+      "| a | b |\n|---|---|\n| 1 | 2 |\n\n{@88}",
+    );
+    // Wrapper opens before the table and closes after, with the badge inside.
+    expect(out).toMatch(
+      /<div class="table-wrap">\s*<table[^>]+data-block-id="88"[\s\S]*?<\/table>\s*<button[^>]+class="block-badge"[^>]+data-block-id="88"[^>]*>@88<\/button>\s*<\/div>/,
+    );
+  });
+
   it("renders a stray {@N} as a normal paragraph when not preceded by a table", async () => {
     const out = await renderMarkdown("Just some text.\n\n{@42}");
     expect(out).toContain("{@42}");
