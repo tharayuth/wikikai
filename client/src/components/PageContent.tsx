@@ -114,7 +114,11 @@ export function PageContent({ pageId, line, block }: Props) {
     pageId,
   );
   useChecklistToggles();
-  useImageResize(bodyRef, viewVersion == null && !editing ? pageId : null);
+  useImageResize(
+    bodyRef,
+    viewVersion == null && !editing ? pageId : null,
+    rendered.data ?? "",
+  );
 
   // Reset to latest + exit edit mode whenever the current page changes.
   useEffect(() => {

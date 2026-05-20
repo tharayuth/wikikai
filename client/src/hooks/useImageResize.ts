@@ -20,6 +20,13 @@ import { useResizeInlineImageMutation } from "../store/api";
 export function useImageResize(
   bodyRef: RefObject<HTMLElement | null>,
   pageId: number | null,
+  /** A value that changes whenever the rendered article HTML changes
+   *  (typically `rendered.data ?? ""`). The hook re-runs on every
+   *  change so brand-new `<img>` elements that appear after a refetch
+   *  also get drag handles. Without this the hook would only run once
+   *  per page-navigation, missing post-resize re-renders and the
+   *  first-load race where the article HTML isn't in the DOM yet. */
+  renderKey: string,
 ): void {
   const [resize] = useResizeInlineImageMutation();
 
@@ -237,5 +244,5 @@ export function useImageResize(
         }
       }
     };
-  }, [bodyRef, pageId, resize]);
+  }, [bodyRef, pageId, resize, renderKey]);
 }
