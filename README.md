@@ -9,7 +9,7 @@
 ```
 ┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
 │                               │  HTTP   │  /mcp        ← MCP tools         │
-│  23 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
+│  25 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
 │  read_page, edit_section,     │         │  /           ← React SPA         │
 │  add_image, toggle_task,      │         │  /mermaid/.. ← fullscreen viewer │
 │  get_prompt_log, search, …    │         │  /chart/..   ← fullscreen viewer │
@@ -31,7 +31,7 @@ Working with an AI day-to-day, every useful answer ends up buried in a chat sess
 - **Doesn't get lost** — every doc lives in one searchable place, browsable in a sidebar
 - **Presentation-ready** — diagrams, charts, KPI cards, step cards, gallery, interactive checkboxes — not just text walls
 - **Re-editable** — every change is a version snapshot. Roll back, diff old vs new, prune history
-- **Addressable** — every rich block has a global `@N` id, so you can say "update @47" and the AI knows exactly what you mean
+- **Addressable** — every rich block **plus every plain markdown table** has a global `@N` id. Say "update @47" / "row 3 of @58" and the AI uses `get_block` / `get_table_row` / `find_table_rows` to act surgically without reading the whole page
 - **Auditable** — opt-in prompt log records the verbatim request that produced each revision
 
 ## Features
@@ -46,8 +46,9 @@ Working with an AI day-to-day, every useful answer ends up buried in a chat sess
 | ` ```stats ` | Inline KPI card row with semantic colors |
 | ` ```steps ` | Numbered step cards (markdown inline allowed inside `body`) |
 | ` ```images ` | Thumbnail gallery → click-to-lightbox + per-image size |
-| Plain `- [ ]` lists | **Interactive checkboxes** — write a GFM task list anywhere a markdown list goes; clicking a box writes back to the source (version-bumped + revision-snapshotted). The preferred form. |
-| ` ```html-embed ` | Raw HTML for layouts markdown can't express — tables, SVG, `<details>`, custom CSS |
+| Plain `- [ ]` lists + cells | **Interactive checkboxes** — write a GFM task `- [ ] item` in any list, or drop `[ ]` / `[x]` directly into a markdown table cell; clicking writes back to source (version-bumped + revision-snapshotted) |
+| Markdown tables | Get an `@N` id automatically; the AI can `get_table_row({ block_id, row_index })` or `find_table_rows({ block_id, filter })` to read one row without re-fetching the page |
+| ` ```html-embed ` | Raw HTML for layouts markdown can't express — gradient cards, SVG, `<details>`, custom CSS. Embedded `<input type="checkbox">` is also clickable and write-backed |
 
 Plus standard markdown with Shiki syntax highlighting for 30+ languages.
 
@@ -82,7 +83,7 @@ Knowledge (&N)  ──┬── Page (#N) ──┬── Markdown content
 
 URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, near line 42.
 
-### MCP tool surface (23 tools)
+### MCP tool surface (25 tools)
 
 **Knowledge** — `add_knowledge` · `edit_knowledge` · `list_knowledge` · `get_knowledge` · `delete_knowledge` · `get_outline`
 
@@ -90,7 +91,7 @@ URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, ne
 
 **Surgical edits** — `read_page` (with hash) · `edit_lines` · `edit_section` (heading-anchored, preferred) · `replace_text`
 
-**Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `get_example` (templates with `outline_only` + slice modes)
+**Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `get_example` (templates with `outline_only` + slice modes) · `get_table_row` (one row of a table by `@N` + index) · `find_table_rows` (header-aware filter across a table without reading the whole page)
 
 **Images** — `add_image` (base64 in, content-addressed) · `get_image` (returns inline image content block)
 
@@ -137,7 +138,7 @@ Open <http://localhost:5173> for the dev UI (HMR + proxied API), or <http://loca
 }
 ```
 
-Restart Claude Code; all 23 tools appear automatically. Try:
+Restart Claude Code; all 25 tools appear automatically. Try:
 
 > Save what we just discussed as a knowledge titled "Postgres timeout fix", project "infra-notes".
 
@@ -210,7 +211,7 @@ src/
     images.ts         content-addressed image storage
     promptLog.ts      rolling per-knowledge prompt log (capped at 500 chars)
   mcp/
-    server.ts         registers all 23 tools on the MCP SDK
+    server.ts         registers all 25 tools on the MCP SDK
     handlers.ts       Zod schemas + tool implementations (single source of truth)
     examples/         markdown reference content served via get_example
   web/
