@@ -113,7 +113,7 @@ const editLinesShape = {
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1),
   line_end: z.number().int().min(1),
-  new_text: z.string().describe("Lines replacing [line_start..line_end]. Empty string deletes the range."),
+  new_text: z.string().describe("Lines replacing [line_start..line_end]. Empty string deletes the range. **Block-id preservation**: every `{@N}` annotation present in the replaced region is auto-carried into the first eligible slot in `new_text` (fence info / table-trailing line) when missing — so converting a block from one type to another (e.g. markdown table → html-embed) keeps the same `@N`. To opt out, include a different `{@N}` explicitly."),
   expected_hash: z
     .string()
     .optional()
@@ -126,7 +126,7 @@ const editLinesShape = {
 const editSectionShape = {
   page_id: z.number().int().positive(),
   heading: z.string().min(1).describe('Exact heading line, e.g. "## 3. Performance" — section ends at next equal-or-higher heading'),
-  new_content: z.string().describe("Body to put under the heading. The heading line itself is kept automatically — if you accidentally include it as the first line of new_content the server silently strips it (along with one optional blank line after) to avoid duplication."),
+  new_content: z.string().describe("Body to put under the heading. The heading line itself is kept automatically — if you accidentally include it as the first line of new_content the server silently strips it (along with one optional blank line after) to avoid duplication. **Block-id preservation**: every `{@N}` from the replaced section is auto-carried into the first eligible slot in `new_content` (fence info / table-trailing line), so converting a block from one type to another keeps the same `@N`."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
 

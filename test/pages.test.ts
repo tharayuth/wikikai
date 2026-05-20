@@ -229,6 +229,98 @@ describe("PageStore", () => {
       expect(got).toContain("## X\nbody");
     });
 
+    it("preserves the block @N when converting a table to an html-embed via edit_section", () => {
+      const content = [
+        "## chart",
+        "",
+        "| a | b |",
+        "|---|---|",
+        "| 1 | 2 |",
+        "",
+        "after",
+      ].join("\n");
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const oldId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      // AI converts the table to an html-embed WITHOUT carrying the {@N}
+      pages.editSection(
+        id,
+        "## chart",
+        "```html-embed\n<table><tr><td>a</td><td>b</td></tr></table>\n```",
+      );
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      // Same id stamped into the new fence's info string — not a new one
+      expect(raw1).toMatch(new RegExp(`\`\`\`html-embed.*\\{@${oldId}\\}`));
+      // No additional ids introduced
+      expect((raw1.match(/\{@\d+\}/g) ?? []).length).toBe(1);
+    });
+
+    it("preserves the block @N when converting an html-embed to a table via edit_lines", () => {
+      const initial = [
+        "before",
+        "",
+        "```html-embed",
+        "<div>hi</div>",
+        "```",
+        "",
+        "after",
+      ].join("\n");
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content: initial });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const oldId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      // Find the fence's actual line range (injectBlockIds may insert nothing
+      // beyond editing the fence-open line in place, so 3..5 stays right).
+      const lines0 = raw0.split("\n");
+      const fenceOpen = lines0.findIndex((l) => /^```html-embed/.test(l));
+      const fenceClose = lines0.findIndex(
+        (l, i) => i > fenceOpen && /^```\s*$/.test(l),
+      );
+      pages.editLines(
+        id,
+        fenceOpen + 1,
+        fenceClose + 1,
+        "| a | b |\n|---|---|\n| 1 | 2 |",
+      );
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      // The table now carries the same id as a trailing line
+      expect(raw1).toMatch(new RegExp(`\\| 1 \\| 2 \\|\\n\\n\\{@${oldId}\\}`));
+      expect((raw1.match(/\{@\d+\}/g) ?? []).length).toBe(1);
+    });
+
+    it("leaves the new content alone when the caller already supplied {@N}", () => {
+      const content = "## s\n\n```stats\n[{\"num\":\"1\",\"label\":\"x\"}]\n```";
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content });
+      const raw0 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const oldId = Number(/\{@(\d+)\}/.exec(raw0)![1]);
+      // AI explicitly carries the id forward into the new content
+      pages.editSection(
+        id,
+        "## s",
+        `\`\`\`mermaid {@${oldId}}\nflowchart TD\n  A --> B\n\`\`\``,
+      );
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw1).toContain(`\`\`\`mermaid {@${oldId}}`);
+      expect((raw1.match(/\{@\d+\}/g) ?? []).length).toBe(1);
+    });
+
     it("does NOT strip a deeper heading at the top of new_content", () => {
       const content = ["## Outer", "old"].join("\n");
       const { id } = pages.add({ knowledge_id: kid, title: "T", content });

@@ -383,6 +383,11 @@ function McpGuideEn() {
         <li><code>get_block({"{ id }"})</code> — full source/inner. Use sparingly for tables &gt; ~100 rows</li>
       </ul>
 
+      <h4>Converting a block to a different type — keep the <code>@N</code></h4>
+      <p>
+        When AI converts <code>@123</code> from a markdown table to an <code>html-embed</code> (or stats → mermaid, etc.), the id should stay so existing <code>@123</code> references keep working. Best practice: include the annotation in the new source — fence: <code>{"```html-embed {@123}"}</code>; table: trailing <code>{"{@123}"}</code> line. <strong>If the new source omits it</strong>, <code>edit_lines</code> and <code>edit_section</code> auto-preserve every <code>{"{@N}"}</code> from the replaced region by injecting it into the first eligible slot in the new content (fence info / table-trailing line), in source order. Single-block conversions always keep the id; N:1 merges keep the first id, lose the rest.
+      </p>
+
       <h3>Important fields</h3>
       <ul>
         <li><strong>session_id</strong> — Claude Code chat session UUID (works with <code>claude --resume &lt;id&gt;</code>). Available from a <code>UserPromptSubmit</code> hook's stdin JSON</li>
@@ -537,6 +542,11 @@ function McpGuideTh() {
         <li><code>find_table_rows({"{ block_id, q?, where?, columns?, limit? }"})</code> — ค้นในตาราง (substring หรือ exact column match) ไม่ดูดทั้ง body</li>
         <li><code>get_block({"{ id }"})</code> — source/inner เต็ม. ระวังตารางใหญ่ ๆ (&gt; ~100 แถว)</li>
       </ul>
+
+      <h4>เปลี่ยนชนิด block — เก็บ <code>@N</code> เดิมไว้</h4>
+      <p>
+        เวลา AI แปลง <code>@123</code> จากตาราง markdown เป็น <code>html-embed</code> (หรือ stats → mermaid ฯลฯ) <strong>id ต้องคงเดิม</strong> เพื่อ reference เก่าใช้งานได้. วิธีที่ดีที่สุด: ใส่ annotation ใน source ใหม่ — fence: <code>{"```html-embed {@123}"}</code>; ตาราง: บรรทัด <code>{"{@123}"}</code> ใต้ตาราง. <strong>ถ้าลืม ไม่เป็นไร</strong> — <code>edit_lines</code> + <code>edit_section</code> auto-preserve ทุก <code>{"{@N}"}</code> ที่อยู่ใน region ที่กำลังถูกแทน, ฉีดใส่ slot แรกที่เหมาะใน content ใหม่ (fence info / บรรทัดท้ายตาราง) ตามลำดับ source. แปลง 1 block ก็คง id ได้เสมอ; N:1 merge เก็บ id ตัวแรก, ที่เหลือเสีย.
+      </p>
 
       <h3>Fields สำคัญ</h3>
       <ul>

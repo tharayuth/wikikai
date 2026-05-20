@@ -550,6 +550,103 @@ export class PageStore {
     return lines.join("\n");
   }
 
+  /**
+   * Preserve `{@N}` annotations when an edit replaces a region that had
+   * block ids. When AI converts a block from one type to another (e.g.
+   * markdown table → html-embed, stats card → mermaid) it often forgets
+   * to keep the `{@N}` annotation in the new source — without this guard
+   * the server would allocate a fresh id and silently break every
+   * `@N` reference the user had to the old block.
+   *
+   * Strategy: extract every `{@N}` from `oldRegion`; any id NOT already
+   * present in `newRegion` is injected into the first eligible "id slot"
+   * in `newRegion` (a fence-open line, or a markdown table) that doesn't
+   * already carry an annotation. Missing ids are consumed in source
+   * order, so an N-block region maps to an N-block replacement 1:1. If
+   * `newRegion` has fewer eligible slots than missing ids (N:1 merge) or
+   * none at all (replaced with prose), the extras are dropped — no
+   * better answer in that case.
+   *
+   * Safe to call on any region; returns `newRegion` unchanged when there
+   * are no ids to preserve or the new region already covers them.
+   */
+  private preserveBlockIds(oldRegion: string, newRegion: string): string {
+    const oldIds = new Set<number>();
+    for (const m of oldRegion.matchAll(/\{@(\d+)\}/g)) {
+      oldIds.add(Number(m[1]));
+    }
+    if (oldIds.size === 0) return newRegion;
+    const newIds = new Set<number>();
+    for (const m of newRegion.matchAll(/\{@(\d+)\}/g)) {
+      newIds.add(Number(m[1]));
+    }
+    const missing: number[] = [];
+    for (const id of oldIds) {
+      if (!newIds.has(id)) missing.push(id);
+    }
+    if (missing.length === 0) return newRegion;
+
+    const TABLE_ROW = /^\s*\|.*\|\s*$/;
+    const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;
+    const lines = newRegion.split("\n");
+    let inFence = false;
+    let fenceMarker = "";
+    let i = 0;
+    while (i < lines.length && missing.length > 0) {
+      const line = lines[i];
+      if (!inFence) {
+        // Fence-open with room for an id annotation in the info string.
+        const open = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)(.*)$/.exec(line);
+        if (open) {
+          const [, indent, marker, lang, rest] = open;
+          inFence = true;
+          fenceMarker = marker;
+          if (!/\{@\d+\}/.test(rest)) {
+            const id = missing.shift()!;
+            lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} {@${id}}`;
+          }
+          i++;
+          continue;
+        }
+        // Markdown table — header + separator + 0+ rows, with `{@N}`
+        // sitting on its own line (preceded by a blank line) right after.
+        if (
+          TABLE_ROW.test(line) &&
+          i + 1 < lines.length &&
+          TABLE_SEP.test(lines[i + 1])
+        ) {
+          let end = i + 1;
+          for (let j = i + 2; j < lines.length; j++) {
+            if (TABLE_ROW.test(lines[j])) end = j;
+            else break;
+          }
+          const peek1 = lines[end + 1] ?? "";
+          const peek2 = lines[end + 2] ?? "";
+          const alreadyAnnotated =
+            /^\s*\{@\d+\}\s*$/.test(peek1) ||
+            (peek1.trim() === "" && /^\s*\{@\d+\}\s*$/.test(peek2));
+          if (!alreadyAnnotated) {
+            const id = missing.shift()!;
+            lines.splice(end + 1, 0, "", `{@${id}}`);
+            i = end + 3;
+          } else {
+            i = peek1.trim() === "" ? end + 3 : end + 2;
+          }
+          continue;
+        }
+        i++;
+      } else {
+        const close = new RegExp(`^\\s*${fenceMarker}+\\s*$`);
+        if (close.test(line)) {
+          inFence = false;
+          fenceMarker = "";
+        }
+        i++;
+      }
+    }
+    return lines.join("\n");
+  }
+
   /** Backfill block IDs into every page's content on startup. Skips pages
    *  whose content already has a `{@N}` somewhere (cheap check — we don't
    *  re-scan to find partially-annotated pages; injectBlockIds is run on
@@ -1140,7 +1237,11 @@ export class PageStore {
           `Re-read the range before editing.`,
       );
     }
-    const newLines = newText.split("\n");
+    // Preserve any `{@N}` annotations from the replaced region so AI
+    // can convert a block from one type to another (e.g. markdown table
+    // ↔ html-embed) without the id silently regenerating.
+    const newTextWithIds = this.preserveBlockIds(oldSlice, newText);
+    const newLines = newTextWithIds.split("\n");
     const draft = [
       ...lines.slice(0, lineStart - 1),
       ...newLines,
@@ -1211,7 +1312,11 @@ export class PageStore {
       }
     }
     const body = bodyLines.join("\n").replace(/^\n+|\n+$/g, "");
-    const newSlice = (heading.trim() + (body ? "\n" + body : "")).split("\n");
+    // Preserve any `{@N}` annotations carried by the section being
+    // replaced — covers the common "convert block type" workflow.
+    const oldSection = lines.slice(startIdx, endIdx).join("\n");
+    const preservedBody = this.preserveBlockIds(oldSection, body);
+    const newSlice = (heading.trim() + (preservedBody ? "\n" + preservedBody : "")).split("\n");
     const draft = [
       ...lines.slice(0, startIdx),
       ...newSlice,

@@ -184,7 +184,11 @@ export const EditLinesSchema = z.object({
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1),
   line_end: z.number().int().min(1),
-  new_text: z.string(),
+  new_text: z
+    .string()
+    .describe(
+      "Lines replacing [line_start..line_end]. Block-id preservation: every `{@N}` from the replaced region is auto-carried into the first eligible slot (fence info / table-trailing line) in `new_text` when missing — so converting a block from one type to another (markdown table → html-embed, stats → mermaid, etc.) keeps the same `@N` even if you don't write the annotation yourself.",
+    ),
   expected_hash: z.string().optional().describe("Hash of the line range from read_page — gate against stale edits"),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
@@ -195,7 +199,7 @@ export const EditSectionSchema = z.object({
   new_content: z
     .string()
     .describe(
-      "Body to put under the heading. The heading itself is preserved automatically; if you accidentally include it as the first line of new_content, the server strips it (and one optional blank line after) so the heading isn't emitted twice.",
+      "Body to put under the heading. The heading itself is preserved automatically; if you accidentally include it as the first line of new_content, the server strips it (and one optional blank line after) so the heading isn't emitted twice. Block-id preservation: every `{@N}` from the replaced section is auto-carried into the first eligible slot in `new_content` (fence info / table-trailing line), so block-type conversions keep their `@N`.",
     ),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
