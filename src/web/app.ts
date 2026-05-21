@@ -64,6 +64,7 @@ export function buildApp(opts: BuildAppOptions): Express {
   const authOpts = {
     users: opts.users,
     sessions: opts.sessions,
+    permissions: opts.permissions,
     enabled: !!opts.webAuth,
   };
 

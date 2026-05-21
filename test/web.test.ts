@@ -167,6 +167,126 @@ describe("HTTP routes", () => {
       expect(res.body.user).toBeNull();
     });
 
+    it("admin permissions CRUD", async () => {
+      const db = openDb(":memory:");
+      const knowledge = new KnowledgeStore(db);
+      const pages = new PageStore(db, tmpDir);
+      const images = new ImageStore(db, path.join(tmpDir, "pp-images"));
+      const promptLog = new PromptLogStore(db);
+      const activityLog = new ActivityLogStore(db);
+      const users = new UserStore(db);
+      const sessions = new SessionStore(db, users);
+      const permissions = new PermissionStore(db);
+      users.create({
+        email: "admin",
+        password: "12345",
+        display_name: "Admin",
+        is_admin: true,
+      });
+      const handlers = buildToolHandlers(
+        knowledge,
+        pages,
+        images,
+        promptLog,
+        activityLog,
+        { publicBaseUrl: "http://test" },
+        permissions,
+      );
+      const adminApp = buildApp({
+        knowledge,
+        pages,
+        images,
+        promptLog,
+        activityLog,
+        users,
+        sessions,
+        permissions,
+        handlers,
+        publicBaseUrl: "http://test",
+        webAuth: true,
+      });
+
+      // Log in as admin
+      let res = await request(adminApp)
+        .post("/api/auth/login")
+        .send({ email: "admin", password: "12345" });
+      const cookie = res.headers["set-cookie"][0];
+
+      // Create alice
+      res = await request(adminApp)
+        .post("/api/admin/users")
+        .set("Cookie", cookie)
+        .send({ email: "alice", password: "pw", display_name: "Alice" });
+      const aliceId = res.body.user.id;
+
+      // Register two projects
+      await request(adminApp)
+        .post("/api/projects").set("Cookie", cookie).send({ name: "examples" });
+      await request(adminApp)
+        .post("/api/projects").set("Cookie", cookie).send({ name: "secret" });
+
+      // GET → empty
+      res = await request(adminApp)
+        .get(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.permissions).toEqual([]);
+
+      // PUT replaces
+      res = await request(adminApp)
+        .put(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie)
+        .send({
+          permissions: [
+            { project: "examples", level: "view" },
+            { project: "secret",   level: "edit" },
+          ],
+        });
+      expect(res.status).toBe(200);
+
+      res = await request(adminApp)
+        .get(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie);
+      expect(res.body.permissions).toEqual([
+        { project: "examples", level: "view" },
+        { project: "secret",   level: "edit" },
+      ]);
+
+      // PUT with smaller list revokes the missing one
+      await request(adminApp)
+        .put(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie)
+        .send({ permissions: [{ project: "examples", level: "edit" }] });
+      res = await request(adminApp)
+        .get(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie);
+      expect(res.body.permissions).toEqual([{ project: "examples", level: "edit" }]);
+
+      // Non-admin (alice) cannot touch the endpoint
+      res = await request(adminApp)
+        .post("/api/auth/login")
+        .send({ email: "alice", password: "pw" });
+      const aliceCookie = res.headers["set-cookie"][0];
+      res = await request(adminApp)
+        .get(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", aliceCookie);
+      expect(res.status).toBe(403);
+
+      // Invalid level → 400
+      res = await request(adminApp)
+        .put(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie)
+        .send({ permissions: [{ project: "examples", level: "bogus" }] });
+      expect(res.status).toBe(400);
+
+      // Unknown project → 400 (FK violation)
+      res = await request(adminApp)
+        .put(`/api/admin/users/${aliceId}/permissions`)
+        .set("Cookie", cookie)
+        .send({ permissions: [{ project: "nope", level: "view" }] });
+      expect(res.status).toBe(400);
+    });
+
     it("login → me → logout flow", async () => {
       // Set up a user
       const db = openDb(":memory:");

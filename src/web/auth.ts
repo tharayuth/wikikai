@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { UserStore, SessionStore, User } from "../store/users.js";
+import type { PermissionStore } from "../store/permissions.js";
 import { withCallContext } from "../lib/callContext.js";
 
 const SESSION_COOKIE = "wikikai_session";
@@ -15,6 +16,7 @@ declare module "express-serve-static-core" {
 export interface AuthOptions {
   users: UserStore;
   sessions: SessionStore;
+  permissions: PermissionStore;
   /** When true, every web route below is auth-gated. Otherwise the
    *  auth endpoints still work (so a user can log in voluntarily) but
    *  nothing is blocked. */
@@ -279,6 +281,53 @@ export function attachAuthRoutes(app: Express, opts: AuthOptions): void {
       const token = opts.users.regenerateMcpToken(id);
       res.json({ mcp_token: token });
     } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  app.get("/api/admin/users/:id/permissions", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    res.json({ permissions: opts.permissions.listForUser(id) });
+  });
+
+  app.put("/api/admin/users/:id/permissions", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    const body = req.body as { permissions?: unknown };
+    if (!Array.isArray(body.permissions)) {
+      res.status(400).json({ error: "permissions[] required" });
+      return;
+    }
+    const cleaned: Array<{ project: string; level: "view" | "edit" }> = [];
+    for (const raw of body.permissions) {
+      if (
+        !raw || typeof raw !== "object" ||
+        typeof (raw as { project?: unknown }).project !== "string" ||
+        ((raw as { level?: unknown }).level !== "view" &&
+         (raw as { level?: unknown }).level !== "edit")
+      ) {
+        res.status(400).json({ error: "invalid permission entry" });
+        return;
+      }
+      cleaned.push({
+        project: (raw as { project: string }).project,
+        level:   (raw as { level: "view" | "edit" }).level,
+      });
+    }
+    try {
+      opts.permissions.replaceForUser(id, cleaned, req.user!.id);
+      res.json({ ok: true });
+    } catch (e) {
+      // Most likely an FK violation (unknown project) — surface as 400
       res.status(400).json({ error: (e as Error).message });
     }
   });
