@@ -174,3 +174,17 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
   keywords,
   tokenize='trigram'
 );
+
+-- ───── Project permissions: per-(user, project) view/edit grants ─────
+-- Missing row = no access (deny by default). Admins bypass this table
+-- entirely via the `users.is_admin` flag — they don't need rows.
+CREATE TABLE IF NOT EXISTS project_permissions (
+  user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+  project_name TEXT    NOT NULL REFERENCES projects(name) ON DELETE CASCADE
+                                                           ON UPDATE CASCADE,
+  level        TEXT    NOT NULL CHECK (level IN ('view','edit')),
+  granted_at   TEXT    NOT NULL,
+  granted_by   INTEGER          REFERENCES users(id)      ON DELETE SET NULL,
+  PRIMARY KEY (user_id, project_name)
+);
+CREATE INDEX IF NOT EXISTS idx_pp_user ON project_permissions(user_id);
