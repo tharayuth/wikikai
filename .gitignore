@@ -25,3 +25,7 @@ data/
 # Per-user Claude Code settings (project-level shared settings.json may be committed)
 .claude/settings.local.json
 .claude/worktrees/
+
+# Codex's auto-generated project context file — equivalent to CLAUDE.md
+# but mirrored per-tool; kept on disk for Codex sessions, not tracked.
+AGENTS.md
