@@ -491,6 +491,179 @@ describe("HTTP routes", () => {
       res = await request(authApp).delete(`/api/knowledge/${k.id}`).set("Cookie", aliceCookie);
       expect(res.status).toBe(200);
     });
+
+    it("/api/projects returns only visible projects for non-admin", async () => {
+      const db = openDb(":memory:");
+      const knowledge = new KnowledgeStore(db);
+      const pages = new PageStore(db, tmpDir);
+      const images = new ImageStore(db, path.join(tmpDir, "p1-images"));
+      const promptLog = new PromptLogStore(db);
+      const activityLog = new ActivityLogStore(db);
+      const users = new UserStore(db);
+      const sessions = new SessionStore(db, users);
+      const permissions = new PermissionStore(db);
+      users.create({
+        email: "admin", password: "12345", display_name: "Admin", is_admin: true,
+      });
+      const handlers = buildToolHandlers(
+        knowledge, pages, images, promptLog, activityLog,
+        { publicBaseUrl: "http://test" },
+        permissions,
+      );
+      const authApp = buildApp({
+        knowledge, pages, images, promptLog, activityLog,
+        users, sessions, permissions, handlers,
+        publicBaseUrl: "http://test", webAuth: true,
+      });
+
+      // Admin login
+      let res = await request(authApp).post("/api/auth/login")
+        .send({ email: "admin", password: "12345" });
+      const cookie = res.headers["set-cookie"][0];
+
+      // Register two projects
+      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
+
+      // Create alice and grant view on alpha only
+      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+        .send({ email: "alice", password: "pw", display_name: "Alice" });
+      const aliceId = res.body.user.id;
+      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+        .send({ permissions: [{ project: "alpha", level: "view" }] });
+
+      // Admin sees both
+      res = await request(authApp).get("/api/projects").set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.projects.map((p: { name: string }) => p.name).sort())
+        .toEqual(["alpha", "beta"]);
+
+      // Alice login
+      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      const aliceCookie = res.headers["set-cookie"][0];
+
+      // Alice sees only alpha
+      res = await request(authApp).get("/api/projects").set("Cookie", aliceCookie);
+      expect(res.status).toBe(200);
+      expect(res.body.projects.map((p: { name: string }) => p.name)).toEqual(["alpha"]);
+    });
+
+    it("/api/projects POST/DELETE is admin-only", async () => {
+      const db = openDb(":memory:");
+      const knowledge = new KnowledgeStore(db);
+      const pages = new PageStore(db, tmpDir);
+      const images = new ImageStore(db, path.join(tmpDir, "p2-images"));
+      const promptLog = new PromptLogStore(db);
+      const activityLog = new ActivityLogStore(db);
+      const users = new UserStore(db);
+      const sessions = new SessionStore(db, users);
+      const permissions = new PermissionStore(db);
+      users.create({
+        email: "admin", password: "12345", display_name: "Admin", is_admin: true,
+      });
+      const handlers = buildToolHandlers(
+        knowledge, pages, images, promptLog, activityLog,
+        { publicBaseUrl: "http://test" },
+        permissions,
+      );
+      const authApp = buildApp({
+        knowledge, pages, images, promptLog, activityLog,
+        users, sessions, permissions, handlers,
+        publicBaseUrl: "http://test", webAuth: true,
+      });
+
+      // Admin login + register alpha
+      let res = await request(authApp).post("/api/auth/login")
+        .send({ email: "admin", password: "12345" });
+      const cookie = res.headers["set-cookie"][0];
+      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+
+      // Create alice + grant view on alpha
+      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+        .send({ email: "alice", password: "pw", display_name: "Alice" });
+      const aliceId = res.body.user.id;
+      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+        .send({ permissions: [{ project: "alpha", level: "view" }] });
+
+      // Alice login
+      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      const aliceCookie = res.headers["set-cookie"][0];
+
+      // Alice POST /api/projects → 403
+      res = await request(authApp).post("/api/projects").set("Cookie", aliceCookie).send({ name: "x" });
+      expect(res.status).toBe(403);
+
+      // Alice DELETE /api/projects/alpha → 403
+      res = await request(authApp).delete("/api/projects/alpha").set("Cookie", aliceCookie);
+      expect(res.status).toBe(403);
+    });
+
+    it("/api/activity-log filters by visible projects", async () => {
+      const db = openDb(":memory:");
+      const knowledge = new KnowledgeStore(db);
+      const pages = new PageStore(db, tmpDir);
+      const images = new ImageStore(db, path.join(tmpDir, "p3-images"));
+      const promptLog = new PromptLogStore(db);
+      const activityLog = new ActivityLogStore(db);
+      const users = new UserStore(db);
+      const sessions = new SessionStore(db, users);
+      const permissions = new PermissionStore(db);
+      users.create({
+        email: "admin", password: "12345", display_name: "Admin", is_admin: true,
+      });
+      const handlers = buildToolHandlers(
+        knowledge, pages, images, promptLog, activityLog,
+        { publicBaseUrl: "http://test" },
+        permissions,
+      );
+      const authApp = buildApp({
+        knowledge, pages, images, promptLog, activityLog,
+        users, sessions, permissions, handlers,
+        publicBaseUrl: "http://test", webAuth: true,
+      });
+
+      // Admin login
+      let res = await request(authApp).post("/api/auth/login")
+        .send({ email: "admin", password: "12345" });
+      const cookie = res.headers["set-cookie"][0];
+
+      // Register projects
+      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
+
+      // Knowledge + page in each project
+      const kA = knowledge.add({ title: "A", project: "alpha" });
+      const kB = knowledge.add({ title: "B", project: "beta" });
+      const pA = pages.add({ knowledge_id: kA.id, title: "PA", content: "x" });
+      const pB = pages.add({ knowledge_id: kB.id, title: "PB", content: "y" });
+
+      // Make an edit through the API in each so activity_log rows are written
+      res = await request(authApp).patch(`/api/pages/${pA.id}`).set("Cookie", cookie)
+        .send({ content: "x2" });
+      expect(res.status).toBe(200);
+      res = await request(authApp).patch(`/api/pages/${pB.id}`).set("Cookie", cookie)
+        .send({ content: "y2" });
+      expect(res.status).toBe(200);
+
+      // Create alice + grant view on alpha only
+      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+        .send({ email: "alice", password: "pw", display_name: "Alice" });
+      const aliceId = res.body.user.id;
+      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+        .send({ permissions: [{ project: "alpha", level: "view" }] });
+
+      // Alice login
+      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      const aliceCookie = res.headers["set-cookie"][0];
+
+      // Alice /api/activity → no rows with knowledge_id === kB.id
+      res = await request(authApp).get("/api/activity").set("Cookie", aliceCookie);
+      expect(res.status).toBe(200);
+      const entries = res.body.entries as { knowledge_id: number | null }[];
+      expect(entries.some((e) => e.knowledge_id === kB.id)).toBe(false);
+      // Should still see kA rows
+      expect(entries.some((e) => e.knowledge_id === kA.id)).toBe(true);
+    });
   });
 
   it("GET / responds (built dist OR backend-only placeholder)", async () => {

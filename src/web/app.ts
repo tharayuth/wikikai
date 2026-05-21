@@ -322,9 +322,19 @@ export function buildApp(opts: BuildAppOptions): Express {
   });
 
   // ─── Projects: registry + derived names ───
-  app.get("/api/projects", (_req, res, next) => {
+  app.get("/api/projects", (req, res, next) => {
     try {
-      res.json({ projects: opts.knowledge.listProjects() });
+      const all = opts.knowledge.listProjects();
+      if (!req.user || !aclEnabled || req.user.is_admin) {
+        res.json({ projects: all });
+        return;
+      }
+      const visible = new Set(
+        opts.permissions.listVisibleProjects(req.user.id, false),
+      );
+      res.json({
+        projects: all.filter((p: { name: string }) => visible.has(p.name)),
+      });
     } catch (e) {
       next(e);
     }
@@ -390,7 +400,16 @@ export function buildApp(opts: BuildAppOptions): Express {
       const offset = optionalInt(req.query.offset);
       const kidRaw = optional(req.query.knowledge_id);
       const knowledge_id = kidRaw ? Number(kidRaw) : undefined;
-      const r = opts.activityLog.list({ limit, offset, knowledge_id });
+      const visibleProjects =
+        !req.user || !aclEnabled || req.user.is_admin
+          ? null
+          : opts.permissions.listVisibleProjects(req.user.id, false);
+      const r = opts.activityLog.list({
+        limit,
+        offset,
+        knowledge_id,
+        visibleProjects,
+      });
       res.json(r);
     } catch (e) {
       next(e);

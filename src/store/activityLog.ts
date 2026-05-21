@@ -97,16 +97,46 @@ export class ActivityLogStore {
   }
 
   /** List entries newest-first. Optional `knowledge_id` narrows to a
-   *  single knowledge; `limit` defaults to 100 (max 500). */
+   *  single knowledge; `limit` defaults to 100 (max 500). When
+   *  `visibleProjects` is an array, only rows whose `knowledge_id`
+   *  resolves to one of those projects are returned — rows with a
+   *  NULL `knowledge_id` (e.g. image uploads) are excluded too. Passing
+   *  `null` or `undefined` disables the visibility filter (admin view). */
   list(opts: {
     limit?: number;
     offset?: number;
     knowledge_id?: number;
+    visibleProjects?: string[] | null;
   } = {}): { entries: ActivityEntry[]; total: number } {
     const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
     const offset = Math.max(opts.offset ?? 0, 0);
-    const wherePart =
-      opts.knowledge_id != null ? "WHERE knowledge_id = @kid" : "";
+
+    // Build the WHERE clause as an array of conditions + positional params.
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (opts.knowledge_id != null) {
+      conditions.push("a.knowledge_id = ?");
+      params.push(opts.knowledge_id);
+    }
+
+    const visFilter = opts.visibleProjects;
+    if (Array.isArray(visFilter)) {
+      if (visFilter.length === 0) {
+        // No visible projects → no rows at all.
+        return { entries: [], total: 0 };
+      }
+      const placeholders = visFilter.map(() => "?").join(",");
+      conditions.push(
+        `a.knowledge_id IS NOT NULL AND a.knowledge_id IN (SELECT id FROM knowledge WHERE project IN (${placeholders}))`,
+      );
+      params.push(...visFilter);
+    }
+
+    const wherePart = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
     const rows = this.db
       .prepare(
         `SELECT a.id, a.created_at, a.source, a.tool_name, a.action, a.target,
@@ -115,18 +145,14 @@ export class ActivityLogStore {
                 u.display_name AS user_name
          FROM activity_log a
          LEFT JOIN users u ON u.id = a.user_id
-         ${wherePart.replace("knowledge_id =", "a.knowledge_id =")}
+         ${wherePart}
          ORDER BY a.id DESC
-         LIMIT @limit OFFSET @offset`,
+         LIMIT ? OFFSET ?`,
       )
-      .all({
-        kid: opts.knowledge_id,
-        limit,
-        offset,
-      }) as ActivityEntry[];
+      .all(...params, limit, offset) as ActivityEntry[];
     const totalRow = this.db
-      .prepare(`SELECT COUNT(*) AS n FROM activity_log ${wherePart}`)
-      .get({ kid: opts.knowledge_id }) as { n: number };
+      .prepare(`SELECT COUNT(*) AS n FROM activity_log a ${wherePart}`)
+      .get(...params) as { n: number };
     return { entries: rows, total: totalRow.n };
   }
 }
