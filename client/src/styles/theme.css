@@ -1576,12 +1576,18 @@ a:hover { text-decoration: underline; }
 .markdown-body h2:hover .header-anchor,
 .markdown-body h3:hover .header-anchor { opacity: 1; }
 
+/* Shiki multi-theme output: one <pre> carries both light + dark colors via
+ * inline style + CSS variables (--shiki-dark, --shiki-dark-bg). In dark
+ * mode we swap to the dark vars; the pre/span colours are tagged with
+ * !important because Shiki's inline style would otherwise win. */
 [data-theme="dark"] .markdown-body pre.shiki,
-[data-theme="dark"] .markdown-body pre.shiki span { background: var(--surface-2) !important; }
-[data-theme="dark"] .markdown-body pre.shiki .line { color: inherit; }
-[data-theme="dark"] .shiki.github-light { display: none; }
-[data-theme="light"] .shiki.github-dark,
-:root:not([data-theme="dark"]) .shiki.github-dark { display: none; }
+[data-theme="dark"] .markdown-body pre.shiki span {
+  background-color: var(--shiki-dark-bg, var(--surface-2)) !important;
+  color: var(--shiki-dark, inherit) !important;
+  font-weight: var(--shiki-dark-font-weight, inherit) !important;
+  font-style:  var(--shiki-dark-font-style,  inherit) !important;
+  text-decoration: var(--shiki-dark-text-decoration, inherit) !important;
+}
 
 /* Stats bar */
 .stats-bar {
