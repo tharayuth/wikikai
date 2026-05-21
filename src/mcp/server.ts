@@ -115,6 +115,12 @@ const readPageShape = {
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1).optional().describe("1-based; default 1"),
   line_end: z.number().int().min(1).optional().describe("inclusive; default = last line"),
+  mode: z
+    .enum(["full", "summary"])
+    .optional()
+    .describe(
+      "How to return the page body. `full` (default) = verbatim markdown (use when you'll follow up with line-based edits). `summary` = compact skeleton where every annotated rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) AND every annotated markdown table is replaced by a single placeholder line `[@N kind: caption]` (or `[@N table 12r × 3c: caption]`). Response also gains a `blocks` array listing each placeholder's id / kind / caption / source-line range. **Prefer `summary` for first reads, navigation, and 'tell me what's on this page' / 'find @47' probes** — typical 5-10× token saving on pages with diagrams or large tables. Switch to `full` (or pass `line_start`/`line_end`) when you actually need the body for editing.",
+    ),
 };
 
 const editLinesShape = {
@@ -489,10 +495,13 @@ export function createMcpServer(handlers: ToolHandlers): McpServer {
     {
       title: "Read page (with parent knowledge context)",
       description:
-        "Return page content + total line count + hash. The response also includes the parent knowledge (&) with all sibling pages, so you know where this page sits in the document without a separate get_knowledge call. " +
-        "The returned content includes `{@N}` annotations on every rich fenced block AND on every plain markdown table (as a trailing `{@N}` line under the table) — that's the global block id the user (or you) can refer to by `@N` later. `get_block({ id })` resolves either kind in one call. " +
-        "If the page references any internal image (via an ```images fence OR a `<img src=\"/img/...\" />` inside an ```html-embed fence), the response carries `images_referenced` — a pre-parsed list of `{ src, alt?, caption?, block_id?, via }` where `via` is either 'images' or 'html-embed'. Use it with `get_image({ src })` to view the bytes inline instead of re-scanning the page yourself. " +
-        "Optional line_start/line_end to read just a slice. Always re-read before `edit_lines` if you intend to use expected_hash.",
+        "Return page content + total line count + hash, plus the parent knowledge (&) with all sibling pages so you know where this page sits without a separate get_knowledge call. " +
+        "**Two modes** (control via `mode`):\\n" +
+        "  • `full` (default) — verbatim markdown, line numbers match source, `hash` returned. Use when you'll follow up with `edit_lines` / `edit_section` / any line-based op.\\n" +
+        "  • `summary` — compact skeleton: every annotated rich fenced block AND every annotated markdown table is replaced by a single placeholder line of the form `[@N kind: caption]` (or `[@N table 12r × 3c: caption]`). Response gains a `blocks` array listing each placeholder's id / kind / caption / source-line range. Typical 5–10× token saving on pages with diagrams or large tables. **Prefer this mode for first reads** — switch to `full` (or pass `line_start`/`line_end`) only when you actually need the body for editing.\\n" +
+        "The returned content (either mode) includes `{@N \"caption\"?}` annotations on every rich fenced block AND on every plain markdown table (as a trailing `{@N}` line under the table) — that's the global block id the user (or you) can refer to by `@N` later. `get_block({ id })` resolves either kind in one call; `get_block({ id, summary: true })` is even cheaper (returns caption + schema only). " +
+        "If the page references any internal image (via plain markdown `![alt](/img/...)`, an ```images fence, OR a `<img src=\"/img/...\" />` inside an ```html-embed fence), the response carries `images_referenced` — pre-parsed list of `{ src, alt?, caption?, block_id?, via }` where `via` is `markdown` / `images` / `html-embed`. Use with `get_image({ src })` to view bytes inline. " +
+        "Optional `line_start`/`line_end` to read just a slice. Always re-read with `mode: \"full\"` before `edit_lines` if you intend to use expected_hash.",
       inputSchema: readPageShape,
     },
     async (input) => jsonContent(await handlers.read_page(input)),

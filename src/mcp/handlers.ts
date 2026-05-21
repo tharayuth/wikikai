@@ -178,6 +178,12 @@ export const ReadPageSchema = z.object({
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1).optional(),
   line_end: z.number().int().min(1).optional(),
+  mode: z
+    .enum(["full", "summary"])
+    .optional()
+    .describe(
+      "How to return the page body. `full` (default) returns the markdown verbatim — needed when you intend to follow up with `edit_lines` or any line-number-based edit. `summary` returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line `[@N kind: caption — extra hint]`, so the page reads as headings + prose + 1-line-per-block. **Prefer `summary` for first reads, navigation, or 'tell me what's on this page' / 'find @47'-style probes** — typical 5-10× token saving on pages with diagrams or large tables. Switch to `full` (or pass `line_start`/`line_end`) when you actually need the bodies for editing.",
+    ),
 });
 
 export const EditLinesSchema = z.object({
@@ -530,8 +536,29 @@ export interface ToolHandlers {
     total_lines: number;
     line_start: number;
     line_end: number;
-    hash: string;
+    /** Always present in `full` mode. Omitted in `summary` mode — the
+     *  skeleton's hash wouldn't match the source so it could only
+     *  mislead `expected_hash` callers. */
+    hash?: string;
     url: string;
+    /** Echoes the requested mode. `"full"` when omitted by caller. */
+    mode: "full" | "summary";
+    /** Present only in `summary` mode — the actual source line count
+     *  (skeleton's `total_lines` may be smaller because each rich
+     *  block collapses to one placeholder line). */
+    source_total_lines?: number;
+    /** Present only in `summary` mode — every block summarised in the
+     *  skeleton, in source order, with id, kind, optional caption,
+     *  and source line range. AI can decide which `@N` to fetch in
+     *  full via `get_block({ id })` without re-parsing placeholders. */
+    blocks?: Array<{
+      id: number;
+      kind: string;
+      caption: string | null;
+      source_line_start: number;
+      source_line_end: number;
+      url: string;
+    }>;
     /** Parent knowledge (&) — title + sibling pages so AI knows where this page sits */
     knowledge: {
       id: number;
@@ -1043,17 +1070,11 @@ export function buildToolHandlers(
       const r = pages.readLines(parsed.page_id, parsed.line_start, parsed.line_end);
       const k = knowledge.get(meta.knowledge_id);
       const siblings = pages.list(meta.knowledge_id);
-      return {
+      const baseEnvelope = {
         page_id: parsed.page_id,
         knowledge_id: meta.knowledge_id,
         title: meta.title,
         position: meta.position,
-        content: r.content,
-        total_lines: r.total_lines,
-        line_start: r.line_start,
-        line_end: r.line_end,
-        hash: r.hash,
-        url: urlFor(ctx, meta.knowledge_id, parsed.page_id, r.line_start),
         knowledge: {
           id: meta.knowledge_id,
           title: k?.title ?? "(unknown)",
@@ -1070,6 +1091,43 @@ export function buildToolHandlers(
             is_current: p.id === parsed.page_id,
           })),
         },
+        url: urlFor(ctx, meta.knowledge_id, parsed.page_id, r.line_start),
+      };
+      if (parsed.mode === "summary") {
+        const { skeleton, blocks } = pages.summarizePageContent(r.content);
+        const skelLines = skeleton === "" ? 0 : skeleton.split("\n").length;
+        return {
+          ...baseEnvelope,
+          mode: "summary" as const,
+          content: skeleton,
+          total_lines: skelLines,
+          source_total_lines: r.total_lines,
+          line_start: r.line_start,
+          line_end: r.line_end,
+          // Hash omitted on purpose — skeleton's hash doesn't match
+          // the source so it would only mislead `expected_hash`
+          // callers. Re-read with `mode: "full"` to get an editable
+          // slice + hash.
+          blocks: blocks.map((b) => ({
+            ...b,
+            url: urlFor(
+              ctx,
+              meta.knowledge_id,
+              parsed.page_id,
+              b.source_line_start,
+            ),
+          })),
+          images_referenced: extractImageRefs(r.content),
+        };
+      }
+      return {
+        ...baseEnvelope,
+        mode: "full" as const,
+        content: r.content,
+        total_lines: r.total_lines,
+        line_start: r.line_start,
+        line_end: r.line_end,
+        hash: r.hash,
         images_referenced: extractImageRefs(r.content),
       };
     },

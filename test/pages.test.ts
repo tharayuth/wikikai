@@ -923,6 +923,109 @@ describe("PageStore", () => {
     });
   });
 
+  describe("summarizePageContent", () => {
+    it("replaces annotated fence blocks with single-line placeholders", () => {
+      const content = [
+        "# Page",
+        "",
+        "Intro prose.",
+        "",
+        '```mermaid {@111 "Architecture: API → DB"}',
+        "flowchart TD",
+        "  A --> B",
+        "  C --> D",
+        "```",
+        "",
+        "More prose.",
+        "",
+        '```chart {@222 "Monthly revenue"}',
+        '{"type":"bar","data":{"labels":["Jan"],"datasets":[]}}',
+        "```",
+      ].join("\n");
+      const r = pages.summarizePageContent(content);
+      expect(r.skeleton).toContain("[@111 mermaid: Architecture: API → DB]");
+      expect(r.skeleton).toContain("[@222 chart: Monthly revenue]");
+      // Diagram source bodies must NOT survive in the skeleton
+      expect(r.skeleton).not.toContain("flowchart TD");
+      expect(r.skeleton).not.toContain('{"type":"bar"');
+      // blocks index lists both with correct source line ranges
+      expect(r.blocks).toHaveLength(2);
+      expect(r.blocks[0]).toMatchObject({
+        id: 111,
+        kind: "mermaid",
+        caption: "Architecture: API → DB",
+      });
+      expect(r.blocks[1]).toMatchObject({
+        id: 222,
+        kind: "chart",
+        caption: "Monthly revenue",
+      });
+      expect(r.blocks[0].source_line_start).toBe(5);
+      expect(r.blocks[0].source_line_end).toBe(9);
+    });
+
+    it("replaces annotated markdown tables with table placeholder + dims", () => {
+      const content = [
+        "Before",
+        "",
+        "| name | age |",
+        "|------|-----|",
+        "| Alice | 30 |",
+        "| Bob | 25 |",
+        "| Cara | 40 |",
+        "",
+        '{@333 "User roster"}',
+        "",
+        "After",
+      ].join("\n");
+      const r = pages.summarizePageContent(content);
+      expect(r.skeleton).toContain("[@333 table 3r × 2c: User roster]");
+      // Row data must NOT survive
+      expect(r.skeleton).not.toContain("Alice");
+      expect(r.skeleton).not.toContain("|------|");
+      // Prose still present
+      expect(r.skeleton).toContain("Before");
+      expect(r.skeleton).toContain("After");
+      expect(r.blocks).toEqual([
+        {
+          id: 333,
+          kind: "table",
+          caption: "User roster",
+          source_line_start: 3,
+          source_line_end: 7,
+        },
+      ]);
+    });
+
+    it("leaves unannotated fences (plain code blocks) untouched", () => {
+      const content = [
+        "Sample code:",
+        "",
+        "```typescript",
+        "const x = 1;",
+        "```",
+        "",
+        "End.",
+      ].join("\n");
+      const r = pages.summarizePageContent(content);
+      // ts code is kept verbatim — no @N → no placeholder
+      expect(r.skeleton).toContain("const x = 1;");
+      expect(r.skeleton).toContain("```typescript");
+      expect(r.blocks).toEqual([]);
+    });
+
+    it("uses generic descriptor when caption is missing", () => {
+      const content = [
+        "```stats {@444}",
+        '[{"num":"1","label":"x"}]',
+        "```",
+      ].join("\n");
+      const r = pages.summarizePageContent(content);
+      expect(r.skeleton).toBe("[@444 stats]");
+      expect(r.blocks[0]).toMatchObject({ id: 444, caption: null });
+    });
+  });
+
   describe("block captions", () => {
     it("getBlock returns the caption from a fence annotation", () => {
       const { id } = pages.add({

@@ -122,6 +122,25 @@ export function hashRange(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
 }
 
+/** Render a single-line placeholder used by `summarizePageContent`.
+ *  Format: `[@N kind: caption]` or `[@N kind — extra: caption]` when
+ *  extra hint info is available (e.g. table dimensions). Stays on one
+ *  line so an AI counting "blocks on this page" can do so by simple
+ *  line scanning. */
+function formatPlaceholder(
+  kind: string,
+  id: number,
+  caption: string | null,
+  extra: string | null,
+): string {
+  const head = extra ? `@${id} ${kind} ${extra}` : `@${id} ${kind}`;
+  return caption ? `[${head}: ${caption}]` : `[${head}]`;
+}
+
+function unescapeCap(s: string): string {
+  return s.replace(/\\(["\\])/g, "$1");
+}
+
 /** Split one markdown-table row into trimmed cells. Strips the outer
  *  `|` delimiters, splits on the rest, trims whitespace per cell. Does
  *  not handle escaped `\|` in cell content — rare in our use case. */
@@ -177,6 +196,149 @@ export class PageStore {
     this.migrateFtsTokenizer("trigram");
     this.backfillRevisions();
     this.backfillBlockIds();
+  }
+
+  /**
+   * Produce a "skeleton" version of the page content where every rich
+   * fenced block (mermaid / chart / chart-grid / stats / steps /
+   * html-embed / images) and every `{@N}`-annotated markdown table is
+   * replaced by a SINGLE placeholder line of the form:
+   *
+   *   [@123 mermaid: Architecture: API → DB]
+   *   [@456 chart: Monthly revenue 2024 by region]
+   *   [@789 table 12r × 3c: Q1 inventory by SKU]
+   *
+   * The placeholder is intentionally distinctive (square brackets +
+   * `@N`) so a downstream model can't confuse it for normal prose.
+   * When a block carries no caption, the descriptor falls back to
+   * generic kind info (`[@123 mermaid]`, `[@789 table 12r × 3c]`).
+   *
+   * Returns the skeleton string + a side-channel `blocks` index so
+   * callers don't have to re-parse placeholders to enumerate ids.
+   * The skeleton's line numbers DO NOT match the source — pair with
+   * `get_block({ id })` / `read_page({ mode: "full" })` for editing.
+   */
+  summarizePageContent(content: string): {
+    skeleton: string;
+    blocks: Array<{
+      id: number;
+      kind: string;
+      caption: string | null;
+      source_line_start: number;
+      source_line_end: number;
+    }>;
+  } {
+    const TABLE_ROW = /^\s*\|.*\|\s*$/;
+    const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;
+    const TABLE_ANN = /^\s*\{@(\d+)(?:\s+"((?:[^"\\]|\\.)*)")?\}\s*$/;
+    const lines = content.split("\n");
+    const out: string[] = [];
+    const blocks: Array<{
+      id: number;
+      kind: string;
+      caption: string | null;
+      source_line_start: number;
+      source_line_end: number;
+    }> = [];
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // Fenced rich block?
+      const fenceOpen = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)(.*)$/.exec(line);
+      if (fenceOpen) {
+        const lang = fenceOpen[3].toLowerCase();
+        const ann = parseAnnotation(fenceOpen[4]);
+        // Only ANNOTATED fences get collapsed — plain code blocks
+        // (typescript / json / md / etc.) are kept verbatim so prose
+        // examples remain readable.
+        if (ann) {
+          const marker = fenceOpen[2];
+          // Find matching close
+          const closeRe = new RegExp(`^\\s*${marker.replace(/`/g, "`")}+\\s*$`);
+          let end = i;
+          for (let j = i + 1; j < lines.length; j++) {
+            if (closeRe.test(lines[j])) {
+              end = j;
+              break;
+            }
+          }
+          const sourceStart = i + 1;
+          const sourceEnd = end + 1;
+          const placeholder = formatPlaceholder(lang, ann.id, ann.caption, null);
+          out.push(placeholder);
+          blocks.push({
+            id: ann.id,
+            kind: lang,
+            caption: ann.caption,
+            source_line_start: sourceStart,
+            source_line_end: sourceEnd,
+          });
+          i = end + 1;
+          continue;
+        }
+        // Unannotated fence — walk to close but keep content verbatim
+        const closeRe = new RegExp(
+          `^\\s*${fenceOpen[2].replace(/`/g, "`")}+\\s*$`,
+        );
+        out.push(line);
+        let j = i + 1;
+        while (j < lines.length) {
+          out.push(lines[j]);
+          if (closeRe.test(lines[j])) break;
+          j++;
+        }
+        i = j + 1;
+        continue;
+      }
+
+      // Markdown table with trailing {@N "caption"?} annotation?
+      if (
+        TABLE_ROW.test(line) &&
+        i + 1 < lines.length &&
+        TABLE_SEP.test(lines[i + 1])
+      ) {
+        // Walk to last row
+        let end = i + 1;
+        for (let j = i + 2; j < lines.length; j++) {
+          if (TABLE_ROW.test(lines[j])) end = j;
+          else break;
+        }
+        // Look for trailing annotation (optional blank between)
+        const peek1 = lines[end + 1] ?? "";
+        const peek2 = lines[end + 2] ?? "";
+        let annLineIdx = -1;
+        if (TABLE_ANN.test(peek1)) annLineIdx = end + 1;
+        else if (peek1.trim() === "" && TABLE_ANN.test(peek2))
+          annLineIdx = end + 2;
+        if (annLineIdx !== -1) {
+          const m = TABLE_ANN.exec(lines[annLineIdx])!;
+          const id = Number(m[1]);
+          const caption = m[2] != null ? unescapeCap(m[2]) : null;
+          const headers = parseTableRow(line);
+          const dataRows = end - (i + 1); // count rows AFTER separator
+          const dims = `${dataRows}r × ${headers.length}c`;
+          out.push(formatPlaceholder("table", id, caption, dims));
+          blocks.push({
+            id,
+            kind: "table",
+            caption,
+            source_line_start: i + 1,
+            source_line_end: end + 1,
+          });
+          i = annLineIdx + 1;
+          continue;
+        }
+        // Unannotated table — keep verbatim
+        out.push(line);
+        i++;
+        continue;
+      }
+
+      out.push(line);
+      i++;
+    }
+    return { skeleton: out.join("\n"), blocks };
   }
 
   // ─────────── Block lookup (@N) ───────────

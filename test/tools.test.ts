@@ -135,6 +135,36 @@ describe("MCP tool handlers", () => {
       expect(r.hash).toBeTruthy();
     });
 
+    it("read_page mode:'summary' returns skeleton + blocks index", async () => {
+      const k = await h.add_knowledge({ title: "D" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: [
+          "intro",
+          "",
+          '```mermaid {@500 "Arch overview"}',
+          "flowchart TD",
+          "  A --> B",
+          "```",
+          "",
+          "outro",
+        ].join("\n"),
+      });
+      const r = await h.read_page({ page_id: p.id, mode: "summary" });
+      expect(r.mode).toBe("summary");
+      expect(r.content).toContain("[@500 mermaid: Arch overview]");
+      expect(r.content).not.toContain("flowchart TD");
+      expect(r.blocks).toBeDefined();
+      expect(r.blocks!).toHaveLength(1);
+      expect(r.blocks![0].id).toBe(500);
+      expect(r.blocks![0].caption).toBe("Arch overview");
+      // Hash deliberately absent in summary mode
+      expect(r.hash).toBeUndefined();
+      // Source line count exposed so AI knows the real page size
+      expect(r.source_total_lines).toBeGreaterThan(r.total_lines);
+    });
+
     it("read_page includes parent knowledge structure (& context)", async () => {
       const k = await h.add_knowledge({ title: "Doc title" });
       const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "aa" });
