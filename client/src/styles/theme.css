@@ -3459,7 +3459,6 @@ a:hover { text-decoration: underline; }
   color: var(--text-2);
 }
 .add-user-row input[type="text"],
-.add-user-row input[type="email"],
 .add-user-row input:not([type]) {
   padding: 6px 10px;
   font: inherit;

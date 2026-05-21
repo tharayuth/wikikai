@@ -39,9 +39,9 @@ export function LoginPage(): JSX.Element {
         <p className="login-subtitle">Sign in to continue</p>
         <form onSubmit={onSubmit} className="login-form">
           <label>
-            <span>Email</span>
+            <span>Email or username</span>
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
