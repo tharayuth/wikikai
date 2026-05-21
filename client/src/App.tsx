@@ -10,6 +10,7 @@ import { Viewer } from "./components/Viewer";
 import { LoginPage } from "./components/LoginPage";
 import { HelpModal } from "./components/HelpModal";
 import { ActivityLogModal } from "./components/ActivityLogModal";
+import { AccountModal } from "./components/AccountModal";
 import { ProjectFilterModal } from "./components/ProjectFilterModal";
 import { Toast } from "./components/Toast";
 
@@ -75,6 +76,7 @@ export function App() {
       </div>
       <HelpModal />
       <ActivityLogModal />
+      <AccountModal />
       <ProjectFilterModal />
       <Toast />
     </>

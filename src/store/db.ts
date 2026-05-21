@@ -27,6 +27,16 @@ export function openDb(dbPath: string): Db {
       `ALTER TABLE activity_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
     );
   }
+  if (!hasColumn(db, "users", "mcp_token")) {
+    // Per-user MCP API token. Nullable for legacy rows; populated on
+    // create + regenerate. UNIQUE so a stale token can't accidentally
+    // shadow another user. NULL means "no token issued yet" — the
+    // server falls back to the legacy WIKIKAI_TOKEN env var for those.
+    db.exec(`ALTER TABLE users ADD COLUMN mcp_token TEXT`);
+    db.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mcp_token ON users(mcp_token) WHERE mcp_token IS NOT NULL`,
+    );
+  }
   return db;
 }
 

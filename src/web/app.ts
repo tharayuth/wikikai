@@ -17,6 +17,7 @@ import type { ToolHandlers } from "../mcp/handlers.js";
 import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
 import { onEvent } from "../lib/events.js";
+import { withCallContext } from "../lib/callContext.js";
 import {
   attachAuthRoutes,
   requireAuth,
@@ -652,19 +653,43 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
-  // ─── MCP transport mount (with optional bearer token auth) ───
+  // ─── MCP transport mount (Bearer token → per-user identification) ───
+  // Two token sources, checked in order:
+  //   1. The user's personal mcp_token (recommended) — resolves to that
+  //      user. Every activity-log row written during the call gets
+  //      stamped with their user_id + display_name.
+  //   2. The legacy `WIKIKAI_TOKEN` env var (when set) — falls back to
+  //      tagging with `mcpDefaultUserId` (usually the bootstrap admin).
+  // Anonymous calls are rejected when EITHER token source is present.
   if (opts.mcpHandler) {
-    const token = opts.mcpToken;
+    const legacyToken = opts.mcpToken;
     app.all("/mcp", (req, res, next) => {
-      if (token) {
-        const header = req.header("authorization") ?? "";
-        const m = /^Bearer\s+(.+)$/i.exec(header.trim());
-        if (!m || m[1].trim() !== token) {
+      const header = req.header("authorization") ?? "";
+      const m = /^Bearer\s+(.+)$/i.exec(header.trim());
+      const presented = m?.[1].trim() ?? null;
+
+      let userId: number | null = null;
+      if (presented) {
+        const user = opts.users.getByMcpToken(presented);
+        if (user) {
+          userId = user.id;
+        } else if (legacyToken && presented === legacyToken) {
+          userId = opts.mcpDefaultUserId ?? null;
+        } else {
           res.status(401).json({ error: "unauthorized" });
           return;
         }
+      } else if (legacyToken) {
+        // Env requires a token but none was presented
+        res.status(401).json({ error: "unauthorized" });
+        return;
       }
-      opts.mcpHandler!(req, res, next);
+
+      // Tag the call context with the acting user — the Proxy in
+      // createMcpServer will read this when wrapping each tool call.
+      withCallContext({ source: "web", user_id: userId }, () => {
+        opts.mcpHandler!(req, res, next);
+      });
     });
   }
 

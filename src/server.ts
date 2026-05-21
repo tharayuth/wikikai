@@ -34,6 +34,12 @@ export async function startServer(): Promise<RunningServer> {
   const users = new UserStore(db);
   const sessions = new SessionStore(db, users);
   sessions.purgeExpired();
+  // Backfill MCP tokens for any user that predates the column.
+  const issued = users.ensureMcpTokens();
+  if (issued > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[wikikai] issued MCP tokens for ${issued} pre-existing user(s)`);
+  }
 
   // Bootstrap admin from env vars when the users table is empty —
   // lets a fresh install come up usable without a separate CLI.

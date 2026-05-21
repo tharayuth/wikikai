@@ -3211,3 +3211,135 @@ a:hover { text-decoration: underline; }
   background: var(--accent-light, rgba(99, 102, 241, 0.1));
   margin-right: 6px;
 }
+
+/* ───── Account modal ───── */
+.account-modal {
+  max-width: 620px;
+  width: 92vw;
+}
+.account-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.account-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+}
+.account-body {
+  padding: 18px 22px 24px;
+  overflow-y: auto;
+}
+.account-info {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 6px 14px;
+  margin: 0 0 16px;
+  font-size: 13.5px;
+}
+.account-info dt {
+  color: var(--text-3);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  align-self: center;
+}
+.account-info dd { margin: 0; }
+.account-section {
+  margin: 18px 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.account-help {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.account-help code {
+  background: var(--surface-2, rgba(127,127,127,0.08));
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.account-token-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface-2, rgba(127,127,127,0.05));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.account-token {
+  flex: 1;
+  min-width: 280px;
+  font-family: var(--mono);
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--text);
+}
+.account-token-actions {
+  display: flex;
+  gap: 6px;
+}
+.account-btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.account-btn:hover:not(:disabled) {
+  background: var(--surface-2, rgba(127,127,127,0.06));
+  border-color: var(--accent);
+}
+.account-btn.danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #b91c1c;
+}
+.account-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: #ef4444;
+  color: #991b1b;
+}
+[data-theme="dark"] .account-btn.danger { color: #fca5a5; }
+.account-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.account-code {
+  background: var(--surface-2, rgba(127,127,127,0.05));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* Make the topbar user name look like a button now that it opens the
+   account dialog. */
+.topbar-user-name {
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-user-name:hover {
+  color: var(--accent);
+}

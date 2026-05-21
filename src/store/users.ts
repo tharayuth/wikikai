@@ -12,6 +12,10 @@ export interface User {
   is_admin: boolean;
   created_at: string;
   last_login_at: string | null;
+  /** Personal MCP API token. Each user has one — AI clients send it as
+   *  `Authorization: Bearer <token>` to identify which user the call
+   *  belongs to. Null until first issued; regenerate to rotate. */
+  mcp_token: string | null;
 }
 
 export interface UserWithHash extends User {
@@ -26,6 +30,7 @@ interface UserRow {
   is_admin: number;
   created_at: string;
   last_login_at: string | null;
+  mcp_token: string | null;
 }
 
 function rowToUser(row: UserRow): User {
@@ -36,6 +41,7 @@ function rowToUser(row: UserRow): User {
     is_admin: row.is_admin === 1,
     created_at: row.created_at,
     last_login_at: row.last_login_at,
+    mcp_token: row.mcp_token,
   };
 }
 
@@ -98,11 +104,12 @@ export class UserStore {
     const existing = this.getByEmail(email);
     if (existing) throw new Error(`email already in use`);
     const hash = hashPassword(input.password);
+    const mcpToken = generateSessionToken(); // 32-byte base64url
     const now = new Date().toISOString();
     const r = this.db
       .prepare(
-        `INSERT INTO users (email, password_hash, display_name, is_admin, created_at)
-         VALUES (@email, @hash, @display, @is_admin, @created_at)`,
+        `INSERT INTO users (email, password_hash, display_name, is_admin, created_at, mcp_token)
+         VALUES (@email, @hash, @display, @is_admin, @created_at, @mcp_token)`,
       )
       .run({
         email,
@@ -110,8 +117,47 @@ export class UserStore {
         display,
         is_admin: input.is_admin ? 1 : 0,
         created_at: now,
+        mcp_token: mcpToken,
       });
     return this.get(Number(r.lastInsertRowid))!;
+  }
+
+  /** Lookup by MCP API token. Returns null when the token is missing
+   *  or doesn't match any user. Used by the /mcp route to resolve the
+   *  acting user from the Bearer header. */
+  getByMcpToken(token: string): User | null {
+    if (!token) return null;
+    const row = this.db
+      .prepare(`SELECT * FROM users WHERE mcp_token = ?`)
+      .get(token) as UserRow | undefined;
+    return row ? rowToUser(row) : null;
+  }
+
+  /** Issue a fresh MCP token for a user, replacing any existing one.
+   *  Returns the new token (the only chance the caller has to read it
+   *  if they don't immediately also fetch the user). */
+  regenerateMcpToken(user_id: number): string {
+    const token = generateSessionToken();
+    const r = this.db
+      .prepare(`UPDATE users SET mcp_token = ? WHERE id = ?`)
+      .run(token, user_id);
+    if (r.changes === 0) throw new Error(`user #${user_id} not found`);
+    return token;
+  }
+
+  /** Backfill a token for any user that has none yet — used on startup
+   *  so an existing install (where users predate this column) doesn't
+   *  silently lose MCP access for those rows. */
+  ensureMcpTokens(): number {
+    const rows = this.db
+      .prepare(`SELECT id FROM users WHERE mcp_token IS NULL`)
+      .all() as { id: number }[];
+    let issued = 0;
+    for (const r of rows) {
+      this.regenerateMcpToken(r.id);
+      issued++;
+    }
+    return issued;
   }
 
   list(): User[] {

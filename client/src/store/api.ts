@@ -98,6 +98,11 @@ export interface AuthUser {
   is_admin: boolean;
   created_at: string;
   last_login_at: string | null;
+  /** Personal MCP API token. Send as `Authorization: Bearer <token>`
+   *  in MCP client configs. Regenerate to invalidate any previously
+   *  configured copies. Only the owner sees this — the field is only
+   *  present in `/api/auth/me` for the current session's user. */
+  mcp_token: string | null;
 }
 
 export interface AuthMeResponse {
@@ -224,6 +229,14 @@ export const portalApi = createApi({
         { type: "Auth", id: "ME" },
         { type: "KnowledgeList", id: "LIST" },
       ],
+    }),
+
+    regenerateMcpToken: builder.mutation<{ mcp_token: string }, void>({
+      query: () => ({
+        url: "auth/regenerate-mcp-token",
+        method: "POST",
+      }),
+      invalidatesTags: [{ type: "Auth", id: "ME" }],
     }),
 
     getActivityLog: builder.query<
@@ -454,6 +467,7 @@ export const {
   useGetAuthMeQuery,
   useLoginMutation,
   useLogoutMutation,
+  useRegenerateMcpTokenMutation,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
 } = portalApi;

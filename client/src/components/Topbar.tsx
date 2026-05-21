@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import {
+  openAccount,
   openActivityLog,
   openHelp,
   openProjectFilter,
@@ -193,6 +194,7 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
  * deployment). Keeps the topbar layout consistent across modes.
  */
 function UserWidget(): JSX.Element | null {
+  const dispatch = useAppDispatch();
   const { data } = useGetAuthMeQuery();
   const [logout] = useLogoutMutation();
   if (!data) return null;
@@ -205,8 +207,15 @@ function UserWidget(): JSX.Element | null {
     );
   }
   return (
-    <div className="topbar-user signed-in" title={data.user.email}>
-      <span className="topbar-user-name">{data.user.display_name}</span>
+    <div className="topbar-user signed-in">
+      <button
+        type="button"
+        className="topbar-user-name"
+        title={`${data.user.email} — click to open account / MCP token`}
+        onClick={() => dispatch(openAccount())}
+      >
+        {data.user.display_name}
+      </button>
       <button
         type="button"
         className="topbar-user-logout"

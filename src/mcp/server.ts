@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { EXAMPLE_KINDS } from "./examples.js";
 import type { ToolHandlers } from "./handlers.js";
-import { withCallContext } from "../lib/callContext.js";
+import { getCallContext, withCallContext } from "../lib/callContext.js";
 
 const SESSION_NOTE =
   "Claude Code chat session UUID (the value used by `claude --resume <id>`). " +
@@ -396,19 +396,25 @@ export function createMcpServer(
   // handler signature. `user_id` comes from `WIKIKAI_MCP_DEFAULT_USER`
   // (or the bootstrap admin) since MCP clients authenticate by token,
   // not user session.
-  const userId = opts.defaultUserId ?? null;
+  const fallbackUid = opts.defaultUserId ?? null;
   const handlers = new Proxy(rawHandlers, {
     get(target, prop) {
       const orig = (target as unknown as Record<string | symbol, unknown>)[
         prop
       ];
       if (typeof orig !== "function") return orig;
-      return (input: unknown) =>
-        withCallContext(
+      return (input: unknown) => {
+        // Prefer the user_id resolved by the /mcp route (per-user
+        // Bearer token); fall back to the configured default when the
+        // legacy `WIKIKAI_TOKEN` env var was used.
+        const outer = getCallContext();
+        const userId = outer.user_id ?? fallbackUid;
+        return withCallContext(
           { source: "mcp", tool_name: String(prop), user_id: userId },
           () =>
             (orig as (i: unknown) => Promise<unknown>).call(target, input),
         );
+      };
     },
   }) as ToolHandlers;
 

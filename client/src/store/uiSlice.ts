@@ -12,6 +12,7 @@ export interface UiState {
   helpTab: HelpTab;
   helpLang: HelpLang;
   activityLogOpen: boolean;
+  accountOpen: boolean;
   toast: { message: string; kind: ToastKind; ts: number } | null;
   /** Project names selected for filtering. null = no filter (show all). */
   selectedProjects: string[] | null;
@@ -63,6 +64,7 @@ const initialState: UiState = {
   helpTab: "user",
   helpLang: initialHelpLang(),
   activityLogOpen: false,
+  accountOpen: false,
   toast: null,
   selectedProjects: initialSelectedProjects(),
   projectFilterOpen: false,
@@ -114,6 +116,12 @@ export const uiSlice = createSlice({
     closeActivityLog(state) {
       state.activityLogOpen = false;
     },
+    openAccount(state) {
+      state.accountOpen = true;
+    },
+    closeAccount(state) {
+      state.accountOpen = false;
+    },
     showToast(
       state,
       action: PayloadAction<string | { message: string; kind?: ToastKind }>,
@@ -163,6 +171,8 @@ export const {
   setHelpLang,
   openActivityLog,
   closeActivityLog,
+  openAccount,
+  closeAccount,
   showToast,
   clearToast,
   setSelectedProjects,

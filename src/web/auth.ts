@@ -152,4 +152,18 @@ export function attachAuthRoutes(app: Express, opts: AuthOptions): void {
     }
     res.json({ user: null, auth_enabled: opts.enabled });
   });
+
+  // Regenerate the current user's personal MCP token. Returns the
+  // freshly issued token in the response body — there's no later
+  // "show me my token" call needed since /api/auth/me already includes
+  // it. Old token is invalidated immediately; any AI client using it
+  // will start receiving 401s from /mcp.
+  app.post("/api/auth/regenerate-mcp-token", (req, res) => {
+    if (!req.user) {
+      res.status(401).json({ error: "auth required" });
+      return;
+    }
+    const token = opts.users.regenerateMcpToken(req.user.id);
+    res.json({ mcp_token: token });
+  });
 }
