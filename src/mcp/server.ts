@@ -67,7 +67,15 @@ const addPageShape = {
   knowledge_id: z.number().int().positive(),
   title: z.string().min(1).max(200).describe("Tab label"),
   content: z.string().describe(
-    "Markdown body. Custom fences for richer content: ```mermaid (diagrams), ```chart / ```chart-grid (Chart.js), ```stats (KPI cards), ```steps (numbered step cards), ```html-embed (raw HTML for flexible tables, layouts, SVG, iframes), ```images (multi-image gallery — legacy; for a single image prefer plain markdown `![alt](src \"WxH\")` which now supports drag-to-resize + click-to-lightbox just like the gallery). " +
+    "Markdown body. **Block-choice guidance**: prefer plain markdown + the prepared semantic blocks FIRST — they're cheaper to read/edit, get richer search/extract tooling, render consistently across themes, and avoid inline-style noise. Pick by intent: " +
+      "diagram / flow / sequence / ER → ```mermaid · " +
+      "numeric series / comparison → ```chart or ```chart-grid · " +
+      "KPI numbers → ```stats · " +
+      "ordered procedure / how-to → ```steps · " +
+      "tabular data → **plain markdown table** (gets `@N`, `[ ]` checkboxes in cells, `find_table_rows` search, `get_table_row` random access) · " +
+      "showcase image grid (4+ side-by-side) → ```images (otherwise inline `![alt](src \"WxH\")` is simpler and supports drag-to-resize + lightbox). " +
+      "Only reach for ```html-embed when a custom layout genuinely improves understanding (gradient status cards, decision matrix with row/col colors, badges + flex layout, `<details>` accordions, inline SVG, iframes) AND no prepared block fits. Inline `style=\"...\"` in html-embed is real token cost — it gets stripped by default when AI reads, so picking the right block upfront stays the cheapest. " +
+      "Full fence list (for reference): ```mermaid (diagrams), ```chart / ```chart-grid (Chart.js), ```stats (KPI cards), ```steps (numbered step cards), ```html-embed (raw HTML for flexible tables, layouts, SVG, iframes), ```images (multi-image gallery — legacy; for a single image prefer plain markdown `![alt](src \"WxH\")` which now supports drag-to-resize + click-to-lightbox just like the gallery). " +
       "Each rendered fenced block is auto-assigned a stable global id and annotated in source as ```mermaid {@123}; you can refer to it by `@N` thereafter (e.g. 'update @123'). The annotation can carry a **caption** (like an HTML `<figcaption>` / a Word figure caption): ```mermaid {@123 \"Architecture: API → DB\"} — short text describing what the block IS, rendered as small italic text directly below the block. **Always set a caption when creating a rich block** so an AI calling `get_block({ id, summary: true })` or `read_page({ mode: \"summary\" })` can answer 'what is @123?' without paying the body's token cost. Set/update later via `set_block_caption({ id, caption })`. " +
       "Interactive checkboxes (three surfaces, all live, all flipped via the same `toggle_task` tool): " +
       "(a) GFM task list `- [ ] thing` / `- [x] done` inside any bulleted list, " +
@@ -120,6 +128,12 @@ const readPageShape = {
     .optional()
     .describe(
       "How to return the page body. `full` (default) = verbatim markdown (use when you'll follow up with line-based edits). `summary` = compact skeleton where every annotated rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) AND every annotated markdown table is replaced by a single placeholder line `[@N kind: caption]` (or `[@N table 12r × 3c: caption]`). Response also gains a `blocks` array listing each placeholder's id / kind / caption / source-line range. **Prefer `summary` for first reads, navigation, and 'tell me what's on this page' / 'find @47' probes** — typical 5-10× token saving on pages with diagrams or large tables. Switch to `full` (or pass `line_start`/`line_end`) when you actually need the body for editing.",
+    ),
+  include_styles: z
+    .boolean()
+    .optional()
+    .describe(
+      "By DEFAULT every `style=\"...\"` attribute inside `html-embed` fence bodies is stripped from the returned `content` — saves 60-70% of an html-embed block's tokens when you're just reading text/structure. Pass `true` only when you genuinely need to see/edit the presentation (recolouring, redesigning layout). No effect outside html-embed bodies.",
     ),
 };
 
@@ -243,6 +257,12 @@ const getBlockShape = {
     .optional()
     .describe(
       "When true, omit `source` and `inner` (no body bytes). For table blocks the response gains `columns: string[]` + `row_count: number` so you can probe a table's schema cheaply before deciding whether to fetch the full source or slice rows via get_table_row / find_table_rows. Use this for large tables where the body would be expensive.",
+    ),
+  include_styles: z
+    .boolean()
+    .optional()
+    .describe(
+      "Only meaningful for `kind: \"html-embed\"`. DEFAULT strips every `style=\"...\"` attribute from the returned source/inner — inline styles eat 60-70% of an html-embed block's tokens and add nothing when you're editing content or structure. Pass `true` only when you genuinely need the presentation (recolouring a card, redesigning layout). All non-style attrs (src/href/alt/title/data-*/class) are preserved either way.",
     ),
 };
 

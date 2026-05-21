@@ -165,6 +165,77 @@ describe("MCP tool handlers", () => {
       expect(r.source_total_lines).toBeGreaterThan(r.total_lines);
     });
 
+    it("read_page strips html-embed inline styles by default, omits hash", async () => {
+      const k = await h.add_knowledge({ title: "D" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: [
+          "intro",
+          "",
+          '```html-embed {@700 "Card grid"}',
+          '<div style="display:grid;gap:12px">',
+          '  <div style="background:#fef3c7;padding:8px">hello</div>',
+          '  <div class="card" style="background:#dbeafe">world</div>',
+          "</div>",
+          "```",
+        ].join("\n"),
+      });
+      // Default — styles stripped, hash omitted
+      const r1 = await h.read_page({ page_id: p.id });
+      expect(r1.content).not.toContain('style=');
+      expect(r1.content).toContain("hello");
+      expect(r1.content).toContain("world");
+      // Non-style attrs like class survive
+      expect(r1.content).toContain('class="card"');
+      expect(r1.hash).toBeUndefined();
+      // Opt-in keeps styles + hash
+      const r2 = await h.read_page({
+        page_id: p.id,
+        include_styles: true,
+      });
+      expect(r2.content).toContain('style="display:grid');
+      expect(r2.content).toContain('style="background:#fef3c7');
+      expect(r2.hash).toBeTruthy();
+    });
+
+    it("read_page leaves pages without html-embed alone — hash present by default", async () => {
+      const k = await h.add_knowledge({ title: "D" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: "just\nplain\nprose\n",
+      });
+      // No html-embed → nothing to strip → hash still returned even
+      // though include_styles defaults to false.
+      const r = await h.read_page({ page_id: p.id });
+      expect(r.hash).toBeTruthy();
+    });
+
+    it("get_block strips html-embed inline styles by default, opt-in keeps them", async () => {
+      const k = await h.add_knowledge({ title: "D" });
+      await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: [
+          '```html-embed {@701 "Status grid"}',
+          '<div style="display:grid">',
+          '  <div style="background:red">A</div>',
+          '  <div style="background:green">B</div>',
+          "</div>",
+          "```",
+        ].join("\n"),
+      });
+      const stripped = await h.get_block({ id: 701 });
+      expect(stripped.kind).toBe("html-embed");
+      expect(stripped.source).not.toContain('style=');
+      expect(stripped.source).toContain("A");
+      expect(stripped.source).toContain("B");
+      const full = await h.get_block({ id: 701, include_styles: true });
+      expect(full.source).toContain('style="background:red"');
+      expect(full.source).toContain('style="background:green"');
+    });
+
     it("read_page includes parent knowledge structure (& context)", async () => {
       const k = await h.add_knowledge({ title: "Doc title" });
       const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "aa" });

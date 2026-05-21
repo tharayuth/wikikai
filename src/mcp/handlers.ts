@@ -4,6 +4,10 @@ import type { PageStore, PageEntry, PageWithStats } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
 import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
 import {
+  stripInlineStyles,
+  stripHtmlEmbedStylesInMarkdown,
+} from "../lib/htmlStrip.js";
+import {
   EXAMPLE_KINDS,
   exampleOutline,
   readExample,
@@ -184,6 +188,12 @@ export const ReadPageSchema = z.object({
     .describe(
       "How to return the page body. `full` (default) returns the markdown verbatim — needed when you intend to follow up with `edit_lines` or any line-number-based edit. `summary` returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line `[@N kind: caption — extra hint]`, so the page reads as headings + prose + 1-line-per-block. **Prefer `summary` for first reads, navigation, or 'tell me what's on this page' / 'find @47'-style probes** — typical 5-10× token saving on pages with diagrams or large tables. Switch to `full` (or pass `line_start`/`line_end`) when you actually need the bodies for editing.",
     ),
+  include_styles: z
+    .boolean()
+    .optional()
+    .describe(
+      "By DEFAULT every `style=\"...\"` attribute inside `html-embed` fence bodies is stripped from the returned `content` — inline styles bloat token cost (60-70% of a typical card/grid block) and add nothing when you're reading text/structure. Pass `true` when you need to see the presentation (recolouring, redesigning a layout). Only affects html-embed bodies; the rest of the markdown is untouched. Has no effect in `summary` mode (blocks are already collapsed to placeholder lines).",
+    ),
 });
 
 export const EditLinesSchema = z.object({
@@ -339,6 +349,12 @@ export const GetBlockSchema = z.object({
     .optional()
     .describe(
       "When true, omit `source` and `inner` (no body bytes). For table blocks the response gains `columns: string[]` + `row_count: number` so you can probe a table's schema cheaply before deciding whether to fetch the full source or slice rows via get_table_row / find_table_rows. Use for large tables where the body would be expensive.",
+    ),
+  include_styles: z
+    .boolean()
+    .optional()
+    .describe(
+      "Only meaningful for `kind: \"html-embed\"` blocks. By DEFAULT every `style=\"...\"` attribute is stripped from the returned `source` and `inner` — inline styles eat 60-70% of a typical card/grid block's tokens and add nothing when you're editing text or structure. Pass `true` when you need to see the presentation (recolouring a card, redesigning the layout). Other attributes (src, href, alt, title, data-*, class) are always preserved.",
     ),
 });
 
@@ -536,9 +552,12 @@ export interface ToolHandlers {
     total_lines: number;
     line_start: number;
     line_end: number;
-    /** Always present in `full` mode. Omitted in `summary` mode — the
-     *  skeleton's hash wouldn't match the source so it could only
-     *  mislead `expected_hash` callers. */
+    /** Present in `full` mode ONLY when `include_styles: true` was
+     *  requested. Omitted in `summary` mode (skeleton's hash wouldn't
+     *  match source) and in default-stripped `full` mode (writing
+     *  the stripped content back via `edit_lines` would silently
+     *  wipe the user's inline styles — re-read with
+     *  `include_styles: true` to get a hash for editing). */
     hash?: string;
     url: string;
     /** Echoes the requested mode. `"full"` when omitted by caller. */
@@ -1120,15 +1139,28 @@ export function buildToolHandlers(
           images_referenced: extractImageRefs(r.content),
         };
       }
+      // Full mode: strip inline `style="..."` from every html-embed
+      // fence body unless the caller opted in to see them. Keeps the
+      // common "AI reading to edit text" path cheap.
+      const fullContent = parsed.include_styles
+        ? r.content
+        : stripHtmlEmbedStylesInMarkdown(r.content);
+      const wasStripped = fullContent !== r.content;
       return {
         ...baseEnvelope,
         mode: "full" as const,
-        content: r.content,
+        content: fullContent,
         total_lines: r.total_lines,
         line_start: r.line_start,
         line_end: r.line_end,
-        hash: r.hash,
-        images_referenced: extractImageRefs(r.content),
+        // Hash omitted only when stripping actually changed the
+        // returned content — writing the stripped HTML back via
+        // `edit_lines` would wipe the user's inline styles from
+        // source, so we force a re-read with `include_styles: true`
+        // in that case. Pages with no html-embed bodies return hash
+        // normally regardless of the flag.
+        ...(wasStripped ? {} : { hash: r.hash }),
+        images_referenced: extractImageRefs(fullContent),
       };
     },
 
@@ -1238,8 +1270,19 @@ export function buildToolHandlers(
       }
       const b = pages.getBlock(parsed.id);
       if (!b) throw new Error(`block @${parsed.id} not found`);
+      // For html-embed blocks, strip inline `style="..."` by default
+      // so AI editing the body doesn't pay for presentation tokens.
+      // `include_styles: true` keeps the raw HTML verbatim.
+      const stripped =
+        b.kind === "html-embed" && !parsed.include_styles
+          ? {
+              ...b,
+              source: stripInlineStyles(b.source),
+              inner: stripInlineStyles(b.inner),
+            }
+          : b;
       return {
-        ...b,
+        ...stripped,
         url: urlFor(ctx, b.knowledge_id, b.page_id, b.line_start),
       };
     },
