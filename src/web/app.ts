@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, { type Express, type Request, type Response, type NextFunction, type ErrorRequestHandler } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,7 @@ import {
   requireAuth,
   sessionMiddleware,
 } from "./auth.js";
+import { ForbiddenError } from "../lib/permissions.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -728,7 +729,17 @@ export function buildApp(opts: BuildAppOptions): Express {
     });
   }
 
-  // ─── Error handler ───
+  // ─── Error handlers ───
+  // ForbiddenError → 403 JSON response
+  app.use(((err, _req, res, next) => {
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }) as ErrorRequestHandler);
+
+  // Generic error handler → 400 JSON response
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = err instanceof Error ? err.message : String(err);
     res.status(400).json({ error: message });
