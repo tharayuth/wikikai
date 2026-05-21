@@ -268,6 +268,22 @@ export class KnowledgeStore {
     return rows.map(rowToMetadata);
   }
 
+  /** Subset of `list()` for non-admin users: only rows in projects the
+   *  caller has any permission row for. Empty input → empty result
+   *  (a user with no permissions sees nothing). No filters; sorted by
+   *  updated_at DESC like `list()`. */
+  listVisibleForUser(visibleProjects: string[]): KnowledgeMetadata[] {
+    if (visibleProjects.length === 0) return [];
+    const placeholders = visibleProjects.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM knowledge WHERE project IN (${placeholders})
+         ORDER BY updated_at DESC, id DESC`,
+      )
+      .all(...visibleProjects) as Row[];
+    return rows.map(rowToMetadata);
+  }
+
   remove(id: number): void {
     this.db.prepare(`DELETE FROM knowledge WHERE id = ?`).run(id);
     emitEvent({ type: "knowledge-changed" });

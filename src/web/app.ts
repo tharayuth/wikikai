@@ -24,7 +24,7 @@ import {
   requireAuth,
   sessionMiddleware,
 } from "./auth.js";
-import { ForbiddenError } from "../lib/permissions.js";
+import { ForbiddenError, assertProjectAccess } from "../lib/permissions.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -58,8 +58,6 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.disable("x-powered-by");
 
   const aclEnabled = opts.projectAclEnabled ?? true;
-  // Reserved for upcoming ACL-aware routes — Task 4 is pure plumbing.
-  void aclEnabled;
 
   const authOpts = {
     users: opts.users,
@@ -178,6 +176,14 @@ export function buildApp(opts: BuildAppOptions): Express {
 
   app.get("/api/knowledge", async (req, res, next) => {
     try {
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        const visible = opts.permissions.listVisibleProjects(
+          req.user.id,
+          false,
+        );
+        res.json(opts.knowledge.listVisibleForUser(visible));
+        return;
+      }
       const items = await opts.handlers.list_knowledge({
         project: optional(req.query.project),
         session_id: optional(req.query.session_id),
@@ -208,6 +214,14 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.get("/api/knowledge/:id", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
+      const k = opts.knowledge.get(id);
+      if (!k) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        assertProjectAccess(req.user, k.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
+      }
       const out = await opts.handlers.get_knowledge({ id, include_pages: true });
       res.json(out);
     } catch (e) {
@@ -287,6 +301,14 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.get("/api/knowledge/:id/outline", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
+      const k = opts.knowledge.get(id);
+      if (!k) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        assertProjectAccess(req.user, k.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
+      }
       const out = await opts.handlers.get_outline({ knowledge_id: id });
       res.json(out);
     } catch (e) {
@@ -342,6 +364,10 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(404).json({ error: "page not found" });
         return;
       }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        const k = opts.knowledge.get(meta.knowledge_id);
+        assertProjectAccess(req.user, k?.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
+      }
       const r = opts.pages.readLines(pid);
       res.json({
         id: pid,
@@ -367,6 +393,10 @@ export function buildApp(opts: BuildAppOptions): Express {
       if (!meta) {
         res.status(404).type("text/html").send("<p>not found</p>");
         return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        const k = opts.knowledge.get(meta.knowledge_id);
+        assertProjectAccess(req.user, k?.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
       }
       // Optional ?version=N — render that historical revision instead.
       const versionParam = optionalInt(req.query.version);
@@ -397,6 +427,10 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(404).json({ error: "page not found" });
         return;
       }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        const k = opts.knowledge.get(meta.knowledge_id);
+        assertProjectAccess(req.user, k?.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
+      }
       res.json({
         page_id: pid,
         current_version: meta.version,
@@ -414,6 +448,10 @@ export function buildApp(opts: BuildAppOptions): Express {
       if (!meta) {
         res.status(404).type("text/plain").send("not found");
         return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        const k = opts.knowledge.get(meta.knowledge_id);
+        assertProjectAccess(req.user, k?.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
       }
       const versionParam = optionalInt(req.query.version);
       if (versionParam !== undefined && versionParam !== meta.version) {
