@@ -22,6 +22,11 @@ export function openDb(dbPath: string): Db {
   if (!hasColumn(db, "knowledge", "tokens_used")) {
     db.exec(`ALTER TABLE knowledge ADD COLUMN tokens_used INTEGER`);
   }
+  if (!hasColumn(db, "activity_log", "user_id")) {
+    db.exec(
+      `ALTER TABLE activity_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+    );
+  }
   return db;
 }
 

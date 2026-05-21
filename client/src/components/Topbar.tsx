@@ -7,7 +7,12 @@ import {
   showToast,
   toggleTheme,
 } from "../store/uiSlice";
-import { portalApi, useLazySearchQuery } from "../store/api";
+import {
+  portalApi,
+  useGetAuthMeQuery,
+  useLazySearchQuery,
+  useLogoutMutation,
+} from "../store/api";
 import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
 import { SseStatus } from "./SseStatus";
@@ -174,8 +179,52 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
           >
             {theme === "dark" ? "☀" : "☾"}
           </button>
+          <UserWidget />
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * Tiny user-status chip in the topbar. Shows "Sign in" link when auth
+ * is enabled but the user is anonymous, "Hi, <name>" + logout button
+ * when signed in, and nothing at all when auth is off (single-user
+ * deployment). Keeps the topbar layout consistent across modes.
+ */
+function UserWidget(): JSX.Element | null {
+  const { data } = useGetAuthMeQuery();
+  const [logout] = useLogoutMutation();
+  if (!data) return null;
+  if (!data.auth_enabled) return null;
+  if (!data.user) {
+    return (
+      <a className="topbar-user signed-out" href="/login">
+        Sign in
+      </a>
+    );
+  }
+  return (
+    <div className="topbar-user signed-in" title={data.user.email}>
+      <span className="topbar-user-name">{data.user.display_name}</span>
+      <button
+        type="button"
+        className="topbar-user-logout"
+        aria-label="Sign out"
+        title="Sign out"
+        onClick={() => {
+          logout()
+            .unwrap()
+            .then(() => {
+              // Force a full reload so RTK caches and any in-flight
+              // queries reset cleanly to the anonymous state.
+              window.location.assign("/");
+            })
+            .catch(() => undefined);
+        }}
+      >
+        ⎋
+      </button>
+    </div>
   );
 }

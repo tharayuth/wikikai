@@ -21,6 +21,21 @@ export interface Config {
    * layer instead).
    */
   mcpToken: string | null;
+  /** Turn the web login on. When false (default), the web UI is open
+   *  to anyone who can reach the server — matches the pre-auth
+   *  behaviour. When true, every /api/* + the static SPA require a
+   *  valid session cookie; unauthenticated browsers get bounced to
+   *  /login. */
+  webAuth: boolean;
+  /** Bootstrap admin — when the `users` table is empty on startup and
+   *  both of these are set, an admin row is auto-created. Lets a
+   *  fresh install come up usable without a separate setup CLI. */
+  bootstrapAdmin: { email: string; password: string; display_name: string } | null;
+  /** User id used to tag MCP-source activity-log rows. MCP clients
+   *  authenticate by token, not user session — without this every MCP
+   *  mutation would log `user_id: null`. Defaults to the bootstrap
+   *  admin's id when not set explicitly. */
+  mcpDefaultUserId: number | null;
 }
 
 /**
@@ -65,5 +80,32 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const mcpToken = (env.WIKIKAI_TOKEN ?? "").trim() || null;
 
-  return { port, host, dataDir, dbPath, itemsDir, imagesDir, publicBaseUrl, mcpToken };
+  const webAuth = /^(1|true|yes|on)$/i.test(env.WIKIKAI_WEB_AUTH ?? "");
+  const adminEmail = (env.WIKIKAI_ADMIN_EMAIL ?? "").trim();
+  const adminPassword = env.WIKIKAI_ADMIN_PASSWORD ?? "";
+  const adminName =
+    (env.WIKIKAI_ADMIN_NAME ?? "").trim() ||
+    (adminEmail ? adminEmail.split("@")[0] : "");
+  const bootstrapAdmin =
+    adminEmail && adminPassword
+      ? { email: adminEmail, password: adminPassword, display_name: adminName }
+      : null;
+  const mcpDefaultUserRaw = (env.WIKIKAI_MCP_DEFAULT_USER ?? "").trim();
+  const mcpDefaultUserId = mcpDefaultUserRaw
+    ? Number(mcpDefaultUserRaw) || null
+    : null;
+
+  return {
+    port,
+    host,
+    dataDir,
+    dbPath,
+    itemsDir,
+    imagesDir,
+    publicBaseUrl,
+    mcpToken,
+    webAuth,
+    bootstrapAdmin,
+    mcpDefaultUserId,
+  };
 }

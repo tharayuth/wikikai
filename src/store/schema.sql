@@ -133,6 +133,36 @@ CREATE TABLE IF NOT EXISTS activity_log (
 CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_log_kid ON activity_log(knowledge_id, created_at DESC);
 
+-- ───── Users + sessions (Tier 1 login) ─────
+-- Single-tenant: every logged-in user sees the same content. The auth
+-- layer just blocks anonymous access and tags every mutation with the
+-- acting user. MCP-source rows get `user_id` from a configured default
+-- (`WIKIKAI_MCP_DEFAULT_USER`) since MCP clients authenticate by token,
+-- not by user session.
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,           -- scrypt$<salt>$<hash>
+  display_name  TEXT NOT NULL,
+  is_admin      INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  last_login_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token       TEXT PRIMARY KEY,          -- opaque base64url(32 bytes)
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  user_agent  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_exp ON sessions(expires_at);
+
+-- NOTE: `activity_log.user_id` is added by the in-place migration in
+-- `src/store/db.ts` (SQLite < 3.35 has no ADD COLUMN IF NOT EXISTS,
+-- and adding it here would crash on every restart after the first).
+
 -- ───── FTS5: search across page content + title + keywords ─────
 -- Uses the `trigram` tokenizer (SQLite ≥ 3.34) so substring search works
 -- for Thai, Chinese, Japanese, and any script without whitespace word

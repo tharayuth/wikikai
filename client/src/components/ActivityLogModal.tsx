@@ -122,6 +122,9 @@ function ActivityRow({ entry }: { entry: ActivityLogEntry }): JSX.Element {
         )}
       </div>
       <div className="activity-log-source">
+        {entry.user_name && (
+          <span className="activity-log-user">{entry.user_name}</span>
+        )}
         {entry.source === "mcp" ? (
           <span className="activity-log-tool">
             MCP{entry.tool_name ? ` · ${entry.tool_name}` : ""}

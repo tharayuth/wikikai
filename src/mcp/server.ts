@@ -383,13 +383,20 @@ function imageContent(meta: {
   return { content };
 }
 
-export function createMcpServer(rawHandlers: ToolHandlers): McpServer {
+export function createMcpServer(
+  rawHandlers: ToolHandlers,
+  opts: { defaultUserId?: number | null } = {},
+): McpServer {
   const server = new McpServer({ name: "wikikai", version: "0.2.0" });
 
   // Wrap every handler method so each MCP tool call runs inside an
-  // AsyncLocalStorage context tagged with `{ source: "mcp", tool_name }`.
-  // The activity-log recorder reads this context when stamping rows —
-  // saves us threading source/tool through every handler signature.
+  // AsyncLocalStorage context tagged with `{ source: "mcp", tool_name,
+  // user_id }`. The activity-log recorder reads this context when
+  // stamping rows — saves us threading source/tool/user through every
+  // handler signature. `user_id` comes from `WIKIKAI_MCP_DEFAULT_USER`
+  // (or the bootstrap admin) since MCP clients authenticate by token,
+  // not user session.
+  const userId = opts.defaultUserId ?? null;
   const handlers = new Proxy(rawHandlers, {
     get(target, prop) {
       const orig = (target as unknown as Record<string | symbol, unknown>)[
@@ -398,7 +405,7 @@ export function createMcpServer(rawHandlers: ToolHandlers): McpServer {
       if (typeof orig !== "function") return orig;
       return (input: unknown) =>
         withCallContext(
-          { source: "mcp", tool_name: String(prop) },
+          { source: "mcp", tool_name: String(prop), user_id: userId },
           () =>
             (orig as (i: unknown) => Promise<unknown>).call(target, input),
         );

@@ -3,9 +3,11 @@ import { useHash } from "./hooks/useHash";
 import { useServerEvents } from "./hooks/useServerEvents";
 import { useDocumentTitle } from "./hooks/useDocumentTitle";
 import { useAppSelector } from "./store";
+import { useGetAuthMeQuery } from "./store/api";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
 import { Viewer } from "./components/Viewer";
+import { LoginPage } from "./components/LoginPage";
 import { HelpModal } from "./components/HelpModal";
 import { ActivityLogModal } from "./components/ActivityLogModal";
 import { ProjectFilterModal } from "./components/ProjectFilterModal";
@@ -15,6 +17,7 @@ export function App() {
   const { location, navigate } = useHash();
   const theme = useAppSelector((s) => s.ui.theme);
   const [searchText, setSearchText] = useState("");
+  const authMe = useGetAuthMeQuery();
   useServerEvents();
   useDocumentTitle(location.kid, location.pid);
 
@@ -35,6 +38,18 @@ export function App() {
       /* private mode */
     }
   }, []);
+
+  // Auth gate — when the server has WIKIKAI_WEB_AUTH=1 AND the user
+  // isn't logged in, render the login screen instead of the portal.
+  // First load shows nothing briefly while the auth-me query resolves.
+  // (Placed AFTER every hook call to keep the Rules of Hooks order
+  // stable across renders.)
+  if (authMe.isLoading) {
+    return <div className="boot-splash" />;
+  }
+  if (authMe.data?.auth_enabled && !authMe.data.user) {
+    return <LoginPage />;
+  }
 
   return (
     <>

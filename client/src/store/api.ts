@@ -91,6 +91,20 @@ export interface PromptLogEntry {
   created_at: string;
 }
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  display_name: string;
+  is_admin: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface AuthMeResponse {
+  user: AuthUser | null;
+  auth_enabled: boolean;
+}
+
 export interface ActivityLogEntry {
   id: number;
   created_at: string;
@@ -104,6 +118,8 @@ export interface ActivityLogEntry {
   page_title: string | null;
   block_id: number | null;
   block_caption: string | null;
+  user_id: number | null;
+  user_name: string | null;
 }
 
 export interface ActivityLogResponse {
@@ -129,6 +145,7 @@ export const portalApi = createApi({
     "Projects",
     "PromptLog",
     "ActivityLog",
+    "Auth",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -186,6 +203,27 @@ export const portalApi = createApi({
     getPromptLog: builder.query<PromptLogResponse, number>({
       query: (id) => `knowledge/${id}/prompts`,
       providesTags: (_r, _e, id) => [{ type: "PromptLog", id }],
+    }),
+
+    getAuthMe: builder.query<AuthMeResponse, void>({
+      query: () => "auth/me",
+      providesTags: [{ type: "Auth", id: "ME" }],
+    }),
+
+    login: builder.mutation<
+      { user: AuthUser },
+      { email: string; password: string }
+    >({
+      query: (body) => ({ url: "auth/login", method: "POST", body }),
+      invalidatesTags: [{ type: "Auth", id: "ME" }],
+    }),
+
+    logout: builder.mutation<{ ok: true }, void>({
+      query: () => ({ url: "auth/logout", method: "POST" }),
+      invalidatesTags: [
+        { type: "Auth", id: "ME" },
+        { type: "KnowledgeList", id: "LIST" },
+      ],
     }),
 
     getActivityLog: builder.query<
@@ -413,6 +451,9 @@ export const {
   useRemoveProjectMutation,
   useGetPromptLogQuery,
   useGetActivityLogQuery,
+  useGetAuthMeQuery,
+  useLoginMutation,
+  useLogoutMutation,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
 } = portalApi;

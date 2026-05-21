@@ -9,6 +9,7 @@ import { PageStore } from "../src/store/pages.js";
 import { ImageStore } from "../src/store/images.js";
 import { PromptLogStore } from "../src/store/promptLog.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
+import { SessionStore, UserStore } from "../src/store/users.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
 
@@ -26,12 +27,95 @@ describe("HTTP routes", () => {
     const images = new ImageStore(db, path.join(tmpDir, "images"));
     const promptLog = new PromptLogStore(db);
     const activityLog = new ActivityLogStore(db);
+    const users = new UserStore(db);
+    const sessions = new SessionStore(db, users);
     const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" });
-    app = buildApp({ knowledge, pages, images, promptLog, activityLog, handlers, publicBaseUrl: "http://test" });
+    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, handlers, publicBaseUrl: "http://test" });
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  describe("auth (opt-in)", () => {
+    it("/api/auth/me returns null user when no session", async () => {
+      const res = await request(app).get("/api/auth/me");
+      expect(res.status).toBe(200);
+      expect(res.body.user).toBeNull();
+      expect(res.body.auth_enabled).toBe(false);
+    });
+
+    it("login → me → logout flow", async () => {
+      // Set up a user
+      const db = openDb(":memory:");
+      const knowledge = new KnowledgeStore(db);
+      const pages = new PageStore(db, tmpDir);
+      const images = new ImageStore(db, path.join(tmpDir, "auth-images"));
+      const promptLog = new PromptLogStore(db);
+      const activityLog = new ActivityLogStore(db);
+      const users = new UserStore(db);
+      const sessions = new SessionStore(db, users);
+      users.create({
+        email: "alice@example.com",
+        password: "correct-horse-battery-staple",
+        display_name: "Alice",
+      });
+      const handlers = buildToolHandlers(
+        knowledge,
+        pages,
+        images,
+        promptLog,
+        activityLog,
+        { publicBaseUrl: "http://test" },
+      );
+      const authApp = buildApp({
+        knowledge,
+        pages,
+        images,
+        promptLog,
+        activityLog,
+        users,
+        sessions,
+        handlers,
+        publicBaseUrl: "http://test",
+        webAuth: true,
+      });
+
+      // Wrong password → 401
+      let res = await request(authApp)
+        .post("/api/auth/login")
+        .send({ email: "alice@example.com", password: "wrong" });
+      expect(res.status).toBe(401);
+
+      // Correct → 200 + Set-Cookie
+      res = await request(authApp)
+        .post("/api/auth/login")
+        .send({ email: "alice@example.com", password: "correct-horse-battery-staple" });
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe("alice@example.com");
+      const cookie = res.headers["set-cookie"][0];
+      expect(cookie).toMatch(/wikikai_session=/);
+
+      // /api/auth/me with cookie → user info
+      res = await request(authApp).get("/api/auth/me").set("Cookie", cookie);
+      expect(res.body.user.email).toBe("alice@example.com");
+      expect(res.body.auth_enabled).toBe(true);
+
+      // Anonymous /api/knowledge → 401
+      res = await request(authApp).get("/api/knowledge");
+      expect(res.status).toBe(401);
+
+      // With cookie → 200
+      res = await request(authApp).get("/api/knowledge").set("Cookie", cookie);
+      expect(res.status).toBe(200);
+
+      // Logout clears cookie + session
+      res = await request(authApp)
+        .post("/api/auth/logout")
+        .set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      expect(res.headers["set-cookie"][0]).toMatch(/Max-Age=0/);
+    });
   });
 
   it("GET / responds (built dist OR backend-only placeholder)", async () => {

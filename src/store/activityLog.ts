@@ -44,6 +44,13 @@ export interface ActivityEntry {
   page_title: string | null;
   block_id: number | null;
   block_caption: string | null;
+  /** Acting user id when known. NULL for rows written before auth was
+   *  enabled, or for MCP rows when no `mcpDefaultUserId` was set. */
+  user_id: number | null;
+  /** Joined display name — present when the user_id still resolves to
+   *  an existing user. Snapshotted at SELECT time (not insert), so a
+   *  rename of the user shows up in old log rows too. */
+  user_name: string | null;
 }
 
 /**
@@ -67,11 +74,11 @@ export class ActivityLogStore {
         `INSERT INTO activity_log
          (created_at, source, tool_name, action, target,
           knowledge_id, knowledge_title, page_id, page_title,
-          block_id, block_caption)
+          block_id, block_caption, user_id)
          VALUES
          (@created_at, @source, @tool_name, @action, @target,
           @knowledge_id, @knowledge_title, @page_id, @page_title,
-          @block_id, @block_caption)`,
+          @block_id, @block_caption, @user_id)`,
       )
       .run({
         created_at: new Date().toISOString(),
@@ -85,6 +92,7 @@ export class ActivityLogStore {
         page_title: entry.page_title ?? null,
         block_id: entry.block_id ?? null,
         block_caption: entry.block_caption ?? null,
+        user_id: ctx.user_id ?? null,
       });
   }
 
@@ -101,12 +109,14 @@ export class ActivityLogStore {
       opts.knowledge_id != null ? "WHERE knowledge_id = @kid" : "";
     const rows = this.db
       .prepare(
-        `SELECT id, created_at, source, tool_name, action, target,
-                knowledge_id, knowledge_title, page_id, page_title,
-                block_id, block_caption
-         FROM activity_log
-         ${wherePart}
-         ORDER BY id DESC
+        `SELECT a.id, a.created_at, a.source, a.tool_name, a.action, a.target,
+                a.knowledge_id, a.knowledge_title, a.page_id, a.page_title,
+                a.block_id, a.block_caption, a.user_id,
+                u.display_name AS user_name
+         FROM activity_log a
+         LEFT JOIN users u ON u.id = a.user_id
+         ${wherePart.replace("knowledge_id =", "a.knowledge_id =")}
+         ORDER BY a.id DESC
          LIMIT @limit OFFSET @offset`,
       )
       .all({

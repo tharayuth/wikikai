@@ -5,6 +5,7 @@ import { PageStore } from "./store/pages.js";
 import { ImageStore } from "./store/images.js";
 import { PromptLogStore } from "./store/promptLog.js";
 import { ActivityLogStore } from "./store/activityLog.js";
+import { SessionStore, UserStore } from "./store/users.js";
 import { buildToolHandlers } from "./mcp/handlers.js";
 import { createMcpServer } from "./mcp/server.js";
 import { buildApp } from "./web/app.js";
@@ -17,6 +18,8 @@ export interface RunningServer {
   images: ImageStore;
   promptLog: PromptLogStore;
   activityLog: ActivityLogStore;
+  users: UserStore;
+  sessions: SessionStore;
   close: () => Promise<void>;
 }
 
@@ -28,6 +31,34 @@ export async function startServer(): Promise<RunningServer> {
   const images = new ImageStore(db, config.imagesDir);
   const promptLog = new PromptLogStore(db);
   const activityLog = new ActivityLogStore(db);
+  const users = new UserStore(db);
+  const sessions = new SessionStore(db, users);
+  sessions.purgeExpired();
+
+  // Bootstrap admin from env vars when the users table is empty —
+  // lets a fresh install come up usable without a separate CLI.
+  let mcpDefaultUserId = config.mcpDefaultUserId;
+  if (users.count() === 0 && config.bootstrapAdmin) {
+    const admin = users.create({
+      email: config.bootstrapAdmin.email,
+      password: config.bootstrapAdmin.password,
+      display_name: config.bootstrapAdmin.display_name,
+      is_admin: true,
+    });
+    // eslint-disable-next-line no-console
+    console.log(
+      `[wikikai] bootstrap admin created — ${admin.email} (#${admin.id})`,
+    );
+    if (mcpDefaultUserId == null) mcpDefaultUserId = admin.id;
+  }
+  // Last-resort MCP default user: when none configured but at least one
+  // user exists, tag MCP rows with user #1 so the activity log isn't
+  // empty of user info.
+  if (mcpDefaultUserId == null && users.count() > 0) {
+    const first = users.list()[0];
+    if (first) mcpDefaultUserId = first.id;
+  }
+
   const handlers = buildToolHandlers(
     knowledge,
     pages,
@@ -38,7 +69,9 @@ export async function startServer(): Promise<RunningServer> {
       publicBaseUrl: config.publicBaseUrl,
     },
   );
-  const mcpHandler = createMcpHandler(() => createMcpServer(handlers));
+  const mcpHandler = createMcpHandler(() =>
+    createMcpServer(handlers, { defaultUserId: mcpDefaultUserId }),
+  );
 
   const app = buildApp({
     knowledge,
@@ -46,10 +79,14 @@ export async function startServer(): Promise<RunningServer> {
     images,
     promptLog,
     activityLog,
+    users,
+    sessions,
     handlers,
     publicBaseUrl: config.publicBaseUrl,
     mcpHandler,
     mcpToken: config.mcpToken,
+    webAuth: config.webAuth,
+    mcpDefaultUserId,
   });
 
   return new Promise((resolve, reject) => {
@@ -66,6 +103,8 @@ export async function startServer(): Promise<RunningServer> {
         images,
         promptLog,
         activityLog,
+        users,
+        sessions,
         close: () =>
           new Promise<void>((resolveClose, rejectClose) => {
             httpServer.close((err) => {

@@ -12,11 +12,16 @@ import {
 } from "../store/images.js";
 import type { PromptLogStore } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
+import type { UserStore, SessionStore } from "../store/users.js";
 import type { ToolHandlers } from "../mcp/handlers.js";
 import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
 import { onEvent } from "../lib/events.js";
-import { withCallContext } from "../lib/callContext.js";
+import {
+  attachAuthRoutes,
+  requireAuth,
+  sessionMiddleware,
+} from "./auth.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -27,11 +32,18 @@ export interface BuildAppOptions {
   images: ImageStore;
   promptLog: PromptLogStore;
   activityLog: ActivityLogStore;
+  users: UserStore;
+  sessions: SessionStore;
   handlers: ToolHandlers;
   publicBaseUrl: string;
   mcpHandler?: express.RequestHandler;
   /** When set, /mcp requires `Authorization: Bearer <token>` */
   mcpToken?: string | null;
+  /** When true, every web route (SPA + /api) requires a session
+   *  cookie; unauthenticated visitors get bounced to /login. */
+  webAuth?: boolean;
+  /** User id used to tag MCP-source activity-log rows. */
+  mcpDefaultUserId?: number | null;
 }
 
 export function buildApp(opts: BuildAppOptions): Express {
@@ -39,14 +51,20 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.use(express.json({ limit: "16mb" }));
   app.disable("x-powered-by");
 
-  // Tag every /api request with a web call-context so the activity-log
-  // recorder stamps these rows as `source: "web"` instead of "mcp".
-  // The MCP transport sets its own context via createMcpServer, so /mcp
-  // requests are unaffected. Read-only routes (GET) don't currently
-  // record activity, so the broad scope is fine.
-  app.use("/api", (_req, _res, next) => {
-    withCallContext({ source: "web" }, () => next());
-  });
+  const authOpts = {
+    users: opts.users,
+    sessions: opts.sessions,
+    enabled: !!opts.webAuth,
+  };
+
+  // Read the session cookie + populate `req.user` AND tag the call
+  // context for the activity-log recorder. Runs for every request so
+  // both /api and the static SPA can see who's asking.
+  app.use(sessionMiddleware(authOpts));
+  // Gate guard — when WIKIKAI_WEB_AUTH=1, anonymous /api calls get 401
+  // and anonymous SPA loads get redirected to /login.
+  app.use(requireAuth(authOpts));
+  attachAuthRoutes(app, authOpts);
 
   // ─── Images: content-addressed binary serving ───
   // Path is /img/<sha256>.<ext>; hash + ext are validated so no traversal

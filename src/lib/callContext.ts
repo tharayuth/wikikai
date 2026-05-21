@@ -18,6 +18,10 @@ export interface CallContext {
   source: "mcp" | "web";
   /** Set only when source === "mcp". */
   tool_name?: string;
+  /** Set when the request belongs to a known user. For web routes this
+   *  comes from the session cookie; for MCP it comes from the
+   *  configured `mcpDefaultUserId`. Null when neither applies. */
+  user_id?: number | null;
 }
 
 const storage = new AsyncLocalStorage<CallContext>();
