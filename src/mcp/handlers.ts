@@ -969,6 +969,37 @@ export function buildToolHandlers(
       enabled: aclEnabled,
     });
   }
+
+  function gateEditByKid(kid: number): void {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return;
+    const k = knowledge.get(kid);
+    if (!k || !k.project) return; // let the handler throw its own not-found
+    assertProjectAccess(user, k.project, "edit", permissions, {
+      enabled: aclEnabled,
+    });
+  }
+
+  function gateEditByPid(pid: number): void {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return;
+    const page = pages.getMetadata(pid);
+    if (!page) return;
+    const k = knowledge.get(page.knowledge_id);
+    if (!k || !k.project) return;
+    assertProjectAccess(user, k.project, "edit", permissions, {
+      enabled: aclEnabled,
+    });
+  }
+
+  function gateEditByProject(project: string | null | undefined): void {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return;
+    if (!project) return;
+    assertProjectAccess(user, project, "edit", permissions, {
+      enabled: aclEnabled,
+    });
+  }
   // Snapshot title/caption helpers used by the activity-log recorder.
   // Best-effort — if the target doesn't exist (e.g. we're logging a
   // delete that already happened), fall back to null and let the entry
@@ -1035,6 +1066,7 @@ export function buildToolHandlers(
   return {
     async add_knowledge(input) {
       const parsed = AddKnowledgeSchema.parse(input);
+      gateEditByProject(parsed.project);
       const k = knowledge.add(parsed);
       let first_page;
       if (parsed.first_page) {
@@ -1063,6 +1095,13 @@ export function buildToolHandlers(
 
     async edit_knowledge(input) {
       const parsed = EditKnowledgeSchema.parse(input);
+      gateEditByKid(parsed.id);
+      if (parsed.project) {
+        const current = knowledge.get(parsed.id);
+        if (current && current.project !== parsed.project) {
+          gateEditByProject(parsed.project);
+        }
+      }
       const r = knowledge.update(parsed.id, parsed);
       logIf("edit_knowledge", parsed.user_prompt, r.id, null, null);
       recordActivity({
@@ -1100,6 +1139,7 @@ export function buildToolHandlers(
 
     async delete_knowledge(input) {
       const parsed = DeleteKnowledgeSchema.parse(input);
+      gateEditByKid(parsed.id);
       // Snapshot the title BEFORE we drop the row so the audit row stays
       // meaningful after the knowledge is gone.
       const before = knowledge.get(parsed.id);
@@ -1135,6 +1175,7 @@ export function buildToolHandlers(
 
     async add_page(input) {
       const parsed = AddPageSchema.parse(input);
+      gateEditByKid(parsed.knowledge_id);
       const r = pages.add(parsed);
       logIf("add_page", parsed.user_prompt, parsed.knowledge_id, r.id, 1);
       recordActivity({
@@ -1155,6 +1196,7 @@ export function buildToolHandlers(
 
     async edit_page(input) {
       const parsed = EditPageSchema.parse(input);
+      gateEditByPid(parsed.page_id);
       const before = pages.getMetadata(parsed.page_id);
       if (!before) throw new Error(`page #${parsed.page_id} not found`);
       const r = pages.update(parsed.page_id, parsed);
@@ -1182,6 +1224,7 @@ export function buildToolHandlers(
 
     async append_page(input) {
       const parsed = AppendPageSchema.parse(input);
+      gateEditByPid(parsed.page_id);
       const before = pages.getMetadata(parsed.page_id);
       if (!before) throw new Error(`page #${parsed.page_id} not found`);
       const r = pages.append(parsed.page_id, parsed.text);
@@ -1209,6 +1252,7 @@ export function buildToolHandlers(
 
     async delete_page(input) {
       const parsed = DeletePageSchema.parse(input);
+      gateEditByPid(parsed.page_id);
       // Snapshot title + parent knowledge BEFORE removing so the audit
       // row keeps human-readable context.
       const before = pages.getMetadata(parsed.page_id);
@@ -1232,6 +1276,7 @@ export function buildToolHandlers(
 
     async reorder_pages(input) {
       const parsed = ReorderPagesSchema.parse(input);
+      gateEditByKid(parsed.knowledge_id);
       pages.reorder(parsed.knowledge_id, parsed.order);
       recordActivity({
         action: "reorder",
@@ -1332,6 +1377,7 @@ export function buildToolHandlers(
 
     async edit_lines(input) {
       const parsed = EditLinesSchema.parse(input);
+      gateEditByPid(parsed.page_id);
       const meta = pages.getMetadata(parsed.page_id);
       if (!meta) throw new Error(`page #${parsed.page_id} not found`);
       const r = pages.editLines(
@@ -1365,6 +1411,7 @@ export function buildToolHandlers(
 
     async edit_section(input) {
       const parsed = EditSectionSchema.parse(input);
+      gateEditByPid(parsed.page_id);
       const meta = pages.getMetadata(parsed.page_id);
       if (!meta) throw new Error(`page #${parsed.page_id} not found`);
       const r = pages.editSection(parsed.page_id, parsed.heading, parsed.new_content);
@@ -1393,6 +1440,11 @@ export function buildToolHandlers(
 
     async replace_text(input) {
       const parsed = ReplaceTextSchema.parse(input);
+      if (parsed.page_id != null) {
+        gateEditByPid(parsed.page_id);
+      } else {
+        gateEditByKid(parsed.knowledge_id);
+      }
       const r = pages.replaceText(
         parsed.knowledge_id,
         parsed.page_id,
@@ -1510,6 +1562,8 @@ export function buildToolHandlers(
 
     async set_block_caption(input) {
       const parsed = SetBlockCaptionSchema.parse(input);
+      const summary = pages.getBlockSummary(parsed.id);
+      if (summary) gateEditByProject(summary.project);
       const r = pages.setBlockCaption(parsed.id, parsed.caption);
       logIf(
         "set_block_caption",
@@ -1534,6 +1588,9 @@ export function buildToolHandlers(
 
     async add_image(input) {
       const parsed = AddImageSchema.parse(input);
+      // add_image has no knowledge_id binding — images live in a shared
+      // pool and are linked by reference from page content. The eventual
+      // page edit that embeds the image will enforce per-project edit.
       const raw = parsed.data_base64.replace(/^data:[^,]+,/, ""); // strip data: URI if present
       let bytes: Buffer;
       try {
@@ -1616,6 +1673,7 @@ export function buildToolHandlers(
 
     async toggle_task(input) {
       const parsed = ToggleTaskSchema.parse(input);
+      gateEditByPid(parsed.page_id);
       const meta = pages.getMetadata(parsed.page_id);
       if (!meta) throw new Error(`page #${parsed.page_id} not found`);
       const r = pages.toggleTaskAtIndex(parsed.page_id, parsed.index, {

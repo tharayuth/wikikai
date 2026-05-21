@@ -483,4 +483,70 @@ describe("MCP tool handlers", () => {
       ).resolves.toBeTruthy();
     });
   });
+
+  describe("MCP write gating", () => {
+    it("add_knowledge denied without edit on the requested project", async () => {
+      knowledge.registerProject("alpha");
+      const alice = users.create({
+        email: "writer-alice",
+        password: "x",
+        display_name: "A",
+      });
+      permissions.replaceForUser(
+        alice.id,
+        [{ project: "alpha", level: "view" }],
+        null,
+      );
+      await expect(
+        withCallContext(
+          { source: "mcp", tool_name: "add_knowledge", user_id: alice.id },
+          () => h.add_knowledge({ title: "X", project: "alpha" }),
+        ),
+      ).rejects.toThrow(/edit/);
+    });
+
+    it("edit_page denied on view-only project", async () => {
+      knowledge.registerProject("alpha");
+      const k = await h.add_knowledge({ title: "K", project: "alpha" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "x" });
+      const alice = users.create({
+        email: "writer-alice2",
+        password: "x",
+        display_name: "A",
+      });
+      permissions.replaceForUser(
+        alice.id,
+        [{ project: "alpha", level: "view" }],
+        null,
+      );
+      await expect(
+        withCallContext(
+          { source: "mcp", tool_name: "edit_page", user_id: alice.id },
+          () => h.edit_page({ page_id: p.id, content: "new" }),
+        ),
+      ).rejects.toThrow(/edit/);
+    });
+
+    it("edit access lets the caller mutate", async () => {
+      knowledge.registerProject("alpha");
+      const k = await h.add_knowledge({ title: "K2", project: "alpha" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "x" });
+      const alice = users.create({
+        email: "writer-alice3",
+        password: "x",
+        display_name: "A",
+      });
+      permissions.replaceForUser(
+        alice.id,
+        [{ project: "alpha", level: "edit" }],
+        null,
+      );
+      await expect(
+        withCallContext(
+          { source: "mcp", tool_name: "edit_page", user_id: alice.id },
+          () => h.edit_page({ page_id: p.id, content: "new" }),
+        ),
+      ).resolves.toBeTruthy();
+    });
+  });
 });
