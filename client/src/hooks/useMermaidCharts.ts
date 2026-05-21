@@ -115,6 +115,51 @@ function ensureMermaid(theme: "default" | "dark"): void {
   });
 }
 
+// ─── Mermaid run queue ───
+// Mermaid 11.x holds module-level state during async renders (diagram
+// registry, parser cache, …). If `mermaid.run()` is called a second
+// time before the first call's promise settles — exactly what happens
+// on a fast page-switch — the two runs can clobber each other and the
+// second batch ends up rendering the "Syntax error in text mermaid
+// version 11.15.0" placeholder SVG.
+//
+// Two-part fix: (a) always restore raw source + clear `data-processed`
+// so mermaid re-renders the new batch from scratch (no caching on
+// stale node refs), and (b) serialise every `mermaid.run` call through
+// a single module-level queue so concurrent page navigations can't
+// race inside mermaid.
+let mermaidQueue: Promise<void> = Promise.resolve();
+
+function queueMermaidRun(nodes: HTMLElement[]): Promise<void> {
+  const myNodes = nodes.slice();
+  const job = mermaidQueue
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await mermaid.run({ nodes: myNodes });
+      } catch (err) {
+        // If the first attempt failed (or rendered the syntax-error
+        // SVG), restore raw source and retry once on the next tick —
+        // by which point any in-flight stale state has fully settled.
+        // eslint-disable-next-line no-console
+        console.warn("mermaid first-pass error, retrying once:", err);
+        await new Promise((r) => setTimeout(r, 30));
+        for (const n of myNodes) {
+          if (n.dataset.raw) n.innerHTML = n.dataset.raw;
+          n.removeAttribute("data-processed");
+        }
+        try {
+          await mermaid.run({ nodes: myNodes });
+        } catch (err2) {
+          // eslint-disable-next-line no-console
+          console.error("mermaid retry error:", err2);
+        }
+      }
+    });
+  mermaidQueue = job;
+  return job;
+}
+
 /**
  * After mounting rendered HTML, find <pre class="mermaid"> blocks and process them,
  * and <canvas class="chart" data-chart="..."> blocks and instantiate Chart.js.
@@ -136,19 +181,20 @@ export function useMermaidCharts(
     // ─── Mermaid ───
     const mermaidNodes = Array.from(root.querySelectorAll<HTMLElement>("pre.mermaid"));
     for (const node of mermaidNodes) {
-      // restore raw source if previously processed
-      if (node.dataset.processed === "true" && node.dataset.raw) {
-        node.removeAttribute("data-processed");
-        node.innerHTML = node.dataset.raw;
-      } else if (!node.dataset.raw) {
+      // Cache the raw mermaid source on first sight (innerHTML before
+      // mermaid replaces it with SVG). Subsequent runs always start
+      // from this raw text — never the previous run's SVG output.
+      if (!node.dataset.raw) {
         node.dataset.raw = node.innerHTML;
+      } else {
+        node.innerHTML = node.dataset.raw;
       }
+      // Drop the "already processed" marker mermaid sets on success —
+      // we always want a fresh render for the current effect run.
+      node.removeAttribute("data-processed");
     }
     if (mermaidNodes.length > 0) {
-      mermaid.run({ nodes: mermaidNodes }).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.error("mermaid render error:", err);
-      });
+      queueMermaidRun(mermaidNodes);
       // Attach click → open standalone viewer in a new tab.
       if (pageId !== undefined) {
         mermaidNodes.forEach((node, idx) => {
