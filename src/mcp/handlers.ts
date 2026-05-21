@@ -5,6 +5,9 @@ import type { ImageStore } from "../store/images.js";
 import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
 import type { PermissionStore } from "../store/permissions.js";
+import type { User, UserStore } from "../store/users.js";
+import { getCallContext } from "../lib/callContext.js";
+import { assertProjectAccess } from "../lib/permissions.js";
 import {
   stripInlineStyles,
   stripHtmlEmbedStylesInMarkdown,
@@ -919,12 +922,53 @@ export function buildToolHandlers(
   promptLog: PromptLogStore,
   activityLog: ActivityLogStore,
   ctx: HandlerContext,
-  permissions?: PermissionStore,
+  permissions: PermissionStore,
+  users: UserStore,
 ): ToolHandlers {
   const aclEnabled = ctx.projectAclEnabled ?? true;
-  // Reserved for upcoming ACL enforcement — Task 4 is pure plumbing.
-  void permissions;
-  void aclEnabled;
+
+  function resolveCallerForAcl(): { user: User | null } {
+    const { user_id } = getCallContext();
+    const user = user_id != null ? users.get(user_id) : null;
+    return { user };
+  }
+
+  function gateReadByKid(kid: number): void {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return;
+    const k = knowledge.get(kid);
+    if (!k || !k.project) return; // let the handler throw its own not-found
+    assertProjectAccess(user, k.project, "view", permissions, {
+      enabled: aclEnabled,
+    });
+  }
+
+  function gateReadByPid(pid: number): void {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return;
+    const page = pages.getMetadata(pid);
+    if (!page) return;
+    const k = knowledge.get(page.knowledge_id);
+    if (!k || !k.project) return;
+    assertProjectAccess(user, k.project, "view", permissions, {
+      enabled: aclEnabled,
+    });
+  }
+
+  function visibleProjectsForCaller(): Set<string> | null {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return null;
+    return new Set(permissions.listVisibleProjects(user.id, false));
+  }
+
+  function gateReadByProject(project: string | null | undefined): void {
+    const { user } = resolveCallerForAcl();
+    if (!user || !aclEnabled || user.is_admin) return;
+    if (!project) return;
+    assertProjectAccess(user, project, "view", permissions, {
+      enabled: aclEnabled,
+    });
+  }
   // Snapshot title/caption helpers used by the activity-log recorder.
   // Best-effort — if the target doesn't exist (e.g. we're logging a
   // delete that already happened), fall back to null and let the entry
@@ -1031,11 +1075,18 @@ export function buildToolHandlers(
 
     async list_knowledge(input) {
       const parsed = ListKnowledgeSchema.parse(input);
-      return knowledge.list(parsed).map((k) => withUrl(ctx, k));
+      const visible = visibleProjectsForCaller();
+      const rows = knowledge.list(parsed);
+      const filtered =
+        visible === null
+          ? rows
+          : rows.filter((k) => k.project != null && visible.has(k.project));
+      return filtered.map((k) => withUrl(ctx, k));
     },
 
     async get_knowledge(input) {
       const parsed = GetKnowledgeSchema.parse(input);
+      gateReadByKid(parsed.id);
       const meta = knowledge.get(parsed.id);
       if (!meta) throw new Error(`knowledge #${parsed.id} not found`);
       const includePages = parsed.include_pages ?? true;
@@ -1066,6 +1117,7 @@ export function buildToolHandlers(
 
     async get_outline(input) {
       const parsed = GetOutlineSchema.parse(input);
+      gateReadByKid(parsed.knowledge_id);
       const meta = knowledge.get(parsed.knowledge_id);
       if (!meta) throw new Error(`knowledge #${parsed.knowledge_id} not found`);
       const out = pages.outline(parsed.knowledge_id);
@@ -1174,6 +1226,7 @@ export function buildToolHandlers(
 
     async list_pages(input) {
       const parsed = ListPagesSchema.parse(input);
+      gateReadByKid(parsed.knowledge_id);
       return pages.list(parsed.knowledge_id).map((p) => pageWithUrl(ctx, p));
     },
 
@@ -1192,6 +1245,7 @@ export function buildToolHandlers(
 
     async read_page(input) {
       const parsed = ReadPageSchema.parse(input);
+      gateReadByPid(parsed.page_id);
       const meta = pages.getMetadata(parsed.page_id);
       if (!meta) throw new Error(`page #${parsed.page_id} not found`);
       const r = pages.readLines(parsed.page_id, parsed.line_start, parsed.line_end);
@@ -1381,12 +1435,17 @@ export function buildToolHandlers(
         knowledge_id: parsed.knowledge_id,
         limit: parsed.limit,
       });
+      const visible = visibleProjectsForCaller();
+      const filtered =
+        visible === null
+          ? hits
+          : hits.filter((h) => h.project != null && visible.has(h.project));
       return {
-        hits: hits.map((h) => ({
+        hits: filtered.map((h) => ({
           ...h,
           url: urlFor(ctx, h.knowledge_id, h.page_id, h.line),
         })),
-        total: hits.length,
+        total: filtered.length,
       };
     },
 
@@ -1395,6 +1454,7 @@ export function buildToolHandlers(
       if (parsed.summary) {
         const s = pages.getBlockSummary(parsed.id);
         if (!s) throw new Error(`block @${parsed.id} not found`);
+        gateReadByProject(s.project);
         return {
           ...s,
           url: urlFor(ctx, s.knowledge_id, s.page_id, s.line_start),
@@ -1402,6 +1462,7 @@ export function buildToolHandlers(
       }
       const b = pages.getBlock(parsed.id);
       if (!b) throw new Error(`block @${parsed.id} not found`);
+      gateReadByProject(b.project);
       // For html-embed blocks, strip inline `style="..."` by default
       // so AI editing the body doesn't pay for presentation tokens.
       // `include_styles: true` keeps the raw HTML verbatim.
@@ -1422,6 +1483,7 @@ export function buildToolHandlers(
     async get_table_row(input) {
       const parsed = GetTableRowSchema.parse(input);
       const r = pages.getTableRow(parsed.block_id, parsed.index);
+      gateReadByKid(r.knowledge_id);
       return {
         ...r,
         url: urlFor(ctx, r.knowledge_id, r.page_id, r.source_line),
@@ -1436,6 +1498,7 @@ export function buildToolHandlers(
         columns: parsed.columns,
         limit: parsed.limit,
       });
+      gateReadByKid(r.knowledge_id);
       return {
         ...r,
         matches: r.matches.map((m) => ({
@@ -1537,6 +1600,7 @@ export function buildToolHandlers(
 
     async get_prompt_log(input) {
       const parsed = GetPromptLogSchema.parse(input);
+      gateReadByKid(parsed.knowledge_id);
       const meta = knowledge.get(parsed.knowledge_id);
       if (!meta) throw new Error(`knowledge #${parsed.knowledge_id} not found`);
       const entries = promptLog.listForKnowledge(parsed.knowledge_id, {

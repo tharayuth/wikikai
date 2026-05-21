@@ -9,13 +9,17 @@ import { ImageStore } from "../src/store/images.js";
 import { PromptLogStore } from "../src/store/promptLog.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
 import { PermissionStore } from "../src/store/permissions.js";
+import { UserStore } from "../src/store/users.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
+import { withCallContext } from "../src/lib/callContext.js";
 
 describe("MCP tool handlers", () => {
   let tmpDir: string;
   let h: ReturnType<typeof buildToolHandlers>;
   let knowledge: KnowledgeStore;
   let pages: PageStore;
+  let permissions: PermissionStore;
+  let users: UserStore;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aim-tools-"));
@@ -25,8 +29,9 @@ describe("MCP tool handlers", () => {
     const images = new ImageStore(db, path.join(tmpDir, "images"));
     const promptLog = new PromptLogStore(db);
     const activityLog = new ActivityLogStore(db);
-    const permissions = new PermissionStore(db);
-    h = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions);
+    permissions = new PermissionStore(db);
+    users = new UserStore(db);
+    h = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users);
   });
 
   afterEach(() => {
@@ -410,6 +415,72 @@ describe("MCP tool handlers", () => {
       await h.delete_knowledge({ id: k.id });
       expect(fs.existsSync(fp)).toBe(false);
       expect(await h.list_pages({ knowledge_id: k.id })).toEqual([]);
+    });
+  });
+
+  describe("MCP read gating", () => {
+    it("list_knowledge filters to visible projects for non-admin", async () => {
+      knowledge.registerProject("alpha");
+      knowledge.registerProject("beta");
+      await h.add_knowledge({ title: "A", project: "alpha" });
+      await h.add_knowledge({ title: "B", project: "beta" });
+
+      const alice = users.create({
+        email: "alice",
+        password: "x",
+        display_name: "Alice",
+      });
+      permissions.replaceForUser(
+        alice.id,
+        [{ project: "alpha", level: "view" }],
+        null,
+      );
+
+      const out = await withCallContext(
+        { source: "mcp", tool_name: "list_knowledge", user_id: alice.id },
+        () => h.list_knowledge({}),
+      );
+      const titles = out.map((k) => k.title);
+      expect(titles).toContain("A");
+      expect(titles).not.toContain("B");
+    });
+
+    it("get_knowledge throws on a forbidden id", async () => {
+      knowledge.registerProject("alpha");
+      knowledge.registerProject("beta");
+      const kB = await h.add_knowledge({ title: "B", project: "beta" });
+      const alice = users.create({
+        email: "alice2",
+        password: "x",
+        display_name: "Alice2",
+      });
+      permissions.replaceForUser(
+        alice.id,
+        [{ project: "alpha", level: "view" }],
+        null,
+      );
+      await expect(
+        withCallContext(
+          { source: "mcp", tool_name: "get_knowledge", user_id: alice.id },
+          () => h.get_knowledge({ id: kB.id }),
+        ),
+      ).rejects.toThrow(/no access/);
+    });
+
+    it("admin user bypasses ACL", async () => {
+      const kB = await h.add_knowledge({ title: "B", project: "beta" });
+      const admin2 = users.create({
+        email: "admin2",
+        password: "x",
+        display_name: "A2",
+        is_admin: true,
+      });
+      await expect(
+        withCallContext(
+          { source: "mcp", tool_name: "get_knowledge", user_id: admin2.id },
+          () => h.get_knowledge({ id: kB.id }),
+        ),
+      ).resolves.toBeTruthy();
     });
   });
 });

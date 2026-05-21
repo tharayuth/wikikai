@@ -78,6 +78,7 @@ export async function startServer(): Promise<RunningServer> {
       projectAclEnabled: config.projectAclEnabled,
     },
     permissions,
+    users,
   );
   const mcpHandler = createMcpHandler(() =>
     createMcpServer(handlers, { defaultUserId: mcpDefaultUserId }),
