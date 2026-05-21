@@ -21,7 +21,8 @@ import { setSseStatus } from "../store/uiSlice";
 type ServerEvent =
   | { type: "page-changed"; page_id: number; knowledge_id: number }
   | { type: "page-deleted"; page_id: number; knowledge_id: number }
-  | { type: "knowledge-changed"; knowledge_id?: number };
+  | { type: "knowledge-changed"; knowledge_id?: number }
+  | { type: "activity-logged"; knowledge_id: number | null };
 
 const REFRESH_TAGS = [
   { type: "KnowledgeList", id: "LIST" },
@@ -107,6 +108,19 @@ export function useServerEvents(): void {
             tags.push({ type: "Knowledge", id: e.knowledge_id });
           }
           dispatch(portalApi.util.invalidateTags(tags));
+          break;
+        }
+        case "activity-logged": {
+          // Audit-log only — narrowly refresh the ActivityLogModal list.
+          // Every mutation path goes through ActivityLogStore.record(),
+          // so this guarantees the dialog stays current even for paths
+          // that don't emit knowledge-changed (image upload, block
+          // toggle, caption, resize).
+          dispatch(
+            portalApi.util.invalidateTags([
+              { type: "ActivityLog", id: "LIST" },
+            ]),
+          );
           break;
         }
       }

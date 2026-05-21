@@ -11,11 +11,17 @@ import { EventEmitter } from "node:events";
  *   knowledge-changed — a knowledge's metadata / pages list changed.
  *                       knowledge_id absent ⇒ the list itself changed
  *                       (a knowledge was added / removed).
+ *   activity-logged  — a new row was inserted into activity_log.
+ *                       knowledge_id is the row's knowledge_id (null
+ *                       for log entries without a knowledge target —
+ *                       e.g. image uploads). The open ActivityLogModal
+ *                       refreshes its list on this signal.
  */
 export type WikikaiEvent =
   | { type: "page-changed"; page_id: number; knowledge_id: number }
   | { type: "page-deleted"; page_id: number; knowledge_id: number }
-  | { type: "knowledge-changed"; knowledge_id?: number };
+  | { type: "knowledge-changed"; knowledge_id?: number }
+  | { type: "activity-logged"; knowledge_id: number | null };
 
 const bus = new EventEmitter();
 // Each open SSE response registers a listener; remove the default cap

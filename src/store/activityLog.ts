@@ -1,5 +1,6 @@
 import type { Db } from "./db.js";
 import { getCallContext } from "../lib/callContext.js";
+import { emitEvent } from "../lib/events.js";
 
 export type ActivityAction =
   | "add"
@@ -94,6 +95,14 @@ export class ActivityLogStore {
         block_caption: entry.block_caption ?? null,
         user_id: ctx.user_id ?? null,
       });
+    // Notify the SSE hub so any open ActivityLogModal refetches —
+    // without this signal the dialog goes stale on mutation paths
+    // that don't already emit knowledge-changed (image upload,
+    // block toggle, etc.).
+    emitEvent({
+      type: "activity-logged",
+      knowledge_id: entry.knowledge_id ?? null,
+    });
   }
 
   /** List entries newest-first. Optional `knowledge_id` narrows to a

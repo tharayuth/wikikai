@@ -769,4 +769,47 @@ describe("HTTP routes", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/project/);
   });
+
+  it("ActivityLogStore.record emits an activity-logged event", async () => {
+    // Lazy-import so the events bus singleton is the one the store uses.
+    const { onEvent } = await import("../src/lib/events.js");
+
+    const captured: Array<{ type: string; knowledge_id: number | null }> = [];
+    const off = onEvent((e) => {
+      if (e.type === "activity-logged") {
+        captured.push({ type: e.type, knowledge_id: e.knowledge_id });
+      }
+    });
+
+    try {
+      const k = knowledge.add({ title: "K", project: "examples" });
+      // Filter out the knowledge-add ripple — only count rows we record below.
+      captured.length = 0;
+
+      const db = openDb(":memory:");
+      const log = new ActivityLogStore(db);
+      log.record({
+        action: "edit",
+        target: "knowledge",
+        knowledge_id: k.id,
+        knowledge_title: "K",
+      });
+
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toEqual({
+        type: "activity-logged",
+        knowledge_id: k.id,
+      });
+
+      // null knowledge_id (e.g. image upload) should pass through.
+      log.record({ action: "upload", target: "image" });
+      expect(captured).toHaveLength(2);
+      expect(captured[1]).toEqual({
+        type: "activity-logged",
+        knowledge_id: null,
+      });
+    } finally {
+      off();
+    }
+  });
 });
