@@ -37,7 +37,10 @@ Skip WikiKai for: one-shot questions, code-only edits, chit-chat.
 - `reorder_pages({ knowledge_id, order: [pid, pid, ...] })`
 
 ### Fine-grained edits
-- `read_page({ page_id, line_start?, line_end? })` — content + `total_lines` + `hash` + parent knowledge structure.
+- `read_page({ page_id, line_start?, line_end?, mode? })` — content + `total_lines` + `hash` + parent knowledge structure. Two modes:
+  - **`mode: "summary"` (recommended first read)** — every annotated rich block + table collapses to a one-line placeholder `[@N kind: caption]` (or `[@N table 12r × 3c: caption]`); response also gains a `blocks` array with each id / kind / caption / source-line range. Typical 5–10× token saving on pages with diagrams or large tables. AI's default workflow: probe with `summary` → fetch full bodies via `get_block({ id })` only for the ones it actually needs.
+  - **`mode: "full"` (default; use when you'll edit)** — verbatim markdown with `hash` for `expected_hash` gating. Line numbers match source. Always switch to `full` (or pass `line_start`/`line_end`) immediately before `edit_lines`.
+  - **`include_styles: false` (default for both modes)** — every `style="..."` attribute inside `html-embed` fences is stripped from the returned content. Inline styles routinely eat 60-70% of an html-embed block's tokens with zero value for editing text/structure. Pass `include_styles: true` only when you're working on presentation (recolour, redesign). `get_block({ id })` has the same flag with the same default; only the `style=` attr is stripped — every other attribute (src/href/alt/title/data-*/class) stays. **`hash` is OMITTED when content is stripped** — writing the stripped HTML back via `edit_lines` would silently wipe the user's inline styles, so the server forces you to re-read with `include_styles: true` first to get a hash for editing.
 - `edit_lines({ page_id, line_start, line_end, new_text, expected_hash?, user_prompt? })` — line range replace. Pass `expected_hash` from a recent `read_page` to gate stale edits.
 - `edit_section({ page_id, heading, new_content, user_prompt? })` — **PREFER THIS** over line edits — heading-anchored replace, stable across other edits.
 - `replace_text({ knowledge_id, page_id?, find, replace, count?, user_prompt? })`
@@ -46,11 +49,13 @@ Skip WikiKai for: one-shot questions, code-only edits, chit-chat.
 - `search({ query, project?, knowledge_id?, limit? })` — SQLite FTS5 across content/title/keywords. Returns hits with `url`.
 - `get_example({ kind?, outline_only?, line_start?, line_end? })` — markdown reference. **Use `outline_only: true` first** (10× cheaper). `kind` = `full` / `minimal` / `mermaid` / `chart` / `stats` / `steps` / `er` / `html`.
 - `get_prompt_log({ knowledge_id, limit?, offset? })` — read the rolling audit trail of `user_prompt` values per knowledge. Each entry: `{ page_id?, page_version?, tool_name, prompt, created_at }`. Use to answer "why did revision N happen?"
-- `toggle_task({ page_id, index })` — flip the Nth GFM `- [ ]` / `- [x]` task or `<input type="checkbox">` inside `html-embed` on a page (0-based, document order, skipping code fences). Same path the web checkbox uses.
+- `toggle_task({ page_id, index, expected_version? })` — flip the Nth interactive checkbox on a page (0-based, document order, skipping non-html-embed code fences). Counts three sources in source order: GFM `- [ ]`/`- [x]` task items, `[ ]`/`[x]` **anywhere inside a markdown-table cell** (start, middle, multiple per cell), and `<input type="checkbox">` inside `html-embed`. Same path the web checkbox uses.
+  - **Pass `expected_version` from your most recent `read_page` / `get_block`** when you call toggle from an AI workflow. Indices are recomputed top-down on every call, so if another tool added a checkbox earlier between your read and your toggle, index N now points at a different box. With `expected_version` the server rejects the call instead of flipping the wrong one. Web-UI clicks omit it (no race window).
 
 ### Interactive checkboxes (GFM, not a fence)
 - Write plain GFM task items anywhere a normal markdown list works: `- [ ] task` / `- [x] done`. They render as clickable checkboxes; clicking flips the source (version bump + revision + FTS reindex).
-- For checkboxes **inside a table** or any custom layout, drop raw `<input type="checkbox">` (with or without `checked`) into an `html-embed` block — the renderer rewrites them so they're live and share the same toggle index.
+- **Inside a plain markdown table**: drop `[ ]` or `[x]` anywhere in any cell (start, middle, multiple per cell) — each becomes a live checkbox sharing the same toggle-index counter as the GFM list above. The match requires the bracket pair to be bounded by whitespace or the cell separator `|`, so `[abc]`, markdown links like `[link](url)`, and bracket-heavy code references like `arr[i]` aren't mis-detected. To keep a literal `[x]` as text (e.g. when documenting the syntax inside a cell), wrap it in backticks: `` `[x]` `` becomes inline code and is skipped.
+- For checkboxes inside a custom HTML layout (gradient cards, sticky-header tables, badges, …), drop raw `<input type="checkbox">` (with or without `checked`) into an `html-embed` block — same toggle index. Prefer the plain-markdown form for ordinary tables; use `html-embed` only when you need full HTML/CSS control.
 - AI can drive the same toggle without the UI via `toggle_task({ page_id, index })`.
 - **Do not** use a `checklist` fence — that block was retired; if you see one in an old page, replace it with GFM tasks on save.
 
@@ -107,13 +112,38 @@ Returns hits with `url`, `line`, `snippet`, `page_title`, `knowledge_title`. Ope
 
 ## Content fences (use them — they render rich)
 
+### Block-choice rule
+
+**Reach for plain markdown + a prepared semantic block FIRST.** Only escalate to `html-embed` when the prepared blocks genuinely can't express what the reader needs to see, AND a custom HTML layout meaningfully improves understanding (gradient status cards, color-coded decision matrices, flex layouts with badges, `<details>` accordions, inline SVG diagrams, iframes).
+
+Why this order:
+- Prepared blocks are **cheaper to read** (no inline-style noise — `html-embed` style attrs are stripped by default for AI but the cost remains for human review/diff)
+- Prepared blocks get **richer tooling** — `find_table_rows`, `get_table_row`, chart re-themes, `@N` referencing all work out of the box
+- Prepared blocks **render consistently** across light/dark themes; html-embed often needs theme-aware CSS to look right
+- Inline `style="..."` in `html-embed` averages 60-70% of the block's bytes — picking the right semantic block avoids that cost entirely
+
+Pick by intent:
+
+| You want to show… | Use |
+|---|---|
+| Flow, sequence, ER, gantt, state, mindmap | ```mermaid |
+| Numeric series / comparison / trend | ```chart (single) or ```chart-grid (multiple) |
+| KPI numbers, dashboard headline figures | ```stats |
+| Ordered procedure, how-to, deployment runbook | ```steps |
+| Tabular data | **plain markdown table** (gets `@N`, `[ ]`/`[x]` in cells, `find_table_rows` search, `get_table_row` random access) |
+| 4+ side-by-side screenshots as gallery | ```images |
+| Single image inline / in prose / in a table cell | plain markdown `![alt](src "WxH")` (has drag-resize + click-lightbox) |
+| Decision matrix with row/col colors, gradient cards, badges, custom `<details>`, inline SVG, iframe | ```html-embed (last resort) |
+
+### Fence catalog
+
 ```mermaid           — flowchart/sequence/ER/gantt/state
 ```chart             — single Chart.js (JSON config)
 ```chart-grid        — array of charts side-by-side
 ```stats             — array of { num, label, color? } (purple/blue/green/amber/red/cyan)
 ```steps             — array of { title, body? } — auto-numbered cards, body is markdown
-```html-embed        — raw HTML for flexible content (richer tables with row colors / col-span / sticky headers, custom card/grid layouts, inline SVG, iframes, <details>). <script> tags are inert by design
-```images            — single image or gallery — array of { src, alt?, caption? }. UI renders as a thumbnail grid; click opens a lightbox
+```html-embed        — raw HTML for flexible content (richer tables with row colors / col-span / sticky headers, custom card/grid layouts, inline SVG, iframes, <details>). <script> tags are inert by design. **Last resort** — see block-choice rule above
+```images            — multi-image GALLERY only (4+ side-by-side thumbnails as a uniform grid). For a single image, use plain markdown `![alt](src "WxH")` instead — it now has drag-to-resize + click-to-lightbox, so it covers the same use case with less syntax
 ```typescript / etc  — code blocks with Shiki highlight
 
 ## Images
@@ -121,18 +151,32 @@ Returns hits with `url`, `line`, `snippet`, `page_title`, `knowledge_title`. Ope
 To attach an image to a knowledge page:
 
 1. `add_image({ data_base64, mime_type, alt? })` — uploads bytes. Returns `{ src: "/img/<hash>.<ext>", hash, size_bytes, … }`. Content-addressed → identical bytes dedupe automatically.
-2. Embed the returned `src` in markdown in one of two ways:
+2. Embed the returned `src` in markdown. **Default: plain markdown image** — covers virtually every case:
 
-   **A. Plain gallery — `images` fence** (recommended when the image stands on its own):
+   ```markdown
+   ![Pipeline overview](/img/abc.png "720x")
+   ```
+
+   - Title slot encodes max size: `"WxH"` / `"Wx"` / `"xH"` / `"caption w=300 h=200"` (caption form when you want both text and sizing).
+   - Works in paragraphs, list items, AND markdown table cells.
+   - Web UI adds drag-to-resize handles on hover (right/bottom/corner) → drop and the new size is persisted to the title slot via `POST /api/pages/:pid/image-size`.
+   - Click the image → fullscreen lightbox with the original resolution.
+   - Article column is ~860 px on a typical screen; `"720x"` is a safe full-bleed cap.
+
+   Two specialised surfaces, reach for only when the default doesn't fit:
+
+   **A. Multi-image gallery — `images` fence** (4+ side-by-side thumbnails as a uniform grid):
    ```images
    [
      { "src": "/img/abc.png", "alt": "Pipeline overview", "caption": "Phase 1" },
-     { "src": "/img/def.jpg", "alt": "Result chart" }
+     { "src": "/img/def.jpg", "alt": "Result chart" },
+     { "src": "/img/ghi.jpg", "alt": "Final dashboard" },
+     { "src": "/img/jkl.jpg", "alt": "Audit log" }
    ]
    ```
-   One image is fine — the fence accepts a single object or a 1-element array. UI renders a thumbnail grid; click → lightbox.
+   For ≤ 3 images, plain markdown is simpler and equivalent (it has its own lightbox + resize handles).
 
-   **B. Image inside custom HTML — `html-embed` + `<img>`** (when you need the image as part of a flex/grid layout, beside text, in a `<details>`, with bespoke width/border):
+   **B. Image inside custom HTML — `html-embed` + `<img>`** (when the image is part of a flex/grid layout, badge, `<details>`, with bespoke border/styling):
    ```html-embed
    <div style="display:flex;gap:14px;align-items:flex-start;">
      <img src="/img/abc.png" alt="Pipeline" style="width:240px;border-radius:8px;" />
@@ -163,7 +207,37 @@ When asked to **update** a block by `@N`:
 
 (Direct FTS search `search({ query: "{@N}" })` still works — `get_block` is just the convenience wrapper.)
 
-**Markdown tables do not get an `@N` id** — they're plain text, not fenced. If the user wants to refer to a table by `@N`, the table must be authored as a `<table>` inside an `html-embed` fence (which is a rich block and does get an id).
+### Converting a block to a different type — keep the `@N`
+
+When the user asks "convert @123 from a markdown table to an html-embed" (or stats card → mermaid, etc.), **carry the `{@123}` annotation into the new source** so the id stays stable and every `@123` reference the user already has keeps working:
+
+- Fence block: include the annotation in the fence info — `` ```html-embed {@123} `` / `` ```mermaid {@123} ``
+- Markdown table: leave a blank line under the last row, then `{@123}` on its own line
+
+If you forget, the server now auto-preserves: `edit_lines` and `edit_section` extract `{@N}` ids from the region being replaced and inject any missing ones into the first eligible slot in the new content (fence info or table-trailing-line), in source order. So a single-block conversion keeps its id even when you submit the new source without the annotation. Multi-block regions get 1:1 mapping by order; N:1 merges keep the first id and lose the rest (no other reasonable choice). Still — write the annotation explicitly when you can; the auto-preserve is a safety net, not a contract.
+
+**Markdown tables also get an `@N` id** via a trailing `{@N}` line under the table (with one blank line in between):
+
+```markdown
+| col a | col b |
+|-------|-------|
+| 1     | 2     |
+
+{@123}
+```
+
+The renderer attaches it as `data-block-id` on the `<table>`. `injectBlockIds` auto-inserts the annotation on save when missing — you don't need to allocate one yourself, just write the table and let the server stamp it.
+
+**Reading a table efficiently** — `get_block` returns the whole body, which can be expensive for large tables. Pick the cheapest tool for the question:
+
+| Question | Use |
+|---|---|
+| "What columns does @123 have? How many rows?" | `get_block({ id: 123, summary: true })` → `{ kind:"table", columns:[...], row_count, line_start, line_end, ... }` — no body, cheap. |
+| "Give me row N" (you know the index) | `get_table_row({ block_id: 123, index: N })`. `index` is 0-based; negative wraps from end (`-1` = last row). |
+| "Find rows where col=value" / "rows mentioning X" / "first N rows" | `find_table_rows({ block_id, q?, where?, columns?, limit? })`. `q` = substring search (case-insensitive), `where` = exact column match (AND across keys), `columns` = restrict `q` to these column names, `limit` default 50 / max 500. Returns `{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`. |
+| "Show me the whole table" / "I'm about to edit it" | `get_block({ id: 123 })` (full source + inner). Use sparingly for tables > ~100 rows. |
+
+Token-cost rule of thumb: for a 100-row × 5-col table (cells averaging ~20 chars), `get_block` costs ~3 k tokens; `summary` ~0.1 k; `get_table_row` ~0.1 k; `find_table_rows` ~0.1 k per match. Probe with `summary` first when you don't know the size.
 
 ## URL conventions
 
