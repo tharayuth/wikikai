@@ -138,6 +138,11 @@ export interface PromptLogResponse {
   entries: PromptLogEntry[];
 }
 
+export interface ProjectPermission {
+  project: string;
+  level: "view" | "edit";
+}
+
 export const portalApi = createApi({
   reducerPath: "portalApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api/" }),
@@ -151,6 +156,7 @@ export const portalApi = createApi({
     "PromptLog",
     "ActivityLog",
     "Auth",
+    "Permissions",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -290,6 +296,28 @@ export const portalApi = createApi({
         method: "POST",
       }),
       invalidatesTags: [{ type: "Auth", id: "USERS" }],
+    }),
+
+    listUserPermissions: builder.query<
+      { permissions: ProjectPermission[] },
+      number /* userId */
+    >({
+      query: (userId) => `admin/users/${userId}/permissions`,
+      providesTags: (_r, _e, userId) => [{ type: "Permissions", id: userId }],
+    }),
+
+    updateUserPermissions: builder.mutation<
+      { ok: true },
+      { userId: number; permissions: ProjectPermission[] }
+    >({
+      query: ({ userId, permissions }) => ({
+        url: `admin/users/${userId}/permissions`,
+        method: "PUT",
+        body: { permissions },
+      }),
+      invalidatesTags: (_r, _e, { userId }) => [
+        { type: "Permissions", id: userId },
+      ],
     }),
 
     getActivityLog: builder.query<
@@ -526,6 +554,8 @@ export const {
   useUpdateAdminUserMutation,
   useDeleteAdminUserMutation,
   useRegenerateUserMcpTokenMutation,
+  useListUserPermissionsQuery,
+  useUpdateUserPermissionsMutation,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
 } = portalApi;
