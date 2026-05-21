@@ -4,6 +4,7 @@ import { KnowledgeStore } from "./store/knowledge.js";
 import { PageStore } from "./store/pages.js";
 import { ImageStore } from "./store/images.js";
 import { PromptLogStore } from "./store/promptLog.js";
+import { ActivityLogStore } from "./store/activityLog.js";
 import { buildToolHandlers } from "./mcp/handlers.js";
 import { createMcpServer } from "./mcp/server.js";
 import { buildApp } from "./web/app.js";
@@ -15,6 +16,7 @@ export interface RunningServer {
   pages: PageStore;
   images: ImageStore;
   promptLog: PromptLogStore;
+  activityLog: ActivityLogStore;
   close: () => Promise<void>;
 }
 
@@ -25,9 +27,17 @@ export async function startServer(): Promise<RunningServer> {
   const pages = new PageStore(db, config.itemsDir);
   const images = new ImageStore(db, config.imagesDir);
   const promptLog = new PromptLogStore(db);
-  const handlers = buildToolHandlers(knowledge, pages, images, promptLog, {
-    publicBaseUrl: config.publicBaseUrl,
-  });
+  const activityLog = new ActivityLogStore(db);
+  const handlers = buildToolHandlers(
+    knowledge,
+    pages,
+    images,
+    promptLog,
+    activityLog,
+    {
+      publicBaseUrl: config.publicBaseUrl,
+    },
+  );
   const mcpHandler = createMcpHandler(() => createMcpServer(handlers));
 
   const app = buildApp({
@@ -35,6 +45,7 @@ export async function startServer(): Promise<RunningServer> {
     pages,
     images,
     promptLog,
+    activityLog,
     handlers,
     publicBaseUrl: config.publicBaseUrl,
     mcpHandler,
@@ -54,6 +65,7 @@ export async function startServer(): Promise<RunningServer> {
         pages,
         images,
         promptLog,
+        activityLog,
         close: () =>
           new Promise<void>((resolveClose, rejectClose) => {
             httpServer.close((err) => {

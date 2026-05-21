@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
-import { openHelp, openProjectFilter, showToast, toggleTheme } from "../store/uiSlice";
+import {
+  openActivityLog,
+  openHelp,
+  openProjectFilter,
+  showToast,
+  toggleTheme,
+} from "../store/uiSlice";
 import { portalApi, useLazySearchQuery } from "../store/api";
 import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
@@ -134,6 +140,26 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
               />
             )}
           </div>
+          <button
+            className="icon-btn"
+            title="Activity log — recent add / edit / delete actions"
+            onClick={() => dispatch(openActivityLog())}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="12 7 12 12 15 14" />
+            </svg>
+          </button>
           <button
             className="icon-btn"
             title="Help + MCP guide"

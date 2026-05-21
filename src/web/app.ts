@@ -11,10 +11,12 @@ import {
   parseImageSrc,
 } from "../store/images.js";
 import type { PromptLogStore } from "../store/promptLog.js";
+import type { ActivityLogStore } from "../store/activityLog.js";
 import type { ToolHandlers } from "../mcp/handlers.js";
 import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
 import { onEvent } from "../lib/events.js";
+import { withCallContext } from "../lib/callContext.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -24,6 +26,7 @@ export interface BuildAppOptions {
   pages: PageStore;
   images: ImageStore;
   promptLog: PromptLogStore;
+  activityLog: ActivityLogStore;
   handlers: ToolHandlers;
   publicBaseUrl: string;
   mcpHandler?: express.RequestHandler;
@@ -35,6 +38,15 @@ export function buildApp(opts: BuildAppOptions): Express {
   const app = express();
   app.use(express.json({ limit: "16mb" }));
   app.disable("x-powered-by");
+
+  // Tag every /api request with a web call-context so the activity-log
+  // recorder stamps these rows as `source: "web"` instead of "mcp".
+  // The MCP transport sets its own context via createMcpServer, so /mcp
+  // requests are unaffected. Read-only routes (GET) don't currently
+  // record activity, so the broad scope is fine.
+  app.use("/api", (_req, _res, next) => {
+    withCallContext({ source: "web" }, () => next());
+  });
 
   // ─── Images: content-addressed binary serving ───
   // Path is /img/<sha256>.<ext>; hash + ext are validated so no traversal
@@ -237,6 +249,24 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Activity log — chronological audit trail of every mutating action
+  // (add / edit / delete / toggle / caption / upload / reorder / resize).
+  // Snapshots titles + captions at the time of the action so entries
+  // stay readable even after the target is renamed or deleted. Used
+  // by the "View activity log" dialog in the topbar.
+  app.get("/api/activity", (req, res, next) => {
+    try {
+      const limit = optionalInt(req.query.limit);
+      const offset = optionalInt(req.query.offset);
+      const kidRaw = optional(req.query.knowledge_id);
+      const knowledge_id = kidRaw ? Number(kidRaw) : undefined;
+      const r = opts.activityLog.list({ limit, offset, knowledge_id });
+      res.json(r);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.get("/api/knowledge/:id/prompts", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
@@ -397,7 +427,19 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(400).json({ error: "invalid task index" });
         return;
       }
-      res.json(opts.pages.toggleTaskAtIndex(pid, idx));
+      const meta = opts.pages.getMetadata(pid);
+      const result = opts.pages.toggleTaskAtIndex(pid, idx);
+      if (meta) {
+        opts.activityLog.record({
+          action: "toggle",
+          target: "task",
+          knowledge_id: meta.knowledge_id,
+          knowledge_title: opts.knowledge.get(meta.knowledge_id)?.title ?? null,
+          page_id: pid,
+          page_title: meta.title,
+        });
+      }
+      res.json(result);
     } catch (e) {
       next(e);
     }
@@ -447,9 +489,14 @@ export function buildApp(opts: BuildAppOptions): Express {
           res.status(400).json({ error: "invalid index" });
           return;
         }
-        res.json(
-          opts.pages.setHtmlEmbedImageSize(pid, blockId, imgIndex, dims),
+        const result = opts.pages.setHtmlEmbedImageSize(
+          pid,
+          blockId,
+          imgIndex,
+          dims,
         );
+        logImageResize(pid, blockId);
+        res.json(result);
         return;
       }
 
@@ -464,11 +511,29 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(400).json({ error: "invalid occurrence" });
         return;
       }
-      res.json(opts.pages.setInlineImageSize(pid, src, occurrence, dims));
+      const result = opts.pages.setInlineImageSize(pid, src, occurrence, dims);
+      logImageResize(pid, null);
+      res.json(result);
     } catch (e) {
       next(e);
     }
   });
+
+  // Helper for the resize route — keeps the activity-log call out of
+  // both branches without duplicating the metadata lookup.
+  function logImageResize(pid: number, blockId: number | null): void {
+    const meta = opts.pages.getMetadata(pid);
+    if (!meta) return;
+    opts.activityLog.record({
+      action: "resize",
+      target: "image",
+      knowledge_id: meta.knowledge_id,
+      knowledge_title: opts.knowledge.get(meta.knowledge_id)?.title ?? null,
+      page_id: pid,
+      page_title: meta.title,
+      block_id: blockId,
+    });
+  }
 
   // ─── Search ───
   app.get("/api/search", async (req, res, next) => {

@@ -91,6 +91,26 @@ export interface PromptLogEntry {
   created_at: string;
 }
 
+export interface ActivityLogEntry {
+  id: number;
+  created_at: string;
+  source: "mcp" | "web";
+  tool_name: string | null;
+  action: "add" | "edit" | "delete" | "reorder" | "toggle" | "caption" | "upload" | "resize";
+  target: "knowledge" | "page" | "block" | "image" | "task";
+  knowledge_id: number | null;
+  knowledge_title: string | null;
+  page_id: number | null;
+  page_title: string | null;
+  block_id: number | null;
+  block_caption: string | null;
+}
+
+export interface ActivityLogResponse {
+  entries: ActivityLogEntry[];
+  total: number;
+}
+
 export interface PromptLogResponse {
   knowledge_id: number;
   total: number;
@@ -108,6 +128,7 @@ export const portalApi = createApi({
     "Revisions",
     "Projects",
     "PromptLog",
+    "ActivityLog",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -165,6 +186,23 @@ export const portalApi = createApi({
     getPromptLog: builder.query<PromptLogResponse, number>({
       query: (id) => `knowledge/${id}/prompts`,
       providesTags: (_r, _e, id) => [{ type: "PromptLog", id }],
+    }),
+
+    getActivityLog: builder.query<
+      ActivityLogResponse,
+      { limit?: number; offset?: number; knowledge_id?: number } | void
+    >({
+      query: (args) => {
+        const params = new URLSearchParams();
+        const a = args ?? {};
+        if (a.limit != null) params.set("limit", String(a.limit));
+        if (a.offset != null) params.set("offset", String(a.offset));
+        if (a.knowledge_id != null)
+          params.set("knowledge_id", String(a.knowledge_id));
+        const q = params.toString();
+        return q ? `activity?${q}` : "activity";
+      },
+      providesTags: [{ type: "ActivityLog", id: "LIST" }],
     }),
 
     deleteKnowledge: builder.mutation<{ id: number; deleted: true }, number>({
@@ -374,6 +412,7 @@ export const {
   useAddProjectMutation,
   useRemoveProjectMutation,
   useGetPromptLogQuery,
+  useGetActivityLogQuery,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
 } = portalApi;

@@ -2951,3 +2951,120 @@ a:hover { text-decoration: underline; }
   background: var(--accent-strong);
 }
 .iu-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ───── Activity log modal ───── */
+/* Tall, scrollable modal. Audit-log entries newest first.
+   Uses the existing .modal-backdrop / .modal base styles plus
+   activity-log-* overrides for the taller layout + table grid. */
+.activity-log-modal {
+  max-width: 920px;
+  width: 92vw;
+  height: 86vh;
+  max-height: 86vh;
+}
+.activity-log-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.activity-log-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.activity-log-meta {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.activity-log-header .icon-btn {
+  font-size: 18px;
+  line-height: 1;
+}
+.activity-log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+.activity-log-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.activity-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.activity-log-row {
+  display: grid;
+  grid-template-columns: 80px 70px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 18px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-faint, var(--border));
+}
+.activity-log-row:hover { background: var(--surface-2, rgba(127,127,127,0.04)); }
+.activity-log-time {
+  color: var(--text-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.activity-log-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-align: center;
+  background: var(--surface-2, rgba(127,127,127,0.08));
+  color: var(--text-2);
+}
+.activity-log-tag.tag-add     { background: rgba(34,197,94,.15);  color: #15803d; }
+.activity-log-tag.tag-delete  { background: rgba(239,68,68,.15);  color: #b91c1c; }
+.activity-log-tag.tag-edit    { background: rgba(59,130,246,.15); color: #1d4ed8; }
+.activity-log-tag.tag-toggle  { background: rgba(168,85,247,.15); color: #7e22ce; }
+.activity-log-tag.tag-caption { background: rgba(6,182,212,.15);  color: #0e7490; }
+.activity-log-tag.tag-upload  { background: rgba(245,158,11,.15); color: #b45309; }
+.activity-log-tag.tag-resize  { background: rgba(20,184,166,.15); color: #0f766e; }
+.activity-log-tag.tag-reorder { background: rgba(100,116,139,.18); color: #475569; }
+[data-theme="dark"] .activity-log-tag.tag-add     { color: #4ade80; }
+[data-theme="dark"] .activity-log-tag.tag-delete  { color: #fca5a5; }
+[data-theme="dark"] .activity-log-tag.tag-edit    { color: #93c5fd; }
+[data-theme="dark"] .activity-log-tag.tag-toggle  { color: #d8b4fe; }
+[data-theme="dark"] .activity-log-tag.tag-caption { color: #67e8f9; }
+[data-theme="dark"] .activity-log-tag.tag-upload  { color: #fbbf24; }
+[data-theme="dark"] .activity-log-tag.tag-resize  { color: #5eead4; }
+[data-theme="dark"] .activity-log-tag.tag-reorder { color: #cbd5e1; }
+.activity-log-target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-log-jump {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+.activity-log-jump:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.activity-log-source {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.activity-log-tool.web { color: var(--text-3); font-style: italic; }

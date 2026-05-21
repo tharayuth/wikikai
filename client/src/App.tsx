@@ -7,6 +7,7 @@ import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
 import { Viewer } from "./components/Viewer";
 import { HelpModal } from "./components/HelpModal";
+import { ActivityLogModal } from "./components/ActivityLogModal";
 import { ProjectFilterModal } from "./components/ProjectFilterModal";
 import { Toast } from "./components/Toast";
 
@@ -58,6 +59,7 @@ export function App() {
         />
       </div>
       <HelpModal />
+      <ActivityLogModal />
       <ProjectFilterModal />
       <Toast />
     </>

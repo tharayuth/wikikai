@@ -27,6 +27,7 @@ const REFRESH_TAGS = [
   { type: "KnowledgeList", id: "LIST" },
   { type: "Page", id: "TITLES" },
   { type: "Projects", id: "LIST" },
+  { type: "ActivityLog", id: "LIST" },
   "Knowledge",
   "Page",
   "PageRendered",
@@ -76,6 +77,7 @@ export function useServerEvents(): void {
               { type: "Revisions", id: e.page_id },
               { type: "Knowledge", id: e.knowledge_id },
               { type: "Page", id: "TITLES" },
+              { type: "ActivityLog", id: "LIST" },
             ]),
           );
           break;
@@ -89,6 +91,7 @@ export function useServerEvents(): void {
               { type: "Knowledge", id: e.knowledge_id },
               { type: "KnowledgeList", id: "LIST" },
               { type: "Page", id: "TITLES" },
+              { type: "ActivityLog", id: "LIST" },
             ]),
           );
           break;
@@ -98,6 +101,7 @@ export function useServerEvents(): void {
             { type: "KnowledgeList", id: "LIST" },
             { type: "Page", id: "TITLES" },
             { type: "Projects", id: "LIST" },
+            { type: "ActivityLog", id: "LIST" },
           ];
           if (e.knowledge_id != null) {
             tags.push({ type: "Knowledge", id: e.knowledge_id });

@@ -8,6 +8,7 @@ import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
 import { ImageStore } from "../src/store/images.js";
 import { PromptLogStore } from "../src/store/promptLog.js";
+import { ActivityLogStore } from "../src/store/activityLog.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
 
@@ -24,8 +25,9 @@ describe("HTTP routes", () => {
     pages = new PageStore(db, tmpDir);
     const images = new ImageStore(db, path.join(tmpDir, "images"));
     const promptLog = new PromptLogStore(db);
-    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, { publicBaseUrl: "http://test" });
-    app = buildApp({ knowledge, pages, images, promptLog, handlers, publicBaseUrl: "http://test" });
+    const activityLog = new ActivityLogStore(db);
+    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" });
+    app = buildApp({ knowledge, pages, images, promptLog, activityLog, handlers, publicBaseUrl: "http://test" });
   });
 
   afterEach(() => {

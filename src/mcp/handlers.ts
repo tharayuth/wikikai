@@ -3,6 +3,7 @@ import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
 import type { PageStore, PageEntry, PageWithStats } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
 import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
+import type { ActivityLogStore } from "../store/activityLog.js";
 import {
   stripInlineStyles,
   stripHtmlEmbedStylesInMarkdown,
@@ -913,8 +914,51 @@ export function buildToolHandlers(
   pages: PageStore,
   images: ImageStore,
   promptLog: PromptLogStore,
+  activityLog: ActivityLogStore,
   ctx: HandlerContext,
 ): ToolHandlers {
+  // Snapshot title/caption helpers used by the activity-log recorder.
+  // Best-effort — if the target doesn't exist (e.g. we're logging a
+  // delete that already happened), fall back to null and let the entry
+  // carry just the id.
+  const titlesFor = (knowledge_id?: number | null, page_id?: number | null) => {
+    let knowledge_title: string | null = null;
+    let page_title: string | null = null;
+    if (knowledge_id != null) {
+      try {
+        knowledge_title = knowledge.get(knowledge_id)?.title ?? null;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (page_id != null) {
+      try {
+        page_title = pages.getMetadata(page_id)?.title ?? null;
+      } catch {
+        /* ignore */
+      }
+    }
+    return { knowledge_title, page_title };
+  };
+  const recordActivity = (
+    entry: Parameters<ActivityLogStore["record"]>[0],
+  ): void => {
+    try {
+      // Snapshot titles when the caller didn't supply them.
+      const filled = { ...entry };
+      if (
+        (filled.knowledge_title == null || filled.page_title == null) &&
+        (filled.knowledge_id != null || filled.page_id != null)
+      ) {
+        const t = titlesFor(filled.knowledge_id, filled.page_id);
+        if (filled.knowledge_title == null) filled.knowledge_title = t.knowledge_title;
+        if (filled.page_title == null) filled.page_title = t.page_title;
+      }
+      activityLog.record(filled);
+    } catch {
+      // Never let audit logging take down a mutation.
+    }
+  };
   const logIf = (
     tool: string,
     prompt: string | undefined,
@@ -954,6 +998,14 @@ export function buildToolHandlers(
         first_page?.id ?? null,
         first_page ? 1 : null,
       );
+      recordActivity({
+        action: "add",
+        target: "knowledge",
+        knowledge_id: k.id,
+        knowledge_title: parsed.title,
+        page_id: first_page?.id ?? null,
+        page_title: parsed.first_page?.title ?? null,
+      });
       return { id: k.id, url: urlFor(ctx, k.id), created_at: k.created_at, first_page };
     },
 
@@ -961,6 +1013,11 @@ export function buildToolHandlers(
       const parsed = EditKnowledgeSchema.parse(input);
       const r = knowledge.update(parsed.id, parsed);
       logIf("edit_knowledge", parsed.user_prompt, r.id, null, null);
+      recordActivity({
+        action: "edit",
+        target: "knowledge",
+        knowledge_id: r.id,
+      });
       return { id: r.id, url: urlFor(ctx, r.id), version: r.version, updated_at: r.updated_at };
     },
 
@@ -984,9 +1041,18 @@ export function buildToolHandlers(
 
     async delete_knowledge(input) {
       const parsed = DeleteKnowledgeSchema.parse(input);
+      // Snapshot the title BEFORE we drop the row so the audit row stays
+      // meaningful after the knowledge is gone.
+      const before = knowledge.get(parsed.id);
       pages.removeKnowledgeFiles(parsed.id);
       knowledge.remove(parsed.id);
       const removed_images = cleanupOrphanImages(pages, images);
+      recordActivity({
+        action: "delete",
+        target: "knowledge",
+        knowledge_id: parsed.id,
+        knowledge_title: before?.title ?? null,
+      });
       return { id: parsed.id, deleted: true, removed_images };
     },
 
@@ -1011,6 +1077,13 @@ export function buildToolHandlers(
       const parsed = AddPageSchema.parse(input);
       const r = pages.add(parsed);
       logIf("add_page", parsed.user_prompt, parsed.knowledge_id, r.id, 1);
+      recordActivity({
+        action: "add",
+        target: "page",
+        knowledge_id: parsed.knowledge_id,
+        page_id: r.id,
+        page_title: parsed.title,
+      });
       return {
         id: r.id,
         knowledge_id: parsed.knowledge_id,
@@ -1032,6 +1105,12 @@ export function buildToolHandlers(
         r.id,
         r.version,
       );
+      recordActivity({
+        action: "edit",
+        target: "page",
+        knowledge_id: before.knowledge_id,
+        page_id: r.id,
+      });
       return {
         id: r.id,
         knowledge_id: before.knowledge_id,
@@ -1053,6 +1132,12 @@ export function buildToolHandlers(
         r.id,
         r.version,
       );
+      recordActivity({
+        action: "edit",
+        target: "page",
+        knowledge_id: before.knowledge_id,
+        page_id: r.id,
+      });
       return {
         id: r.id,
         knowledge_id: before.knowledge_id,
@@ -1064,8 +1149,18 @@ export function buildToolHandlers(
 
     async delete_page(input) {
       const parsed = DeletePageSchema.parse(input);
+      // Snapshot title + parent knowledge BEFORE removing so the audit
+      // row keeps human-readable context.
+      const before = pages.getMetadata(parsed.page_id);
       pages.remove(parsed.page_id);
       const removed_images = cleanupOrphanImages(pages, images);
+      recordActivity({
+        action: "delete",
+        target: "page",
+        knowledge_id: before?.knowledge_id ?? null,
+        page_id: parsed.page_id,
+        page_title: before?.title ?? null,
+      });
       return { id: parsed.page_id, deleted: true, removed_images };
     },
 
@@ -1077,6 +1172,11 @@ export function buildToolHandlers(
     async reorder_pages(input) {
       const parsed = ReorderPagesSchema.parse(input);
       pages.reorder(parsed.knowledge_id, parsed.order);
+      recordActivity({
+        action: "reorder",
+        target: "knowledge",
+        knowledge_id: parsed.knowledge_id,
+      });
       return { ok: true, order: parsed.order };
     },
 
@@ -1182,6 +1282,12 @@ export function buildToolHandlers(
         r.id,
         r.version,
       );
+      recordActivity({
+        action: "edit",
+        target: "page",
+        knowledge_id: meta.knowledge_id,
+        page_id: r.id,
+      });
       return {
         id: r.id,
         knowledge_id: meta.knowledge_id,
@@ -1203,6 +1309,12 @@ export function buildToolHandlers(
         r.id,
         r.version,
       );
+      recordActivity({
+        action: "edit",
+        target: "page",
+        knowledge_id: meta.knowledge_id,
+        page_id: r.id,
+      });
       return {
         id: r.id,
         knowledge_id: meta.knowledge_id,
@@ -1232,6 +1344,14 @@ export function buildToolHandlers(
         parsed.page_id ?? null,
         null,
       );
+      if (total > 0) {
+        recordActivity({
+          action: "edit",
+          target: parsed.page_id != null ? "page" : "knowledge",
+          knowledge_id: parsed.knowledge_id,
+          page_id: parsed.page_id ?? null,
+        });
+      }
       return {
         replacements: r.replacements.map((it) => ({
           ...it,
@@ -1323,6 +1443,14 @@ export function buildToolHandlers(
         r.page_id,
         null,
       );
+      recordActivity({
+        action: "caption",
+        target: "block",
+        knowledge_id: r.knowledge_id,
+        page_id: r.page_id,
+        block_id: r.block_id,
+        block_caption: r.caption,
+      });
       return {
         ...r,
         url: urlFor(ctx, r.knowledge_id, r.page_id),
@@ -1340,6 +1468,10 @@ export function buildToolHandlers(
       }
       const meta = images.add(bytes, parsed.mime_type, parsed.alt ?? null);
       const base = ctx.publicBaseUrl.replace(/\/$/, "");
+      recordActivity({
+        action: "upload",
+        target: "image",
+      });
       return { ...meta, url: `${base}${meta.src}` };
     },
 
@@ -1420,6 +1552,12 @@ export function buildToolHandlers(
         parsed.page_id,
         r.version,
       );
+      recordActivity({
+        action: "toggle",
+        target: "task",
+        knowledge_id: meta.knowledge_id,
+        page_id: parsed.page_id,
+      });
       return {
         page_id: parsed.page_id,
         knowledge_id: meta.knowledge_id,

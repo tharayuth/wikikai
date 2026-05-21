@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { EXAMPLE_KINDS } from "./examples.js";
 import type { ToolHandlers } from "./handlers.js";
+import { withCallContext } from "../lib/callContext.js";
 
 const SESSION_NOTE =
   "Claude Code chat session UUID (the value used by `claude --resume <id>`). " +
@@ -382,8 +383,27 @@ function imageContent(meta: {
   return { content };
 }
 
-export function createMcpServer(handlers: ToolHandlers): McpServer {
+export function createMcpServer(rawHandlers: ToolHandlers): McpServer {
   const server = new McpServer({ name: "wikikai", version: "0.2.0" });
+
+  // Wrap every handler method so each MCP tool call runs inside an
+  // AsyncLocalStorage context tagged with `{ source: "mcp", tool_name }`.
+  // The activity-log recorder reads this context when stamping rows —
+  // saves us threading source/tool through every handler signature.
+  const handlers = new Proxy(rawHandlers, {
+    get(target, prop) {
+      const orig = (target as unknown as Record<string | symbol, unknown>)[
+        prop
+      ];
+      if (typeof orig !== "function") return orig;
+      return (input: unknown) =>
+        withCallContext(
+          { source: "mcp", tool_name: String(prop) },
+          () =>
+            (orig as (i: unknown) => Promise<unknown>).call(target, input),
+        );
+    },
+  }) as ToolHandlers;
 
   // ─── Knowledge (container) ───
   server.registerTool(

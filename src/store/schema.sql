@@ -108,6 +108,31 @@ CREATE TABLE IF NOT EXISTS prompt_log (
 CREATE INDEX IF NOT EXISTS idx_prompt_log_kid ON prompt_log(knowledge_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prompt_log_pid ON prompt_log(page_id, created_at DESC);
 
+-- ───── Activity log ─────
+-- Coarse audit trail of every mutating action (add / edit / delete /
+-- toggle / caption / reorder / upload) across knowledge / page / block /
+-- image / task targets. Snapshots the human-readable title / caption at
+-- the time of the action so the log stays meaningful even after the
+-- target is renamed or deleted. Source = 'mcp' (with tool_name set) or
+-- 'web' (UI click). Content bodies are NEVER captured — just enough to
+-- answer "what changed, where, when, by whom (tool)".
+CREATE TABLE IF NOT EXISTS activity_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at      TEXT NOT NULL,
+  source          TEXT NOT NULL CHECK (source IN ('mcp', 'web')),
+  tool_name       TEXT,                          -- MCP tool name; null for plain web mutations
+  action          TEXT NOT NULL,                 -- 'add' | 'edit' | 'delete' | 'reorder' | 'toggle' | 'caption' | 'upload' | 'resize'
+  target          TEXT NOT NULL,                 -- 'knowledge' | 'page' | 'block' | 'image' | 'task'
+  knowledge_id    INTEGER,                       -- nullable for image uploads
+  knowledge_title TEXT,
+  page_id         INTEGER,
+  page_title      TEXT,
+  block_id        INTEGER,
+  block_caption   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_kid ON activity_log(knowledge_id, created_at DESC);
+
 -- ───── FTS5: search across page content + title + keywords ─────
 -- Uses the `trigram` tokenizer (SQLite ≥ 3.34) so substring search works
 -- for Thai, Chinese, Japanese, and any script without whitespace word
