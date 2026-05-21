@@ -17,7 +17,7 @@ export interface KnowledgeMetadata {
 
 export interface AddKnowledgeInput {
   title: string;
-  project?: string;
+  project: string;
   session_id?: string;
   user_prompt?: string;
   tokens_used?: number;
@@ -152,6 +152,9 @@ export class KnowledgeStore {
     if (!input.title || !input.title.trim()) {
       throw new Error("title is required");
     }
+    if (!input.project || !input.project.trim()) {
+      throw new Error("project is required");
+    }
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`
       INSERT INTO knowledge (title, project, session_id, user_prompt, tokens_used, tags, author, created_at, updated_at, version)
@@ -159,7 +162,7 @@ export class KnowledgeStore {
     `);
     const result = stmt.run({
       title: input.title.trim(),
-      project: input.project ?? null,
+      project: input.project.trim(),
       session_id: input.session_id ?? null,
       user_prompt: input.user_prompt ?? null,
       tokens_used: input.tokens_used ?? null,
@@ -185,6 +188,10 @@ export class KnowledgeStore {
       .get(id) as Row | undefined;
     if (!existing) throw new Error(`knowledge #${id} not found`);
 
+    if (patch.project !== undefined && !patch.project.trim()) {
+      throw new Error("project is required");
+    }
+
     const now = new Date().toISOString();
     const nextVersion = existing.version + 1;
     const tagsValue =
@@ -206,7 +213,7 @@ export class KnowledgeStore {
       .run({
         id,
         title: patch.title !== undefined ? patch.title.trim() : existing.title,
-        project: patch.project !== undefined ? patch.project : existing.project,
+        project: patch.project !== undefined ? patch.project.trim() : existing.project,
         session_id:
           patch.session_id !== undefined ? patch.session_id : existing.session_id,
         user_prompt:

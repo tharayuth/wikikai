@@ -11,8 +11,8 @@ describe("KnowledgeStore (metadata only)", () => {
 
   describe("add", () => {
     it("returns incrementing ids", () => {
-      const a = store.add({ title: "A" });
-      const b = store.add({ title: "B" });
+      const a = store.add({ title: "A", project: "examples" });
+      const b = store.add({ title: "B", project: "examples" });
       expect(a.id).toBe(1);
       expect(b.id).toBe(2);
     });
@@ -38,7 +38,13 @@ describe("KnowledgeStore (metadata only)", () => {
     });
 
     it("requires title", () => {
-      expect(() => store.add({ title: "" })).toThrow();
+      expect(() => store.add({ title: "", project: "examples" })).toThrow();
+    });
+
+    it("requires project", () => {
+      expect(() =>
+        store.add({ title: "T" } as unknown as Parameters<typeof store.add>[0]),
+      ).toThrow(/project/);
     });
   });
 
@@ -50,7 +56,7 @@ describe("KnowledgeStore (metadata only)", () => {
 
   describe("update", () => {
     it("bumps version and updates fields", () => {
-      const { id } = store.add({ title: "Old", tags: ["x"] });
+      const { id } = store.add({ title: "Old", project: "examples", tags: ["x"] });
       const r = store.update(id, { title: "New", tags: ["y", "z"] });
       expect(r.version).toBe(2);
       const got = store.get(id)!;
@@ -82,7 +88,7 @@ describe("KnowledgeStore (metadata only)", () => {
       store.add({ title: "A1", project: "isf", tags: ["er"] });
       store.add({ title: "A2", project: "isf", tags: ["chart"] });
       store.add({ title: "B", project: "wikikai" });
-      store.add({ title: "C", session_id: "sess-1" });
+      store.add({ title: "C", project: "examples", session_id: "sess-1" });
     });
 
     it("newest first", () => {
@@ -124,7 +130,7 @@ describe("KnowledgeStore (metadata only)", () => {
 
   describe("remove", () => {
     it("removes the row", () => {
-      const { id } = store.add({ title: "T" });
+      const { id } = store.add({ title: "T", project: "examples" });
       store.remove(id);
       expect(store.get(id)).toBeNull();
     });

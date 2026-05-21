@@ -44,9 +44,16 @@ describe("MCP tool handlers", () => {
     it("creates first_page when provided", async () => {
       const r = await h.add_knowledge({
         title: "Doc",
+        project: "examples",
         first_page: { title: "Intro", content: "# Hi" },
       });
       expect(r.first_page).toEqual(expect.objectContaining({ id: 1, position: 1 }));
+    });
+
+    it("add_knowledge rejects when project missing", async () => {
+      await expect(
+        h.add_knowledge({ title: "X" } as unknown as Parameters<typeof h.add_knowledge>[0]),
+      ).rejects.toThrow(/project/);
     });
   });
 
@@ -54,6 +61,7 @@ describe("MCP tool handlers", () => {
     it("returns metadata + pages by default", async () => {
       const k = await h.add_knowledge({
         title: "Doc",
+        project: "examples",
         first_page: { title: "P1", content: "a" },
       });
       await h.add_page({ knowledge_id: k.id, title: "P2", content: "b" });
@@ -63,7 +71,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("omits pages when include_pages=false", async () => {
-      const k = await h.add_knowledge({ title: "Doc" });
+      const k = await h.add_knowledge({ title: "Doc", project: "examples" });
       const got = await h.get_knowledge({ id: k.id, include_pages: false });
       expect(got.pages).toBeUndefined();
     });
@@ -77,6 +85,7 @@ describe("MCP tool handlers", () => {
     it("returns title + page outlines", async () => {
       const k = await h.add_knowledge({
         title: "K",
+        project: "examples",
         first_page: { title: "P1", content: "# T\n\n## A\nx\n\n## B\ny" },
       });
       const out = await h.get_outline({ knowledge_id: k.id });
@@ -87,7 +96,7 @@ describe("MCP tool handlers", () => {
 
   describe("add_page / list_pages / delete_page", () => {
     it("end-to-end", async () => {
-      const k = await h.add_knowledge({ title: "Doc" });
+      const k = await h.add_knowledge({ title: "Doc", project: "examples" });
       const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "a" });
       const b = await h.add_page({ knowledge_id: k.id, title: "B", content: "b" });
       const list = await h.list_pages({ knowledge_id: k.id });
@@ -102,7 +111,7 @@ describe("MCP tool handlers", () => {
 
   describe("edit_page + append_page", () => {
     it("edit_page replaces content + bumps version", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "v1" });
       const r = await h.edit_page({ page_id: p.id, content: "v2" });
       expect(r.version).toBe(2);
@@ -110,7 +119,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("append_page returns new line count", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a" });
       const r = await h.append_page({ page_id: p.id, text: "b\nc" });
       expect(r.new_line_count).toBe(3);
@@ -119,7 +128,7 @@ describe("MCP tool handlers", () => {
 
   describe("reorder_pages", () => {
     it("reorders by id permutation", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "" });
       const b = await h.add_page({ knowledge_id: k.id, title: "B", content: "" });
       const c = await h.add_page({ knowledge_id: k.id, title: "C", content: "" });
@@ -131,7 +140,7 @@ describe("MCP tool handlers", () => {
 
   describe("read_page + edit_lines + edit_section + replace_text", () => {
     it("read_page mode:'full' returns slice + hash + url with line", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a\nb\nc" });
       // Explicit mode:"full" — default is now "summary" which omits hash.
       const r = await h.read_page({
@@ -146,7 +155,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("read_page defaults to summary mode when caller omits `mode`", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({
         knowledge_id: k.id,
         title: "P",
@@ -162,7 +171,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("read_page mode:'summary' returns skeleton + blocks index", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({
         knowledge_id: k.id,
         title: "P",
@@ -192,7 +201,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("read_page strips html-embed inline styles by default, omits hash", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({
         knowledge_id: k.id,
         title: "P",
@@ -229,7 +238,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("read_page leaves pages without html-embed alone — hash present in full mode", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({
         knowledge_id: k.id,
         title: "P",
@@ -242,7 +251,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("get_block strips html-embed inline styles by default, opt-in keeps them", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       await h.add_page({
         knowledge_id: k.id,
         title: "P",
@@ -266,7 +275,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("read_page includes parent knowledge structure (& context)", async () => {
-      const k = await h.add_knowledge({ title: "Doc title" });
+      const k = await h.add_knowledge({ title: "Doc title", project: "examples" });
       const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "aa" });
       const b = await h.add_page({ knowledge_id: k.id, title: "B", content: "bb" });
       const r = await h.read_page({ page_id: a.id });
@@ -282,7 +291,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("edit_lines with expected_hash gate", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a\nb\nc" });
       const r = await h.read_page({
         page_id: p.id,
@@ -311,7 +320,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("edit_section replaces under heading", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({
         knowledge_id: k.id,
         title: "P",
@@ -324,7 +333,7 @@ describe("MCP tool handlers", () => {
     });
 
     it("replace_text returns per-page counts and total", async () => {
-      const k = await h.add_knowledge({ title: "D" });
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
       await h.add_page({ knowledge_id: k.id, title: "A", content: "foo foo bar" });
       await h.add_page({ knowledge_id: k.id, title: "B", content: "foo only here" });
       const r = await h.replace_text({ knowledge_id: k.id, find: "foo", replace: "X" });
@@ -335,7 +344,7 @@ describe("MCP tool handlers", () => {
 
   describe("search", () => {
     it("returns hits with url containing line", async () => {
-      const k = await h.add_knowledge({ title: "K" });
+      const k = await h.add_knowledge({ title: "K", project: "examples" });
       await h.add_page({
         knowledge_id: k.id,
         title: "Page",
@@ -394,7 +403,7 @@ describe("MCP tool handlers", () => {
 
   describe("delete_knowledge", () => {
     it("deletes knowledge, pages, and files", async () => {
-      const k = await h.add_knowledge({ title: "K" });
+      const k = await h.add_knowledge({ title: "K", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "x" });
       const fp = path.join(tmpDir, String(k.id), `${p.id}.md`);
       expect(fs.existsSync(fp)).toBe(true);

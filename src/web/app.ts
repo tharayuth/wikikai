@@ -192,6 +192,19 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  app.post("/api/knowledge", async (req, res, next) => {
+    try {
+      if (typeof req.body?.project !== "string" || !req.body.project.trim()) {
+        res.status(400).json({ error: "project is required" });
+        return;
+      }
+      const result = await opts.handlers.add_knowledge(req.body);
+      res.status(201).json(result);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.get("/api/knowledge/:id", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
@@ -209,6 +222,13 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.patch("/api/knowledge/:id", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
+      if (
+        req.body?.project !== undefined &&
+        (typeof req.body.project !== "string" || !req.body.project.trim())
+      ) {
+        res.status(400).json({ error: "project is required" });
+        return;
+      }
       const result = await opts.handlers.edit_knowledge({ id, ...req.body });
       res.json(result);
     } catch (e) {

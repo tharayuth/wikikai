@@ -375,7 +375,7 @@ describe("HTTP routes", () => {
   });
 
   it("GET /api/knowledge/:id with pages", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P1", content: "a" });
     pages.add({ knowledge_id: k.id, title: "P2", content: "b" });
     const res = await request(app).get(`/api/knowledge/${k.id}`);
@@ -390,7 +390,7 @@ describe("HTTP routes", () => {
   });
 
   it("GET /api/knowledge/:id/outline returns heading tree", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "# T\n\n## A\n\n## B" });
     const res = await request(app).get(`/api/knowledge/${k.id}/outline`);
     expect(res.status).toBe(200);
@@ -398,7 +398,7 @@ describe("HTTP routes", () => {
   });
 
   it("GET /api/pages/:pid + rendered + raw", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "# H\n\ntext" });
 
     const meta = await request(app).get(`/api/pages/${p.id}`);
@@ -414,7 +414,7 @@ describe("HTTP routes", () => {
   });
 
   it("PATCH /api/pages/:pid updates content", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "old" });
     const res = await request(app)
       .patch(`/api/pages/${p.id}`)
@@ -425,7 +425,7 @@ describe("HTTP routes", () => {
   });
 
   it("DELETE /api/pages/:pid", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "x" });
     const res = await request(app).delete(`/api/pages/${p.id}`);
     expect(res.status).toBe(200);
@@ -433,7 +433,7 @@ describe("HTTP routes", () => {
   });
 
   it("GET /api/search returns hits", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "Postgres is great" });
     const res = await request(app).get(`/api/search?q=Postgres`);
     expect(res.status).toBe(200);
@@ -447,9 +447,15 @@ describe("HTTP routes", () => {
   });
 
   it("DELETE /api/knowledge/:id cascades pages", async () => {
-    const k = knowledge.add({ title: "K" });
+    const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "x" });
     await request(app).delete(`/api/knowledge/${k.id}`);
     expect(pages.list(k.id)).toEqual([]);
+  });
+
+  it("POST /api/knowledge rejects empty project", async () => {
+    const res = await request(app).post("/api/knowledge").send({ title: "X" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/project/);
   });
 });

@@ -20,7 +20,11 @@ const USER_PROMPT_EDIT_NOTE =
 
 const addKnowledgeShape = {
   title: z.string().min(1).max(200).describe("Knowledge title shown in sidebar"),
-  project: z.string().max(100).optional().describe("Group key (e.g. repo/project name)"),
+  project: z
+    .string()
+    .min(1, "project is required")
+    .max(100)
+    .describe("Group key (e.g. repo/project name). Required — ACL gates on this."),
   session_id: z.string().max(200).optional().describe(SESSION_NOTE),
   user_prompt: z.string().max(8000).optional().describe(USER_PROMPT_NOTE),
   tokens_used: z.number().int().min(0).optional().describe(TOKENS_NOTE),
@@ -40,7 +44,7 @@ const addKnowledgeShape = {
 const editKnowledgeShape = {
   id: z.number().int().positive(),
   title: z.string().min(1).max(200).optional(),
-  project: z.string().max(100).optional(),
+  project: z.string().min(1, "project is required").max(100).optional(),
   session_id: z.string().max(200).optional().describe(SESSION_NOTE),
   user_prompt: z.string().max(8000).optional().describe(USER_PROMPT_NOTE),
   tokens_used: z.number().int().min(0).optional().describe(TOKENS_NOTE),

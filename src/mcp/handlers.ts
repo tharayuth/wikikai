@@ -74,7 +74,7 @@ const TOKENS_NOTE =
 
 export const AddKnowledgeSchema = z.object({
   title: z.string().min(1).max(200),
-  project: z.string().max(100).optional(),
+  project: z.string().min(1, "project is required").max(100),
   session_id: z.string().max(200).optional().describe(SESSION_NOTE),
   user_prompt: z.string().max(8000).optional().describe(USER_PROMPT_NOTE),
   tokens_used: z.number().int().min(0).optional().describe(TOKENS_NOTE),
@@ -94,7 +94,7 @@ export const EditKnowledgeSchema = z
   .object({
     id: z.number().int().positive(),
     title: z.string().min(1).max(200).optional(),
-    project: z.string().max(100).optional(),
+    project: z.string().min(1, "project is required").max(100).optional(),
     session_id: z.string().max(200).optional().describe(SESSION_NOTE),
     user_prompt: z.string().max(8000).optional().describe(USER_PROMPT_NOTE),
     tokens_used: z.number().int().min(0).optional().describe(TOKENS_NOTE),

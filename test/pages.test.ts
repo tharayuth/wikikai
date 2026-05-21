@@ -17,7 +17,7 @@ describe("PageStore", () => {
     const db = openDb(":memory:");
     knowledge = new KnowledgeStore(db);
     pages = new PageStore(db, tmpDir);
-    kid = knowledge.add({ title: "Doc" }).id;
+    kid = knowledge.add({ title: "Doc", project: "examples" }).id;
   });
 
   afterEach(() => {
@@ -412,7 +412,7 @@ describe("PageStore", () => {
     });
 
     it("filters by knowledge_id", () => {
-      const otherK = knowledge.add({ title: "Other" }).id;
+      const otherK = knowledge.add({ title: "Other", project: "examples" }).id;
       pages.add({ knowledge_id: otherK, title: "Z", content: "Redis here too" });
       const hits = pages.search("Redis", { knowledge_id: kid });
       for (const h of hits) expect(h.knowledge_id).toBe(kid);
