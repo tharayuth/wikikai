@@ -169,7 +169,7 @@ function UserGuideEn() {
         <li><strong>Image gallery — <code>```images</code> fence</strong> (specialised) — JSON array of <code>{`{ src, alt?, caption? }`}</code>; renders a uniform thumbnail grid with click-to-lightbox. Useful for 4+ side-by-side screenshots. For 1–3 images, plain markdown above is simpler and now equivalent</li>
         <li><strong>Interactive checkboxes</strong> — write a GFM task list <code>- [ ] item</code> / <code>- [x] item</code> anywhere a markdown list goes; the renderer turns each into a real clickable checkbox. <strong>Plain markdown tables work too</strong> — drop <code>[ ]</code> or <code>[x]</code> anywhere inside any cell (start, middle, multiple per cell) and each becomes a live checkbox sharing the same task-index counter. Wrap a literal <code>`[x]`</code> in backticks if you want to keep it as text. Raw <code>&lt;input type="checkbox"&gt;</code> markup inside <code>html-embed</code> is also clickable. <em>Clicking a box writes back to the source immediately</em> (page version bumped, revision snapshot, FTS reindexed). AI flips them via the <code>toggle_task</code> MCP tool — e.g. "tick task 3 on this page"</li>
         <li><strong>Images in HTML embed</strong> — alternatively, write <code>&lt;img src="/img/..." /&gt;</code> (or any external URL) inside an <code>html-embed</code> block when the image needs to sit beside text in a custom flex/grid layout. External URLs are also OK but only internal <code>/img/</code> paths are recoverable + visible to <code>get_image</code></li>
-        <li><strong>Block ids <code>@N</code></strong> — every rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) gets a globally-unique id, shown as a small pill in the block's corner. Click to open a small menu — copy <code>@N</code> or jump straight into the editor at this block. <strong>Plain markdown tables</strong> also get an id via a trailing <code>{`{@N}`}</code> line under the table (blank line in between); the renderer attaches it as <code>data-block-id</code> on the <code>&lt;table&gt;</code> so <code>search</code> / <code>get_block</code> / the new <code>get_table_row</code> tool all work on tables too</li>
+        <li><strong>Block ids <code>@N</code> + captions</strong> — every rich block (mermaid / chart / chart-grid / stats / steps / html-embed / images) gets a globally-unique id, shown as a small pill in the block's corner. Click to open a small menu — copy <code>@N</code> or jump straight into the editor at this block. <strong>Plain markdown tables</strong> also get an id via a trailing <code>{`{@N}`}</code> line. Each annotation can carry an optional <strong>caption</strong>: <code>{`{@123 "Architecture: API → DB"}`}</code> — renders as small italic text below the block (like an HTML <code>&lt;figcaption&gt;</code>) and lets AI answer "what is @123?" cheaply via <code>get_block({"{ id, summary: true }"})</code></li>
         <li><strong>Tables and code blocks</strong> — standard markdown plus Shiki syntax highlighting</li>
         <li><strong>Heading anchors</strong> — hover a heading to reveal <code>#</code> for copying a deep link to that section</li>
       </ul>
@@ -271,7 +271,7 @@ function UserGuideTh() {
         <li><strong>Image gallery (<code>```images</code> fence)</strong> — ใช้เฉพาะกรณีอยากได้ thumbnail grid 4+ ภาพเรียงกัน. JSON array <code>{`{ src, alt?, caption? }`}</code>; คลิก thumbnail → lightbox. ถ้า 1–3 ภาพ ใช้ markdown ปกติด้านบนดีกว่า (มี lightbox + resize handle อยู่แล้ว)</li>
         <li><strong>Interactive checkbox</strong> — เขียน GFM task list <code>- [ ] item</code> / <code>- [x] item</code> ใน list ปกติ; renderer แปลงเป็น checkbox จริงคลิกได้. <strong>ตาราง markdown ปกติก็ได้</strong> — ใส่ <code>[ ]</code> หรือ <code>[x]</code> ที่ไหนก็ได้ใน cell (ต้น, กลาง, หลายอันใน cell เดียว) — ทุกอันเป็น checkbox คลิกได้ใช้ task-index counter เดียวกัน. อยากให้เป็น text จริงให้ใส่ backtick ครอบ — เช่น <code>`[x]`</code>. <code>&lt;input type="checkbox"&gt;</code> ใน <code>html-embed</code> ก็คลิกได้. <em>คลิกแล้ว save กลับ markdown ทันที</em> (bump page version + revision snapshot + FTS reindex). AI ใช้ MCP tool <code>toggle_task</code> ก็ได้ผลเดียวกัน (เช่น "tick task 3")</li>
         <li><strong>Image ใน HTML embed</strong> — หรือใช้ <code>&lt;img src="/img/..." /&gt;</code> (หรือ URL ภายนอก) ใน <code>html-embed</code> เมื่อต้องการภาพคู่กับ text ใน layout เอง. URL ภายนอกก็ได้ แต่เฉพาะ <code>/img/</code> ภายในที่ <code>get_image</code> ดูได้ + กู้คืนได้</li>
-        <li><strong>Block id <code>@N</code></strong> — rich block ทุกชนิด (mermaid / chart / chart-grid / stats / steps / html-embed / images) ได้เลข <code>@N</code> ระดับ global ติดมุมขวาบน คลิกเพื่อเปิดเมนู — copy <code>@N</code> หรือเข้า editor ที่ block นั้นเลย. <strong>ตาราง markdown</strong> ก็ได้ <code>@N</code> ผ่านบรรทัด <code>{`{@N}`}</code> ใต้ตาราง (เว้น 1 บรรทัดก่อน) — renderer จะแปะเป็น <code>data-block-id</code> บน <code>&lt;table&gt;</code> ทำให้ <code>search</code> / <code>get_block</code> / tool ใหม่ <code>get_table_row</code> ใช้กับตารางได้</li>
+        <li><strong>Block id <code>@N</code> + caption</strong> — rich block ทุกชนิด + ตาราง markdown ได้ <code>@N</code> ระดับ global. annotation มี caption ได้: <code>{`{@123 "คำบรรยายภาพ"}`}</code> — render เป็นข้อความ italic เล็กใต้ block (เหมือน HTML <code>&lt;figcaption&gt;</code>). AI ถาม "what is @123?" ผ่าน <code>get_block({"{ id, summary: true }"})</code> ได้ราคาถูก ๆ — ไม่ต้องดึง body</li>
         <li><strong>Tables, code blocks</strong> — markdown ปกติ + syntax highlight (Shiki)</li>
         <li><strong>Heading anchor</strong> — hover ที่ heading จะมี <code>#</code> สำหรับ copy URL ของหัวข้อ</li>
       </ul>
@@ -361,9 +361,15 @@ function McpGuideEn() {
         </tbody>
       </table>
 
-      <h3>Block ids (<code>@N</code>)</h3>
+      <h3>Block ids (<code>@N</code>) + captions</h3>
       <p>
         Every rendered rich block (mermaid / chart / chart-grid / stats / steps / html-embed) is stamped with a globally-unique id. The source carries it as <code>```mermaid {`{@123}`}</code>; the UI shows a small <code>@123</code> pill in the block's top-left corner on hover (click for a menu: copy or jump-to-edit). Users can then say "update @47" and you can <code>get_block({"{ id: 47 }"})</code> directly without searching.
+      </p>
+      <p>
+        <strong>Captions</strong> — annotation can carry a quoted caption: <code>```mermaid {`{@123 "Architecture: API → DB"}`}</code>. Renders as small italic text directly below the block (semantically the same as an HTML <code>&lt;figcaption&gt;</code> / a Word figure caption). AI can probe "what is @123?" cheaply via <code>get_block({"{ id, summary: true }"})</code> — returns the caption without the body. Set/update/clear via <code>set_block_caption({"{ id, caption }"})</code>.
+      </p>
+      <p>
+        <strong>Read whole pages efficiently</strong> — <code>read_page({"{ page_id, mode: \"summary\" }"})</code> returns a skeleton where every annotated block + table collapses to a one-line <code>[@N kind: caption]</code> placeholder. AI sees the page's structure + every block's caption in 5–10× fewer tokens than a full read, then picks which <code>@N</code> to fetch in full via <code>get_block</code>.
       </p>
       <p>
         <strong>Plain markdown tables</strong> also get an id — author it as a trailing <code>{`{@N}`}</code> line under the table (with one blank line in between):
@@ -521,9 +527,15 @@ function McpGuideTh() {
         </tbody>
       </table>
 
-      <h3>Block id (<code>@N</code>)</h3>
+      <h3>Block id (<code>@N</code>) + caption</h3>
       <p>
         ทุก rich block (mermaid / chart / chart-grid / stats / steps / html-embed) ที่ render จะได้เลข <code>@N</code> แบบ global. ใน source markdown ติดเป็น <code>```mermaid {`{@123}`}</code>; UI แสดง pill <code>@123</code> มุมซ้ายบนของ block ตอน hover (คลิกเปิดเมนู: copy หรือเข้า editor ที่ block นั้น). User บอก "อัพเดต @47" → <code>get_block({"{ id: 47 }"})</code> ได้เลย ไม่ต้องค้นเอง.
+      </p>
+      <p>
+        <strong>Caption (คำบรรยายภาพ)</strong> — annotation มีคำบรรยายได้: <code>```mermaid {`{@123 "Architecture: API → DB"}`}</code>. แสดงเป็นข้อความ italic เล็กสีจางใต้ block (semantic เดียวกับ HTML <code>&lt;figcaption&gt;</code> หรือ caption ในเอกสารทั่วไป). AI ใช้ <code>get_block({"{ id, summary: true }"})</code> จะได้ caption โดยไม่ต้องดึง body — ตอบคำถาม "@123 คืออะไร" ราคาถูก ๆ. ตั้ง/อัปเดต/ล้างด้วย <code>set_block_caption({"{ id, caption }"})</code>.
+      </p>
+      <p>
+        <strong>อ่านทั้งหน้าให้ประหยัด token</strong> — <code>read_page({"{ page_id, mode: \"summary\" }"})</code> คืน skeleton ที่ทุก block + ตารางที่มี <code>@N</code> ยุบเป็นบรรทัดเดียว <code>[@N kind: caption]</code>. AI เห็นโครงสร้างหน้า + caption ของทุก block ใช้ token น้อยกว่า full read 5–10 เท่า. แล้วเลือก fetch เฉพาะ <code>@N</code> ที่ต้องใช้ผ่าน <code>get_block</code>.
       </p>
       <p>
         <strong>ตาราง markdown</strong> ก็ได้ <code>@N</code> เหมือนกัน — เขียนเป็นบรรทัด <code>{`{@N}`}</code> ใต้ตาราง (เว้น 1 บรรทัดก่อน):

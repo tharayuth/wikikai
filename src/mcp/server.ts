@@ -68,7 +68,7 @@ const addPageShape = {
   title: z.string().min(1).max(200).describe("Tab label"),
   content: z.string().describe(
     "Markdown body. Custom fences for richer content: ```mermaid (diagrams), ```chart / ```chart-grid (Chart.js), ```stats (KPI cards), ```steps (numbered step cards), ```html-embed (raw HTML for flexible tables, layouts, SVG, iframes), ```images (multi-image gallery — legacy; for a single image prefer plain markdown `![alt](src \"WxH\")` which now supports drag-to-resize + click-to-lightbox just like the gallery). " +
-      "Each rendered fenced block is auto-assigned a stable global id and annotated in source as ```mermaid {@123}; you can refer to it by `@N` thereafter (e.g. 'update @123'). " +
+      "Each rendered fenced block is auto-assigned a stable global id and annotated in source as ```mermaid {@123}; you can refer to it by `@N` thereafter (e.g. 'update @123'). The annotation can carry a **caption** (like an HTML `<figcaption>` / a Word figure caption): ```mermaid {@123 \"Architecture: API → DB\"} — short text describing what the block IS, rendered as small italic text directly below the block. **Always set a caption when creating a rich block** so an AI calling `get_block({ id, summary: true })` or `read_page({ mode: \"summary\" })` can answer 'what is @123?' without paying the body's token cost. Set/update later via `set_block_caption({ id, caption })`. " +
       "Interactive checkboxes (three surfaces, all live, all flipped via the same `toggle_task` tool): " +
       "(a) GFM task list `- [ ] thing` / `- [x] done` inside any bulleted list, " +
       "(b) `[ ]` / `[x]` anywhere inside a markdown-table cell — e.g. `| Task | [ ] | Owner |` or `| Tests [x] Lint [x] Types [ ] |` (multiple per cell). The bracket pair must be bounded by whitespace or the cell separator `|`; wrap a literal `[x]` in backticks if you want to keep it as text, " +
@@ -311,7 +311,7 @@ const getExampleShape = {
     .describe(
       "Example flavor; default 'full' shows every fenced-block type. " +
         "Pick one to learn the template for that fence: full / minimal / mermaid / chart / stats / steps / er / html. " +
-        "Note: rendered rich blocks (mermaid/chart/chart-grid/stats/steps/html-embed/images) AND plain markdown tables all carry a `@N` id you can refer to later — tables get a trailing `{@N}` line auto-stamped under them on save.",
+        "Note: rendered rich blocks (mermaid/chart/chart-grid/stats/steps/html-embed/images) AND plain markdown tables all carry a `@N` id you can refer to later — tables get a trailing `{@N}` line auto-stamped under them on save. The annotation can also carry an optional caption (`{@N \"short description\"}`) — recommended for every non-trivial block so AI can probe it via `get_block({ summary: true })` / `read_page({ mode: \"summary\" })` without fetching the body.",
     ),
   outline_only: z
     .boolean()
