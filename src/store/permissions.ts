@@ -35,13 +35,23 @@ export class PermissionStore {
       .all(user_id) as PermissionEntry[];
   }
 
-  /** Replace the user's entire permission set in one transaction. */
+  /** Replace the user's entire permission set in one transaction.
+   *
+   *  Project names that exist only as derived `knowledge.project` values
+   *  (never registered explicitly via `POST /api/projects`) get auto-
+   *  registered here so the FK to `projects(name)` is satisfied. The
+   *  UI lists projects as a UNION of `projects` + distinct
+   *  `knowledge.project`, so any name the admin can pick must be a
+   *  legitimate project — registering it on grant is correct. */
   replaceForUser(
     user_id: number,
     entries: PermissionEntry[],
     granted_by: number | null,
   ): void {
     const now = new Date().toISOString();
+    const ensureProject = this.db.prepare(
+      `INSERT OR IGNORE INTO projects (name, created_at) VALUES (?, ?)`,
+    );
     const del = this.db.prepare(
       `DELETE FROM project_permissions WHERE user_id = ?`,
     );
@@ -50,11 +60,33 @@ export class PermissionStore {
          (user_id, project_name, level, granted_at, granted_by)
        VALUES (?, ?, ?, ?, ?)`,
     );
+    const known = new Set(this.knownProjectNames());
     const tx = this.db.transaction((rows: PermissionEntry[]) => {
       del.run(user_id);
-      for (const r of rows) ins.run(user_id, r.project, r.level, now, granted_by);
+      for (const r of rows) {
+        if (!known.has(r.project)) {
+          throw new Error(`unknown project '${r.project}'`);
+        }
+        ensureProject.run(r.project, now);
+        ins.run(user_id, r.project, r.level, now, granted_by);
+      }
     });
     tx(entries);
+  }
+
+  /** UNION of `projects` registry + distinct `knowledge.project`.
+   *  Matches what the admin sees in the Permissions editor. */
+  private knownProjectNames(): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT name FROM (
+           SELECT name FROM projects
+           UNION
+           SELECT project AS name FROM knowledge WHERE project IS NOT NULL
+         )`,
+      )
+      .all() as Array<{ name: string }>;
+    return rows.map((r) => r.name);
   }
 
   /**
