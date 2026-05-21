@@ -1796,7 +1796,7 @@ Before push:
 
 1. `git diff origin/main..HEAD -- data/` — no real data leaked
 2. `git log origin/main..HEAD --stat | grep -E "\.env|secret|token"` — none
-3. `grep -rn "vWSBgKVxqfZX0CVehU22DZEi5NMLEfGth0jmF9O2fBY" src test docs 2>/dev/null` — none
+3. `grep -rn "<your-mcp-token-here>" src test docs 2>/dev/null` — none
 4. `git show HEAD~1:.env 2>/dev/null` — should be 404
 5. `git ls-files | grep -E "^data/"` — only the index/sample, no real notes
 
