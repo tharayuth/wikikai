@@ -6,9 +6,13 @@ import {
   useDeleteAdminUserMutation,
   useGetAuthMeQuery,
   useListAdminUsersQuery,
+  useListProjectsQuery,
+  useListUserPermissionsQuery,
   useRegenerateUserMcpTokenMutation,
   useUpdateAdminUserMutation,
+  useUpdateUserPermissionsMutation,
   type AuthUser,
+  type ProjectPermission,
 } from "../store/api";
 
 /**
@@ -385,6 +389,96 @@ function EditUserForm({
           {isLoading ? "Saving…" : "Save changes"}
         </button>
       </div>
+      {!user.is_admin ? (
+        <ProjectAccessSection userId={user.id} />
+      ) : (
+        <div className="project-access-admin-note">
+          Admin — full access to all projects.
+        </div>
+      )}
     </form>
+  );
+}
+
+type Level = "none" | "view" | "edit";
+
+function ProjectAccessSection({ userId }: { userId: number }): JSX.Element {
+  const { data: projectsResp } = useListProjectsQuery();
+  const { data: permsResp } = useListUserPermissionsQuery(userId);
+  const [update, { isLoading }] = useUpdateUserPermissionsMutation();
+
+  const projects = projectsResp?.projects ?? [];
+
+  const initial: Record<string, Level> = {};
+  for (const p of projects) initial[p.name] = "none";
+  for (const pp of permsResp?.permissions ?? []) initial[pp.project] = pp.level;
+
+  const [state, setState] = useState<Record<string, Level>>(initial);
+
+  useEffect(() => {
+    const next: Record<string, Level> = {};
+    for (const p of projects) next[p.name] = "none";
+    for (const pp of permsResp?.permissions ?? []) next[pp.project] = pp.level;
+    setState(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectsResp, permsResp]);
+
+  const setAll = (lvl: Level) => {
+    const next: Record<string, Level> = {};
+    for (const p of projects) next[p.name] = lvl;
+    setState(next);
+  };
+
+  const save = () => {
+    const permissions: ProjectPermission[] = Object.entries(state)
+      .filter(([, lvl]) => lvl !== "none")
+      .map(([project, level]) => ({
+        project,
+        level: level as "view" | "edit",
+      }));
+    update({ userId, permissions }).catch(() => undefined);
+  };
+
+  return (
+    <fieldset className="project-access">
+      <legend>Project access</legend>
+      {projects.map((p) => (
+        <div key={p.name} className="project-access-row">
+          <span className="project-access-name">{p.name}</span>
+          {(["none", "view", "edit"] as Level[]).map((lvl) => (
+            <label key={lvl}>
+              <input
+                type="radio"
+                checked={state[p.name] === lvl}
+                onChange={() => setState((s) => ({ ...s, [p.name]: lvl }))}
+              />
+              {lvl}
+            </label>
+          ))}
+        </div>
+      ))}
+      <div className="project-access-bulk">
+        <span>Set all →</span>
+        <button type="button" onClick={() => setAll("none")}>
+          none
+        </button>
+        <button type="button" onClick={() => setAll("view")}>
+          view
+        </button>
+        <button type="button" onClick={() => setAll("edit")}>
+          edit
+        </button>
+      </div>
+      <div className="project-access-actions">
+        <button
+          type="button"
+          className="account-btn primary"
+          onClick={save}
+          disabled={isLoading}
+        >
+          {isLoading ? "Saving…" : "Save access"}
+        </button>
+      </div>
+    </fieldset>
   );
 }
