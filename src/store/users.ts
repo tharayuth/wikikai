@@ -33,6 +33,16 @@ interface UserRow {
   mcp_token: string | null;
 }
 
+/** Accept either a real email address (with `@` + domain) or a simple
+ *  username (letters / digits / `_` `.` `-`). Self-hosted single-tenant
+ *  use often has no reason to type a full address — "admin", "kai",
+ *  "team-lead" are all fine. Case is normalised to lowercase upstream. */
+function isValidEmail(s: string): boolean {
+  if (!s) return false;
+  if (/^[a-z0-9_.-]{2,64}$/.test(s)) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
 function rowToUser(row: UserRow): User {
   return {
     id: row.id,
@@ -96,8 +106,8 @@ export class UserStore {
     is_admin?: boolean;
   }): User {
     const email = input.email.trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new Error("invalid email");
+    if (!isValidEmail(email)) {
+      throw new Error("email is required (email address or simple username)");
     }
     const display = input.display_name.trim();
     if (!display) throw new Error("display_name is required");
@@ -165,6 +175,92 @@ export class UserStore {
       .prepare(`SELECT * FROM users ORDER BY id`)
       .all() as UserRow[];
     return rows.map(rowToUser);
+  }
+
+  /** Count of users currently flagged is_admin=1. Used by the
+   *  "you can't delete / demote the last admin" guard. */
+  adminCount(): number {
+    const r = this.db
+      .prepare(`SELECT COUNT(*) AS n FROM users WHERE is_admin = 1`)
+      .get() as { n: number };
+    return r.n;
+  }
+
+  /** Update editable user fields. Pass `password` to also rehash and
+   *  rotate stored hash (won't invalidate active sessions — call
+   *  SessionStore.deleteForUser separately if that's wanted).
+   *
+   *  Throws when:
+   *    - the user doesn't exist
+   *    - a unique-constraint email conflict happens
+   *    - demoting the last admin would leave the system with zero
+   *      admins (would brick admin UI access)
+   */
+  update(
+    id: number,
+    patch: {
+      email?: string;
+      display_name?: string;
+      password?: string;
+      is_admin?: boolean;
+    },
+  ): User {
+    const current = this.get(id);
+    if (!current) throw new Error(`user #${id} not found`);
+
+    // Last-admin guard — refuse a demotion that would leave 0 admins.
+    if (
+      patch.is_admin === false &&
+      current.is_admin &&
+      this.adminCount() <= 1
+    ) {
+      throw new Error("can't demote the last admin");
+    }
+
+    const updates: string[] = [];
+    const params: Record<string, unknown> = { id };
+    if (patch.email !== undefined) {
+      const email = patch.email.trim().toLowerCase();
+      if (!isValidEmail(email)) throw new Error("invalid email");
+      if (email !== current.email) {
+        const clash = this.getByEmail(email);
+        if (clash && clash.id !== id) throw new Error("email already in use");
+      }
+      updates.push("email = @email");
+      params.email = email;
+    }
+    if (patch.display_name !== undefined) {
+      const display = patch.display_name.trim();
+      if (!display) throw new Error("display_name is required");
+      updates.push("display_name = @display");
+      params.display = display;
+    }
+    if (patch.password !== undefined) {
+      updates.push("password_hash = @hash");
+      params.hash = hashPassword(patch.password);
+    }
+    if (patch.is_admin !== undefined) {
+      updates.push("is_admin = @is_admin");
+      params.is_admin = patch.is_admin ? 1 : 0;
+    }
+    if (updates.length === 0) return current;
+
+    this.db
+      .prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = @id`)
+      .run(params);
+    return this.get(id)!;
+  }
+
+  /** Delete a user. Refuses to delete the last admin so the system
+   *  can't get locked out. Cascading FK on sessions → all that user's
+   *  sessions are evicted automatically. */
+  delete(id: number): void {
+    const u = this.get(id);
+    if (!u) throw new Error(`user #${id} not found`);
+    if (u.is_admin && this.adminCount() <= 1) {
+      throw new Error("can't delete the last admin");
+    }
+    this.db.prepare(`DELETE FROM users WHERE id = ?`).run(id);
   }
 }
 

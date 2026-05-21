@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
-import { closeAccount } from "../store/uiSlice";
+import { closeAccount, openUsersAdmin } from "../store/uiSlice";
 import {
   useGetAuthMeQuery,
   useRegenerateMcpTokenMutation,
@@ -88,6 +88,18 @@ export function AccountModal(): JSX.Element | null {
       >
         <div className="account-header">
           <h2>Your account</h2>
+          {user.is_admin && (
+            <button
+              type="button"
+              className="account-btn"
+              onClick={() => {
+                dispatch(closeAccount());
+                dispatch(openUsersAdmin());
+              }}
+            >
+              Manage users →
+            </button>
+          )}
           <button
             type="button"
             className="icon-btn"

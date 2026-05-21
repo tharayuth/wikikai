@@ -11,6 +11,7 @@ import { LoginPage } from "./components/LoginPage";
 import { HelpModal } from "./components/HelpModal";
 import { ActivityLogModal } from "./components/ActivityLogModal";
 import { AccountModal } from "./components/AccountModal";
+import { UsersAdminModal } from "./components/UsersAdminModal";
 import { ProjectFilterModal } from "./components/ProjectFilterModal";
 import { Toast } from "./components/Toast";
 
@@ -77,6 +78,7 @@ export function App() {
       <HelpModal />
       <ActivityLogModal />
       <AccountModal />
+      <UsersAdminModal />
       <ProjectFilterModal />
       <Toast />
     </>

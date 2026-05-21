@@ -45,6 +45,123 @@ describe("HTTP routes", () => {
       expect(res.body.auth_enabled).toBe(false);
     });
 
+    it("admin CRUD + last-admin guard", async () => {
+      const db = openDb(":memory:");
+      const knowledge = new KnowledgeStore(db);
+      const pages = new PageStore(db, tmpDir);
+      const images = new ImageStore(db, path.join(tmpDir, "ad-images"));
+      const promptLog = new PromptLogStore(db);
+      const activityLog = new ActivityLogStore(db);
+      const users = new UserStore(db);
+      const sessions = new SessionStore(db, users);
+      users.create({
+        email: "admin",
+        password: "12345",
+        display_name: "Admin",
+        is_admin: true,
+      });
+      const handlers = buildToolHandlers(
+        knowledge,
+        pages,
+        images,
+        promptLog,
+        activityLog,
+        { publicBaseUrl: "http://test" },
+      );
+      const adminApp = buildApp({
+        knowledge,
+        pages,
+        images,
+        promptLog,
+        activityLog,
+        users,
+        sessions,
+        handlers,
+        publicBaseUrl: "http://test",
+        webAuth: true,
+      });
+
+      // Log in as admin
+      let res = await request(adminApp)
+        .post("/api/auth/login")
+        .send({ email: "admin", password: "12345" });
+      const cookie = res.headers["set-cookie"][0];
+
+      // List → just admin
+      res = await request(adminApp)
+        .get("/api/admin/users")
+        .set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.users).toHaveLength(1);
+      expect(res.body.users[0].email).toBe("admin");
+      expect(res.body.users[0].mcp_token).toBeTruthy();
+
+      // Create a member
+      res = await request(adminApp)
+        .post("/api/admin/users")
+        .set("Cookie", cookie)
+        .send({
+          email: "alice",
+          password: "secret",
+          display_name: "Alice",
+        });
+      expect(res.status).toBe(200);
+      const aliceId = res.body.user.id;
+      expect(res.body.user.is_admin).toBe(false);
+      expect(res.body.user.mcp_token).toBeTruthy();
+
+      // Update Alice's name + password
+      res = await request(adminApp)
+        .patch(`/api/admin/users/${aliceId}`)
+        .set("Cookie", cookie)
+        .send({ display_name: "Alice in WL", password: "newpw" });
+      expect(res.body.user.display_name).toBe("Alice in WL");
+
+      // Regenerate Alice's MCP token
+      const oldTok = res.body.user.mcp_token;
+      res = await request(adminApp)
+        .post(`/api/admin/users/${aliceId}/regenerate-mcp-token`)
+        .set("Cookie", cookie);
+      expect(res.body.mcp_token).toBeTruthy();
+      expect(res.body.mcp_token).not.toBe(oldTok);
+
+      // Last-admin guard: try to demote admin → 400
+      res = await request(adminApp)
+        .patch("/api/admin/users/1")
+        .set("Cookie", cookie)
+        .send({ is_admin: false });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/last admin/);
+
+      // Last-admin guard: try to delete admin → 400
+      res = await request(adminApp)
+        .delete("/api/admin/users/1")
+        .set("Cookie", cookie);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/yourself|last admin/);
+
+      // Non-admin gating: alice logs in, /api/admin/users → 403
+      res = await request(adminApp)
+        .post("/api/auth/login")
+        .send({ email: "alice", password: "newpw" });
+      const aliceCookie = res.headers["set-cookie"][0];
+      res = await request(adminApp)
+        .get("/api/admin/users")
+        .set("Cookie", aliceCookie);
+      expect(res.status).toBe(403);
+
+      // Delete Alice via admin
+      res = await request(adminApp)
+        .delete(`/api/admin/users/${aliceId}`)
+        .set("Cookie", cookie);
+      expect(res.status).toBe(200);
+      // Alice's session should be gone now (FK CASCADE on sessions)
+      res = await request(adminApp)
+        .get("/api/auth/me")
+        .set("Cookie", aliceCookie);
+      expect(res.body.user).toBeNull();
+    });
+
     it("login → me → logout flow", async () => {
       // Set up a user
       const db = openDb(":memory:");

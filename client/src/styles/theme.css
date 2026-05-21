@@ -3343,3 +3343,141 @@ a:hover { text-decoration: underline; }
 .topbar-user-name:hover {
   color: var(--accent);
 }
+
+/* ───── Users admin modal ───── */
+.users-admin-modal {
+  max-width: 1000px;
+  width: 96vw;
+  height: 84vh;
+  max-height: 84vh;
+}
+.users-admin-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-3);
+}
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+.users-table th,
+.users-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-faint, var(--border));
+  font-size: 13px;
+  vertical-align: middle;
+  text-align: left;
+}
+.users-table th {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.users-table code {
+  font-size: 12px;
+  background: var(--surface-2, rgba(127,127,127,0.06));
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--mono);
+}
+.users-table-meta {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.users-table-token {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.users-table-token code {
+  flex: 1;
+  min-width: 100px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.users-table-actions {
+  display: flex;
+  gap: 6px;
+}
+.users-table-edit-row td {
+  background: var(--surface-2, rgba(127,127,127,0.04));
+  padding: 14px 18px;
+}
+.role-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.role-toggle input[disabled] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.account-btn.small {
+  font-size: 11.5px;
+  padding: 3px 8px;
+}
+.account-btn.primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.account-btn.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.add-user-form {
+  background: var(--surface-2, rgba(127,127,127,0.05));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px 16px;
+  margin-bottom: 16px;
+}
+.add-user-form h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.add-user-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 10px 14px;
+  align-items: end;
+}
+.add-user-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.add-user-row input[type="text"],
+.add-user-row input[type="email"],
+.add-user-row input:not([type]) {
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+}
+.add-user-row .add-user-admin {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 7px;
+}
+.add-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}

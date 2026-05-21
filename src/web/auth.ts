@@ -166,4 +166,116 @@ export function attachAuthRoutes(app: Express, opts: AuthOptions): void {
     const token = opts.users.regenerateMcpToken(req.user.id);
     res.json({ mcp_token: token });
   });
+
+  // ───── Admin user management ─────
+  // Gated to req.user.is_admin. Simple CRUD: list / create / update /
+  // delete + regen-token for any user. The last-admin guard inside
+  // UserStore prevents bricking the system (can't delete or demote
+  // the only remaining admin).
+  const requireAdmin = (req: Request, res: Response): boolean => {
+    if (!req.user) {
+      res.status(401).json({ error: "auth required" });
+      return false;
+    }
+    if (!req.user.is_admin) {
+      res.status(403).json({ error: "admin only" });
+      return false;
+    }
+    return true;
+  };
+
+  app.get("/api/admin/users", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    res.json({ users: opts.users.list() });
+  });
+
+  app.post("/api/admin/users", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const body = (req.body ?? {}) as {
+      email?: string;
+      password?: string;
+      display_name?: string;
+      is_admin?: boolean;
+    };
+    if (
+      typeof body.email !== "string" ||
+      typeof body.password !== "string" ||
+      typeof body.display_name !== "string"
+    ) {
+      res
+        .status(400)
+        .json({ error: "email, password, display_name are required" });
+      return;
+    }
+    try {
+      const user = opts.users.create({
+        email: body.email,
+        password: body.password,
+        display_name: body.display_name,
+        is_admin: !!body.is_admin,
+      });
+      res.json({ user });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    const body = (req.body ?? {}) as {
+      email?: string;
+      display_name?: string;
+      password?: string;
+      is_admin?: boolean;
+    };
+    try {
+      const user = opts.users.update(id, body);
+      res.json({ user });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    // Self-delete guard — also blocked by last-admin check but UI
+    // shouldn't even offer it; safety net here.
+    if (req.user!.id === id) {
+      res.status(400).json({ error: "can't delete yourself" });
+      return;
+    }
+    try {
+      opts.users.delete(id);
+      // Drop any active sessions for the removed user
+      opts.sessions.deleteForUser(id);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  app.post("/api/admin/users/:id/regenerate-mcp-token", (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    try {
+      const token = opts.users.regenerateMcpToken(id);
+      res.json({ mcp_token: token });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
 }

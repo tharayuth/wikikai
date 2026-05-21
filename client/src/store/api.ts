@@ -239,6 +239,59 @@ export const portalApi = createApi({
       invalidatesTags: [{ type: "Auth", id: "ME" }],
     }),
 
+    // ───── Admin user management ─────
+    listAdminUsers: builder.query<{ users: AuthUser[] }, void>({
+      query: () => "admin/users",
+      providesTags: [{ type: "Auth", id: "USERS" }],
+    }),
+
+    createAdminUser: builder.mutation<
+      { user: AuthUser },
+      {
+        email: string;
+        password: string;
+        display_name: string;
+        is_admin?: boolean;
+      }
+    >({
+      query: (body) => ({ url: "admin/users", method: "POST", body }),
+      invalidatesTags: [{ type: "Auth", id: "USERS" }],
+    }),
+
+    updateAdminUser: builder.mutation<
+      { user: AuthUser },
+      {
+        id: number;
+        email?: string;
+        password?: string;
+        display_name?: string;
+        is_admin?: boolean;
+      }
+    >({
+      query: ({ id, ...body }) => ({
+        url: `admin/users/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: [{ type: "Auth", id: "USERS" }, { type: "Auth", id: "ME" }],
+    }),
+
+    deleteAdminUser: builder.mutation<{ ok: true }, number>({
+      query: (id) => ({ url: `admin/users/${id}`, method: "DELETE" }),
+      invalidatesTags: [{ type: "Auth", id: "USERS" }],
+    }),
+
+    regenerateUserMcpToken: builder.mutation<
+      { mcp_token: string },
+      number
+    >({
+      query: (id) => ({
+        url: `admin/users/${id}/regenerate-mcp-token`,
+        method: "POST",
+      }),
+      invalidatesTags: [{ type: "Auth", id: "USERS" }],
+    }),
+
     getActivityLog: builder.query<
       ActivityLogResponse,
       { limit?: number; offset?: number; knowledge_id?: number } | void
@@ -468,6 +521,11 @@ export const {
   useLoginMutation,
   useLogoutMutation,
   useRegenerateMcpTokenMutation,
+  useListAdminUsersQuery,
+  useCreateAdminUserMutation,
+  useUpdateAdminUserMutation,
+  useDeleteAdminUserMutation,
+  useRegenerateUserMcpTokenMutation,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
 } = portalApi;
