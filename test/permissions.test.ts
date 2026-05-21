@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { openDb } from "../src/store/db.js";
 import { PermissionStore } from "../src/store/permissions.js";
 import { UserStore } from "../src/store/users.js";
+import { assertProjectAccess, ForbiddenError } from "../src/lib/permissions.js";
 
 describe("project_permissions table", () => {
   it("exists with the expected columns", () => {
@@ -86,5 +87,59 @@ describe("PermissionStore", () => {
     expect(perms.listVisibleProjects(1, true).sort()).toEqual(
       ["examples", "secret"].sort(),
     );
+  });
+});
+
+describe("assertProjectAccess", () => {
+  function setup() {
+    const db = openDb(":memory:");
+    const users = new UserStore(db);
+    const admin = users.create({
+      email: "admin",
+      password: "x",
+      display_name: "Admin",
+      is_admin: true,
+    });
+    const alice = users.create({
+      email: "alice",
+      password: "x",
+      display_name: "Alice",
+    });
+    db.prepare("INSERT INTO projects (name, created_at) VALUES (?, ?)").run(
+      "examples",
+      new Date().toISOString(),
+    );
+    const perms = new PermissionStore(db);
+    perms.replaceForUser(alice.id, [{ project: "examples", level: "view" }], admin.id);
+    return { perms, admin, alice };
+  }
+
+  it("admin passes any check", () => {
+    const { perms, admin } = setup();
+    expect(() => assertProjectAccess(admin, "examples", "edit", perms)).not.toThrow();
+    expect(() => assertProjectAccess(admin, "anything", "edit", perms)).not.toThrow();
+  });
+
+  it("view-only user passes view but not edit", () => {
+    const { perms, alice } = setup();
+    expect(() => assertProjectAccess(alice, "examples", "view", perms)).not.toThrow();
+    expect(() => assertProjectAccess(alice, "examples", "edit", perms)).toThrow(ForbiddenError);
+  });
+
+  it("user without a row is denied", () => {
+    const { perms, alice } = setup();
+    expect(() => assertProjectAccess(alice, "secret", "view", perms)).toThrow(ForbiddenError);
+  });
+
+  it("null user is denied", () => {
+    const { perms } = setup();
+    expect(() => assertProjectAccess(null, "examples", "view", perms)).toThrow(ForbiddenError);
+  });
+
+  it("kill switch: when disabled, always passes", () => {
+    const { perms, alice } = setup();
+    expect(() =>
+      assertProjectAccess(alice, "secret", "edit", perms, { enabled: false }),
+    ).not.toThrow();
   });
 });

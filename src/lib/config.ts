@@ -36,6 +36,9 @@ export interface Config {
    *  mutation would log `user_id: null`. Defaults to the bootstrap
    *  admin's id when not set explicitly. */
   mcpDefaultUserId: number | null;
+  /** When false, `assertProjectAccess` no-ops — restores pre-ACL behaviour.
+   *  Defaults to true. Set `WIKIKAI_PROJECT_ACL=0` to disable in prod. */
+  projectAclEnabled: boolean;
 }
 
 /**
@@ -94,6 +97,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const mcpDefaultUserId = mcpDefaultUserRaw
     ? Number(mcpDefaultUserRaw) || null
     : null;
+  const projectAclEnabled = (env.WIKIKAI_PROJECT_ACL ?? "1") !== "0";
 
   return {
     port,
@@ -107,5 +111,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webAuth,
     bootstrapAdmin,
     mcpDefaultUserId,
+    projectAclEnabled,
   };
 }
