@@ -265,7 +265,12 @@ export class PageStore {
           }
           const sourceStart = i + 1;
           const sourceEnd = end + 1;
-          const placeholder = formatPlaceholder(lang, ann.id, ann.caption, null);
+          // Line count includes the two fence markers — gives the AI a
+          // fair sense of "how much text is hiding here?". Singular
+          // when it's exactly 1 (rare for fenced blocks).
+          const lineCount = sourceEnd - sourceStart + 1;
+          const extra = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
+          const placeholder = formatPlaceholder(lang, ann.id, ann.caption, extra);
           out.push(placeholder);
           blocks.push({
             id: ann.id,

@@ -187,7 +187,7 @@ export const ReadPageSchema = z.object({
     .enum(["full", "summary"])
     .optional()
     .describe(
-      "How to return the page body. `full` (default) returns the markdown verbatim — needed when you intend to follow up with `edit_lines` or any line-number-based edit. `summary` returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line `[@N kind: caption — extra hint]`, so the page reads as headings + prose + 1-line-per-block. **Prefer `summary` for first reads, navigation, or 'tell me what's on this page' / 'find @47'-style probes** — typical 5-10× token saving on pages with diagrams or large tables. Switch to `full` (or pass `line_start`/`line_end`) when you actually need the bodies for editing.",
+      "How to return the page body. `summary` (DEFAULT) returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line of the form `[@N kind 25 lines: caption]` (or `[@N table 12r × 3c: caption]`). The page reads as headings + prose + 1-line-per-block. Use this for first reads, navigation, and 'tell me what's on this page' / 'find @47' probes — typical 5-10× token saving on pages with diagrams or large tables. **`hash` is OMITTED in summary mode** — switch to `mode: \"full\"` (or pass `line_start`/`line_end`) before any `edit_lines` call. `full` returns verbatim markdown with hash, line numbers matching source — use when you're about to edit.",
     ),
   include_styles: z
     .boolean()
@@ -1212,7 +1212,11 @@ export function buildToolHandlers(
         },
         url: urlFor(ctx, meta.knowledge_id, parsed.page_id, r.line_start),
       };
-      if (parsed.mode === "summary") {
+      // Default to summary mode when the caller didn't say — saves
+      // tokens on every navigation/probe read. AI workflows that need
+      // the full body for editing must explicitly pass `mode: "full"`.
+      const mode = parsed.mode ?? "summary";
+      if (mode === "summary") {
         const { skeleton, blocks } = pages.summarizePageContent(r.content);
         const skelLines = skeleton === "" ? 0 : skeleton.split("\n").length;
         return {

@@ -943,8 +943,14 @@ describe("PageStore", () => {
         "```",
       ].join("\n");
       const r = pages.summarizePageContent(content);
-      expect(r.skeleton).toContain("[@111 mermaid: Architecture: API → DB]");
-      expect(r.skeleton).toContain("[@222 chart: Monthly revenue]");
+      // Placeholders include the block's source line count so AI knows
+      // how much text is hiding behind each `@N`.
+      expect(r.skeleton).toContain(
+        "[@111 mermaid 5 lines: Architecture: API → DB]",
+      );
+      expect(r.skeleton).toContain(
+        "[@222 chart 3 lines: Monthly revenue]",
+      );
       // Diagram source bodies must NOT survive in the skeleton
       expect(r.skeleton).not.toContain("flowchart TD");
       expect(r.skeleton).not.toContain('{"type":"bar"');
@@ -1021,7 +1027,7 @@ describe("PageStore", () => {
         "```",
       ].join("\n");
       const r = pages.summarizePageContent(content);
-      expect(r.skeleton).toBe("[@444 stats]");
+      expect(r.skeleton).toBe("[@444 stats 3 lines]");
       expect(r.blocks[0]).toMatchObject({ id: 444, caption: null });
     });
   });

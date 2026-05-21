@@ -128,13 +128,35 @@ describe("MCP tool handlers", () => {
   });
 
   describe("read_page + edit_lines + edit_section + replace_text", () => {
-    it("read_page returns slice + hash + url with line", async () => {
+    it("read_page mode:'full' returns slice + hash + url with line", async () => {
       const k = await h.add_knowledge({ title: "D" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a\nb\nc" });
-      const r = await h.read_page({ page_id: p.id, line_start: 2, line_end: 2 });
+      // Explicit mode:"full" — default is now "summary" which omits hash.
+      const r = await h.read_page({
+        page_id: p.id,
+        line_start: 2,
+        line_end: 2,
+        mode: "full",
+      });
       expect(r.content).toBe("b");
       expect(r.url).toBe(`http://test/&${k.id}/#${p.id}:2`);
       expect(r.hash).toBeTruthy();
+    });
+
+    it("read_page defaults to summary mode when caller omits `mode`", async () => {
+      const k = await h.add_knowledge({ title: "D" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: 'intro\n\n```mermaid {@900 "Arch"}\nflowchart TD\n  A --> B\n```\n',
+      });
+      const r = await h.read_page({ page_id: p.id });
+      expect(r.mode).toBe("summary");
+      expect(r.content).toContain("[@900 mermaid 4 lines: Arch]");
+      // Body must not survive
+      expect(r.content).not.toContain("flowchart TD");
+      // Hash omitted in summary mode by default
+      expect(r.hash).toBeUndefined();
     });
 
     it("read_page mode:'summary' returns skeleton + blocks index", async () => {
@@ -155,7 +177,7 @@ describe("MCP tool handlers", () => {
       });
       const r = await h.read_page({ page_id: p.id, mode: "summary" });
       expect(r.mode).toBe("summary");
-      expect(r.content).toContain("[@500 mermaid: Arch overview]");
+      expect(r.content).toContain("[@500 mermaid 4 lines: Arch overview]");
       expect(r.content).not.toContain("flowchart TD");
       expect(r.blocks).toBeDefined();
       expect(r.blocks!).toHaveLength(1);
@@ -183,8 +205,10 @@ describe("MCP tool handlers", () => {
           "```",
         ].join("\n"),
       });
-      // Default — styles stripped, hash omitted
-      const r1 = await h.read_page({ page_id: p.id });
+      // Full mode — styles stripped, hash omitted because stripping
+      // changed the content. Need mode:"full" since default is summary
+      // (which would collapse the whole html-embed to a placeholder).
+      const r1 = await h.read_page({ page_id: p.id, mode: "full" });
       expect(r1.content).not.toContain('style=');
       expect(r1.content).toContain("hello");
       expect(r1.content).toContain("world");
@@ -194,6 +218,7 @@ describe("MCP tool handlers", () => {
       // Opt-in keeps styles + hash
       const r2 = await h.read_page({
         page_id: p.id,
+        mode: "full",
         include_styles: true,
       });
       expect(r2.content).toContain('style="display:grid');
@@ -201,7 +226,7 @@ describe("MCP tool handlers", () => {
       expect(r2.hash).toBeTruthy();
     });
 
-    it("read_page leaves pages without html-embed alone — hash present by default", async () => {
+    it("read_page leaves pages without html-embed alone — hash present in full mode", async () => {
       const k = await h.add_knowledge({ title: "D" });
       const p = await h.add_page({
         knowledge_id: k.id,
@@ -210,7 +235,7 @@ describe("MCP tool handlers", () => {
       });
       // No html-embed → nothing to strip → hash still returned even
       // though include_styles defaults to false.
-      const r = await h.read_page({ page_id: p.id });
+      const r = await h.read_page({ page_id: p.id, mode: "full" });
       expect(r.hash).toBeTruthy();
     });
 
@@ -257,7 +282,12 @@ describe("MCP tool handlers", () => {
     it("edit_lines with expected_hash gate", async () => {
       const k = await h.add_knowledge({ title: "D" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a\nb\nc" });
-      const r = await h.read_page({ page_id: p.id, line_start: 2, line_end: 2 });
+      const r = await h.read_page({
+        page_id: p.id,
+        line_start: 2,
+        line_end: 2,
+        mode: "full",
+      });
       const e = await h.edit_lines({
         page_id: p.id,
         line_start: 2,
