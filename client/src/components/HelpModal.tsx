@@ -340,7 +340,7 @@ function McpGuideEn() {
       <table>
         <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>read_page</code></td><td>Read a page or just a line range — returns content + total_lines + <code>hash</code> + <strong>parent knowledge structure</strong> (title + sibling pages with <code>is_current</code> flag) so you don't need a separate <code>get_knowledge</code> call</td></tr>
+          <tr><td><code>read_page</code></td><td>Read a page or just a line range — returns content + total_lines + <code>hash</code> + <strong>parent knowledge structure</strong> (title + sibling pages with <code>is_current</code>) so you don't need a separate <code>get_knowledge</code> call. <strong>Two modes</strong>: <code>mode: "full"</code> (default) returns verbatim markdown; <code>mode: "summary"</code> collapses every annotated rich block + table to a one-line <code>[@N kind: caption]</code> placeholder + adds a <code>blocks</code> index — 5–10× token saving for navigation. <strong>html-embed inline <code>style="..."</code> is stripped by default</strong> (saves 50–70%/block); pass <code>include_styles: true</code> when working on presentation. <code>hash</code> is omitted when stripping occurred — re-read with <code>include_styles: true</code> before <code>edit_lines</code></td></tr>
           <tr><td><code>edit_lines</code></td><td>Replace lines [start..end] with new_text. ⚠️ Line numbers shift after every edit — pass <code>expected_hash</code> from a recent <code>read_page</code> to gate against stale edits</td></tr>
           <tr><td><code>edit_section</code></td><td><strong>Recommended</strong> — replace the body under an exact heading line (e.g. <code>"## 3. Performance"</code>) up to the next equal-or-higher heading. More stable than line-based edits</td></tr>
           <tr><td><code>replace_text</code></td><td>Literal find/replace across one page or every page of a knowledge</td></tr>
@@ -352,7 +352,8 @@ function McpGuideEn() {
         <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>search</code></td><td>SQLite FTS5 across content / title / keywords. Returns <code>{`{ kid, pid, line, snippet, url }`}</code> for every hit</td></tr>
-          <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Works for fenced rich blocks <em>and</em> markdown tables. Pass <code>summary: true</code> to skip the body — for tables you get <code>columns</code> + <code>row_count</code> instead, so you can probe a large table cheaply before deciding to fetch the full source</td></tr>
+          <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, caption, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Works for fenced rich blocks <em>and</em> markdown tables. <code>summary: true</code> → skip body; for tables you get <code>columns</code> + <code>row_count</code> + caption instead — cheap probe of large tables. <code>include_styles: true</code> → keep inline <code>style</code> attrs (html-embed kind only; default strips them, saves 50–70%)</td></tr>
+          <tr><td><code>set_block_caption</code></td><td>Set / update / clear the caption on a block's annotation (rewrites <code>{`{@N "caption"}`}</code> in source). Args: <code>{`{ id, caption }`}</code> — pass <code>null</code> or empty string to remove. Caption is the same idea as an HTML <code>&lt;figcaption&gt;</code> — short text describing what the block IS, so future <code>get_block({"{ summary: true }"})</code> probes answer "what is @47?" cheaply</td></tr>
           <tr><td><code>get_table_row</code></td><td>Get a single data row of a markdown-table block as a <code>{`{ columnName: cellText }`}</code> object. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> is 0-based; negative wraps from end (<code>-1</code> = last row). When you don't know the index, use <code>find_table_rows</code> instead</td></tr>
           <tr><td><code>find_table_rows</code></td><td>Search inside a table without pulling the whole body. Args: <code>{`{ block_id, q?, where?, columns?, limit? }`}</code> — <code>q</code> = substring (case-insensitive), <code>where</code> = exact column=value (AND across keys), <code>columns</code> = restrict <code>q</code> to these columns, <code>limit</code> default 50 / max 500. Returns <code>{`{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`}</code></td></tr>
           <tr><td><code>get_example</code></td><td>Markdown reference. <strong>3 read modes</strong> to keep tokens low: <code>outline_only:true</code> (heading list only) · <code>line_start/line_end</code> (slice) · default (full). <code>kind</code> = full / minimal / mermaid / chart / stats / steps / er / html</td></tr>
@@ -402,6 +403,37 @@ function McpGuideEn() {
         <li><strong>project</strong> — group key (e.g. repo name) used to group entries in the sidebar</li>
         <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags filter knowledge entries; keywords add weight to FTS search on a page</li>
       </ul>
+
+      <h3>Block-choice guidance — pick a prepared block FIRST</h3>
+      <p>
+        WikiKai gives you 6 prepared semantic blocks + plain markdown. Reach for <code>html-embed</code> only when no prepared block fits AND a custom HTML layout meaningfully improves understanding (gradient status cards, color-coded decision matrix, badges + flex layout, <code>&lt;details&gt;</code> accordions, inline SVG, iframes). Prepared blocks are cheaper to read (no inline-style noise), get richer tooling (<code>find_table_rows</code>, <code>get_table_row</code>, chart re-themes), and render consistently across light/dark themes.
+      </p>
+      <table>
+        <thead><tr><th>You want to show…</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td>Flow, sequence, ER, gantt, state, mindmap</td><td><code>```mermaid</code></td></tr>
+          <tr><td>Numeric series / comparison / trend</td><td><code>```chart</code> · <code>```chart-grid</code></td></tr>
+          <tr><td>KPI numbers, dashboard headline figures</td><td><code>```stats</code></td></tr>
+          <tr><td>Ordered procedure / how-to / runbook</td><td><code>```steps</code></td></tr>
+          <tr><td>Tabular data</td><td><strong>plain markdown table</strong> — gets <code>@N</code>, <code>[ ]</code> in cells, <code>find_table_rows</code> search</td></tr>
+          <tr><td>4+ side-by-side screenshots as gallery</td><td><code>```images</code></td></tr>
+          <tr><td>Single image inline / in prose / table cell</td><td>plain markdown <code>{`![alt](src "WxH")`}</code> — drag-resize + click-lightbox built in</td></tr>
+          <tr><td>Custom layout with row/col colors, gradient cards, badges, custom <code>&lt;details&gt;</code>, inline SVG, iframe</td><td><code>```html-embed</code> (last resort)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Token-efficient reads (defaults that just work)</h3>
+      <p>
+        Three savings, all opt-out (default behavior is the cheap path):
+      </p>
+      <ul>
+        <li><strong><code>read_page({"{ mode: \"summary\" }"})</code></strong> — every annotated rich block + table collapses to one <code>[@N kind: caption]</code> line. AI sees the page's outline + every block's caption without paying for diagram source / chart JSON / table rows. <strong>Prefer for first reads.</strong> Switch to <code>mode: "full"</code> when you're going to edit.</li>
+        <li><strong><code>get_block({"{ summary: true }"})</code></strong> — returns caption + kind + line range only (no source/inner). For tables also returns <code>columns</code> + <code>row_count</code>. Use to answer "what is @47?" without fetching the body.</li>
+        <li><strong>Inline <code>style="..."</code> stripping</strong> — applied by default to every <code>html-embed</code> body returned from <code>get_block</code> or <code>read_page</code>. Saves 50–70% per block. Pass <code>include_styles: true</code> when working on presentation. <code>hash</code> is omitted when stripping occurred — re-read with <code>include_styles: true</code> to get a hash for <code>edit_lines</code>.</li>
+      </ul>
+      <p style={{ color: "var(--text-2)", fontSize: 12 }}>
+        Pair these with <strong>captions</strong>: write <code>{`{@123 "Short description"}`}</code> on every non-trivial block so all three savings above stay useful (a captionless block in summary mode just shows <code>[@123 mermaid]</code> which doesn't help AI decide whether to fetch).
+      </p>
 
       <h3>Recommended workflow</h3>
       <ol>
@@ -506,7 +538,7 @@ function McpGuideTh() {
       <table>
         <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
         <tbody>
-          <tr><td><code>read_page</code></td><td>อ่าน page หรือเฉพาะ line range — คืน content + total_lines + <code>hash</code> + <strong>โครงสร้าง knowledge ของ page นั้น</strong> (title + รายการ page พี่น้องพร้อม <code>is_current</code>) — ไม่ต้องเรียก <code>get_knowledge</code> เพิ่ม</td></tr>
+          <tr><td><code>read_page</code></td><td>อ่าน page หรือเฉพาะ line range — คืน content + total_lines + <code>hash</code> + <strong>โครงสร้าง knowledge ของ page นั้น</strong> (title + รายการ page พี่น้องพร้อม <code>is_current</code>) — ไม่ต้องเรียก <code>get_knowledge</code> เพิ่ม. <strong>2 modes</strong>: <code>mode: "full"</code> (default) คืน markdown ครบ; <code>mode: "summary"</code> ยุบ rich block + ตารางทุก annotated เป็น <code>[@N kind: caption]</code> + เพิ่ม <code>blocks</code> index — ประหยัด token 5–10 เท่าสำหรับ navigation. <strong>html-embed inline <code>style="..."</code> ถูกตัดเป็น default</strong> (ประหยัด 50–70%/block); ส่ง <code>include_styles: true</code> ตอนทำงานกับ design. <code>hash</code> หายเมื่อมีการ strip — re-read ด้วย <code>include_styles: true</code> ก่อน <code>edit_lines</code></td></tr>
           <tr><td><code>edit_lines</code></td><td>แทนที่ line [start..end] ด้วย new_text. ⚠️ Line shift ทุกครั้งที่แก้ — ใส่ <code>expected_hash</code> จาก read_page เพื่อ gate กัน stale edit</td></tr>
           <tr><td><code>edit_section</code></td><td><strong>แนะนำ</strong> — แทน body ใต้ heading exact match (เช่น <code>"## 3. Performance"</code>) จนถึง heading ระดับเท่าหรือสูงกว่าถัดไป stable กว่า line-based</td></tr>
           <tr><td><code>replace_text</code></td><td>find/replace literal string ใน 1 page หรือทุก page ของ knowledge</td></tr>
@@ -518,7 +550,8 @@ function McpGuideTh() {
         <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
         <tbody>
           <tr><td><code>search</code></td><td>SQLite FTS5 ค้นข้าม content/title/keywords. คืน <code>{`{ kid, pid, line, snippet, url }`}</code> ทุก hit</td></tr>
-          <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้ได้ทั้ง fenced rich block <em>และ</em> markdown table. ส่ง <code>summary: true</code> เพื่อข้าม body — สำหรับตารางจะได้ <code>columns</code> + <code>row_count</code> มาแทน (probe ตารางใหญ่แบบประหยัด token ก่อนตัดสินใจดูดทั้งตัว)</td></tr>
+          <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, caption, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้ได้ทั้ง fenced rich block <em>และ</em> markdown table. <code>summary: true</code> → ข้าม body; สำหรับตารางได้ <code>columns</code> + <code>row_count</code> + caption — probe ตารางใหญ่แบบประหยัด token. <code>include_styles: true</code> → เก็บ inline <code>style</code> ไว้ (เฉพาะ html-embed; default ตัด ประหยัด 50–70%)</td></tr>
+          <tr><td><code>set_block_caption</code></td><td>ตั้ง / อัปเดต / ล้าง caption ของ block (เขียน <code>{`{@N "caption"}`}</code> ใน source). Args: <code>{`{ id, caption }`}</code> — ส่ง <code>null</code> หรือ empty string เพื่อล้าง. Caption คือคำบรรยายภาพ (เหมือน HTML <code>&lt;figcaption&gt;</code>) — สั้น ๆ บอกว่า block นี้คืออะไร เพื่อ <code>get_block({"{ summary: true }"})</code> ในอนาคตตอบ "@47 คืออะไร" ได้ราคาถูก ๆ</td></tr>
           <tr><td><code>get_table_row</code></td><td>ดึง 1 แถวข้อมูลของ markdown-table block เป็น <code>{`{ columnName: cellText }`}</code>. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> เริ่มที่ 0; เลขลบนับจากท้าย (<code>-1</code> = แถวสุดท้าย). ถ้าไม่รู้ index ใช้ <code>find_table_rows</code> แทน</td></tr>
           <tr><td><code>find_table_rows</code></td><td>ค้นในตารางโดยไม่ต้องดูดทั้ง body. Args: <code>{`{ block_id, q?, where?, columns?, limit? }`}</code> — <code>q</code> = substring (case-insensitive), <code>where</code> = exact column=value (AND), <code>columns</code> = จำกัด <code>q</code> ให้ค้นแค่บางคอลัมน์, <code>limit</code> default 50 / max 500. คืน <code>{`{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`}</code></td></tr>
           <tr><td><code>get_example</code></td><td>ดูตัวอย่าง markdown. <strong>3 โหมดอ่าน</strong> เพื่อประหยัด token: <code>outline_only:true</code> (เห็นแค่ heading) · <code>line_start/line_end</code> (slice) · default (full). <code>kind</code> = full / minimal / mermaid / chart / stats / steps / er / html</td></tr>
@@ -568,6 +601,37 @@ function McpGuideTh() {
         <li><strong>project</strong> — group key เช่น repo name → ใช้ group ใน sidebar</li>
         <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags ใช้กรอง knowledge, keywords ใช้เพิ่มน้ำหนัก FTS search ของ page</li>
       </ul>
+
+      <h3>เลือก block ให้ถูก — ใช้ prepared block ก่อน</h3>
+      <p>
+        WikiKai มี semantic block สำเร็จรูป 6 ตัว + markdown ปกติ. <strong>ใช้ <code>html-embed</code> เป็น last resort เท่านั้น</strong> — เมื่อ block สำเร็จรูปไม่พอ และ layout HTML custom ช่วยให้ผู้อ่านเข้าใจดีขึ้นจริง ๆ (gradient status card, decision matrix สีตามแถว/คอลัมน์, badges + flex layout, <code>&lt;details&gt;</code> accordion, inline SVG, iframe). prepared block อ่านถูกกว่า (ไม่มี inline-style noise), มี tooling ครบ (<code>find_table_rows</code>, <code>get_table_row</code>, chart re-themes), render สม่ำเสมอ light/dark theme.
+      </p>
+      <table>
+        <thead><tr><th>อยากแสดง…</th><th>ใช้</th></tr></thead>
+        <tbody>
+          <tr><td>Flow, sequence, ER, gantt, state, mindmap</td><td><code>```mermaid</code></td></tr>
+          <tr><td>ตัวเลข / กราฟเปรียบเทียบ / trend</td><td><code>```chart</code> · <code>```chart-grid</code></td></tr>
+          <tr><td>KPI, headline ตัวเลขใหญ่ ๆ</td><td><code>```stats</code></td></tr>
+          <tr><td>ขั้นตอน / how-to / runbook</td><td><code>```steps</code></td></tr>
+          <tr><td>ตาราง</td><td><strong>markdown table ปกติ</strong> — ได้ <code>@N</code>, <code>[ ]</code> ใน cell, <code>find_table_rows</code></td></tr>
+          <tr><td>Gallery 4+ ภาพเรียงกัน</td><td><code>```images</code></td></tr>
+          <tr><td>ภาพเดี่ยว inline / ใน prose / ใน cell ตาราง</td><td>markdown <code>{`![alt](src "WxH")`}</code> — drag-resize + lightbox ในตัว</td></tr>
+          <tr><td>Layout พิเศษ — สีตาม row/col, gradient card, badge, <code>&lt;details&gt;</code>, SVG, iframe</td><td><code>```html-embed</code> (last resort)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>การอ่านแบบประหยัด token (default ทำให้อยู่แล้ว)</h3>
+      <p>
+        3 จุดประหยัด ทุกตัวเป็น opt-out (default คือ path ที่ถูกที่สุด):
+      </p>
+      <ul>
+        <li><strong><code>read_page({"{ mode: \"summary\" }"})</code></strong> — ทุก rich block + ตารางที่มี annotation ยุบเป็นบรรทัด <code>[@N kind: caption]</code> เดียว. AI เห็นโครงสร้างหน้า + caption ของทุก block โดยไม่ต้องจ่ายค่า diagram source / chart JSON / table rows. <strong>ใช้สำหรับ first read.</strong> เปลี่ยนเป็น <code>mode: "full"</code> เมื่อจะแก้ไข.</li>
+        <li><strong><code>get_block({"{ summary: true }"})</code></strong> — คืน caption + kind + line range เท่านั้น (ไม่มี source/inner). สำหรับตารางได้ <code>columns</code> + <code>row_count</code> ด้วย. ใช้ตอบ "@47 คืออะไร" โดยไม่ดึง body.</li>
+        <li><strong>ตัด inline <code>style="..."</code></strong> — default สำหรับ <code>html-embed</code> ทุก body ที่คืนจาก <code>get_block</code> หรือ <code>read_page</code>. ประหยัด 50–70% ต่อ block. ส่ง <code>include_styles: true</code> ตอนทำงานกับ design. <code>hash</code> หายเมื่อมีการ strip — re-read ด้วย <code>include_styles: true</code> ก่อน <code>edit_lines</code>.</li>
+      </ul>
+      <p style={{ color: "var(--text-2)", fontSize: 12 }}>
+        จับคู่กับ <strong>caption</strong>: เขียน <code>{`{@123 "คำอธิบายสั้น ๆ"}`}</code> บนทุก block ที่ไม่ใช่เรื่องเล็ก — 3 จุดประหยัดข้างบนจะใช้ประโยชน์ได้เต็มที่ (block ที่ไม่มี caption ใน summary mode จะเห็นแค่ <code>[@123 mermaid]</code> ซึ่ง AI ตัดสินใจไม่ได้ว่าจะ fetch หรือไม่).
+      </p>
 
       <h3>Workflow ที่แนะนำ</h3>
       <ol>
