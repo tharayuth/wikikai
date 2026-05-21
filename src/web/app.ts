@@ -59,6 +59,35 @@ export function buildApp(opts: BuildAppOptions): Express {
 
   const aclEnabled = opts.projectAclEnabled ?? true;
 
+  /**
+   * Throw `ForbiddenError` if the caller can't edit the affected
+   * project. Admins, anonymous calls, and ACL-disabled mode bypass.
+   * Pass a number (knowledge id, resolved via `opts.knowledge.get`)
+   * or a project name string directly.
+   */
+  function gateEdit(req: Request, kidOrProject: number | string): void {
+    if (!req.user || !aclEnabled || req.user.is_admin) return;
+    let project: string;
+    if (typeof kidOrProject === "number") {
+      const k = opts.knowledge.get(kidOrProject);
+      if (!k) throw new Error(`knowledge ${kidOrProject} not found`);
+      project = k.project ?? "";
+    } else {
+      project = kidOrProject;
+    }
+    assertProjectAccess(req.user, project, "edit", opts.permissions, {
+      enabled: aclEnabled,
+    });
+  }
+
+  /** Admin-only guard for project-registry mutations. */
+  function gateAdmin(req: Request): void {
+    if (!aclEnabled) return;
+    if (req.user && !req.user.is_admin) {
+      throw new ForbiddenError("admin only");
+    }
+  }
+
   const authOpts = {
     users: opts.users,
     sessions: opts.sessions,
@@ -108,6 +137,10 @@ export function buildApp(opts: BuildAppOptions): Express {
   // generation stay in one place.
   app.post("/api/images", async (req, res, next) => {
     try {
+      const kidRaw = req.body?.knowledge_id;
+      if (typeof kidRaw === "number" && Number.isInteger(kidRaw) && kidRaw > 0) {
+        gateEdit(req, kidRaw);
+      }
       const result = await opts.handlers.add_image({
         data_base64: req.body?.data_base64,
         mime_type: req.body?.mime_type,
@@ -177,11 +210,16 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.get("/api/knowledge", async (req, res, next) => {
     try {
       if (req.user && aclEnabled && !req.user.is_admin) {
-        const visible = opts.permissions.listVisibleProjects(
-          req.user.id,
-          false,
+        const visible = new Set(
+          opts.permissions.listVisibleProjects(req.user.id, false),
         );
-        res.json(opts.knowledge.listVisibleForUser(visible));
+        const all = await opts.handlers.list_knowledge({});
+        res.json(
+          all.filter(
+            (k: { project: string | null }) =>
+              k.project != null && visible.has(k.project),
+          ),
+        );
         return;
       }
       const items = await opts.handlers.list_knowledge({
@@ -204,6 +242,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(400).json({ error: "project is required" });
         return;
       }
+      gateEdit(req, req.body.project.trim());
       const result = await opts.handlers.add_knowledge(req.body);
       res.status(201).json(result);
     } catch (e) {
@@ -243,6 +282,19 @@ export function buildApp(opts: BuildAppOptions): Express {
         res.status(400).json({ error: "project is required" });
         return;
       }
+      const existing = opts.knowledge.get(id);
+      if (!existing) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id); // edit on old project
+      if (
+        typeof req.body?.project === "string" &&
+        req.body.project.trim() &&
+        req.body.project.trim() !== existing.project
+      ) {
+        gateEdit(req, req.body.project.trim()); // edit on new project too
+      }
       const result = await opts.handlers.edit_knowledge({ id, ...req.body });
       res.json(result);
     } catch (e) {
@@ -257,6 +309,11 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.delete("/api/knowledge/:id", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
       const result = await opts.handlers.delete_knowledge({ id });
       res.json(result);
     } catch (e) {
@@ -274,6 +331,7 @@ export function buildApp(opts: BuildAppOptions): Express {
   });
   app.post("/api/projects", (req, res, next) => {
     try {
+      gateAdmin(req);
       const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
       if (!name) {
         res.status(400).json({ error: "name is required" });
@@ -291,6 +349,7 @@ export function buildApp(opts: BuildAppOptions): Express {
   });
   app.delete("/api/projects/:name", (req, res, next) => {
     try {
+      gateAdmin(req);
       const result = opts.knowledge.unregisterProject(req.params.name);
       res.json(result);
     } catch (e) {
@@ -472,6 +531,12 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.patch("/api/pages/:pid", async (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);
+      const meta = opts.pages.getMetadata(pid);
+      if (!meta) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      gateEdit(req, meta.knowledge_id);
       const r = await opts.handlers.edit_page({ page_id: pid, ...req.body });
       res.json(r);
     } catch (e) {
@@ -486,6 +551,12 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.delete("/api/pages/:pid", async (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);
+      const meta = opts.pages.getMetadata(pid);
+      if (!meta) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      gateEdit(req, meta.knowledge_id);
       const r = await opts.handlers.delete_page({ page_id: pid });
       res.json(r);
     } catch (e) {
@@ -497,6 +568,12 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.delete("/api/pages/:pid/revisions", (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);
+      const meta = opts.pages.getMetadata(pid);
+      if (!meta) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      gateEdit(req, meta.knowledge_id);
       res.json(opts.pages.pruneRevisions(pid));
     } catch (e) {
       next(e);
@@ -515,6 +592,11 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const meta = opts.pages.getMetadata(pid);
+      if (!meta) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      gateEdit(req, meta.knowledge_id);
       const result = opts.pages.toggleTaskAtIndex(pid, idx);
       if (meta) {
         opts.activityLog.record({
@@ -547,6 +629,12 @@ export function buildApp(opts: BuildAppOptions): Express {
   app.post("/api/pages/:pid/image-size", (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);
+      const metaForGate = opts.pages.getMetadata(pid);
+      if (!metaForGate) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      gateEdit(req, metaForGate.knowledge_id);
       const body = req.body as {
         src?: unknown;
         occurrence?: unknown;
