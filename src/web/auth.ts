@@ -86,9 +86,13 @@ export function requireAuth(opts: AuthOptions) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!opts.enabled) return next();
     if (req.user) return next();
-    // Auth endpoints + login UI are always open
+    // Auth endpoints + login UI are always open. `/mcp` is also open
+    // here because it does its own Bearer-token auth in the route
+    // handler (per-user mcp_token, or legacy WIKIKAI_TOKEN); session
+    // cookies don't apply to MCP clients.
     const p = req.path;
     if (
+      p === "/mcp" ||
       p === "/login" ||
       p === "/api/auth/login" ||
       p === "/api/auth/logout" ||
