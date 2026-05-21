@@ -5,8 +5,14 @@ import {
   useListPageTitlesQuery,
   type KnowledgeMeta,
 } from "../store/api";
-import { useAppSelector } from "../store";
+import { useAppDispatch, useAppSelector } from "../store";
 import { navigateTo } from "../hooks/useHash";
+import { showToast } from "../store/uiSlice";
+import {
+  readStarredKnowledgeIds,
+  STARRED_KNOWLEDGE_EVENT,
+  toggleKnowledgeStar,
+} from "../lib/starredKnowledge";
 
 interface Props {
   activeKid: number | null;
@@ -44,6 +50,7 @@ interface RowProps {
   onPickKnowledge: (kid: number) => void;
   /** When set, force this row open + only show pages whose id is in the set. */
   pageFilter: Set<number> | null;
+  starred: boolean;
 }
 
 function KnowledgeRow({
@@ -52,8 +59,10 @@ function KnowledgeRow({
   activePid,
   onPickKnowledge,
   pageFilter,
+  starred,
 }: RowProps) {
   const [open, setOpen] = useState(isActive);
+  const dispatch = useAppDispatch();
 
   // Auto-expand when this knowledge becomes the active one.
   useEffect(() => {
@@ -66,7 +75,7 @@ function KnowledgeRow({
   const pages = pageFilter ? allPages.filter((p) => pageFilter.has(p.id)) : allPages;
 
   return (
-    <div className={`sidebar-row${isActive ? " active-row" : ""}`}>
+    <div className={`sidebar-row has-star-action${isActive ? " active-row" : ""}`}>
       <a
         className={`sidebar-item${isActive ? " active" : ""}`}
         href={`/&${item.id}`}
@@ -112,6 +121,33 @@ function KnowledgeRow({
           </div>
         </div>
       </a>
+      <button
+        type="button"
+        className={`sidebar-star-btn${starred ? " active" : ""}`}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const next = toggleKnowledgeStar(item.id);
+          dispatch(showToast(next ? "Starred topic" : "Unstarred topic"));
+        }}
+        title={starred ? "Unstar this topic" : "Star this topic"}
+        aria-label={starred ? `Unstar ${item.title}` : `Star ${item.title}`}
+        aria-pressed={starred}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill={starred ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      </button>
       {effectiveOpen && pages.length > 0 && (
         <ul className="sidebar-pages">
           {pages.map((p) => {
@@ -145,15 +181,33 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   const { data: pageTitles = [] } = useListPageTitlesQuery();
   const selectedProjects = useAppSelector((s) => s.ui.selectedProjects);
   const [filterText, setFilterText] = useState("");
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [starredIds, setStarredIds] = useState<Set<number>>(() =>
+    readStarredKnowledgeIds(),
+  );
+
+  useEffect(() => {
+    const refresh = () => setStarredIds(readStarredKnowledgeIds());
+    window.addEventListener(STARRED_KNOWLEDGE_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(STARRED_KNOWLEDGE_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
 
   const filtered = useMemo(() => {
-    if (selectedProjects == null) return items;
-    if (selectedProjects.length === 0) return [];
-    const set = new Set(selectedProjects);
-    return items.filter((it) =>
-      set.has(it.project || "(no project)"),
-    );
-  }, [items, selectedProjects]);
+    const projectFiltered = (() => {
+      if (selectedProjects == null) return items;
+      if (selectedProjects.length === 0) return [];
+      const set = new Set(selectedProjects);
+      return items.filter((it) =>
+        set.has(it.project || "(no project)"),
+      );
+    })();
+    if (!starredOnly) return projectFiltered;
+    return projectFiltered.filter((it) => starredIds.has(it.id));
+  }, [items, selectedProjects, starredOnly, starredIds]);
 
   const q = filterText.trim().toLowerCase();
 
@@ -203,6 +257,28 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
           ×
         </button>
       )}
+      <button
+        type="button"
+        className={`sidebar-star-filter${starredOnly ? " active" : ""}`}
+        aria-label={starredOnly ? "Show all topics" : "Show starred topics only"}
+        aria-pressed={starredOnly}
+        title={starredOnly ? "Showing starred topics only" : "Show starred topics only"}
+        onClick={() => setStarredOnly((v) => !v)}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="15"
+          height="15"
+          fill={starredOnly ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      </button>
     </div>
   );
 
@@ -228,6 +304,8 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
             </>
           ) : filterText ? (
             `No matches for "${filterText}"`
+          ) : starredOnly ? (
+            "No starred topics"
           ) : (
             "No items in the selected projects"
           )}
@@ -265,6 +343,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
                 activePid={activePid}
                 onPickKnowledge={onPick}
                 pageFilter={pageFilter}
+                starred={starredIds.has(it.id)}
               />
             );
           })}

@@ -109,6 +109,7 @@ Returns hits with `url`, `line`, `snippet`, `page_title`, `knowledge_title`. Ope
 | `outline_only:true` before `read_page` | 10× cheaper |
 | One major H1/H2 per page | Tab navigation works naturally |
 | Use `project` to group | Sidebar groups by project |
+| Star important knowledge in the web portal | Browser-local preference; useful for filtering the sidebar without changing shared metadata |
 
 ## Content fences (use them — they render rich)
 

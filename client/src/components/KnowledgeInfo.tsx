@@ -3,6 +3,11 @@ import { useGetKnowledgeQuery } from "../store/api";
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
+import {
+  isKnowledgeStarred,
+  STARRED_KNOWLEDGE_EVENT,
+  toggleKnowledgeStar,
+} from "../lib/starredKnowledge";
 
 interface Props {
   kid: number | null;
@@ -16,9 +21,21 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   const dispatch = useAppDispatch();
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: kid === null });
   const [infoOpen, setInfoOpen] = useState(false);
+  const [starred, setStarred] = useState(false);
 
   useEffect(() => {
     setInfoOpen(false);
+    setStarred(kid != null ? isKnowledgeStarred(kid) : false);
+  }, [kid]);
+
+  useEffect(() => {
+    const refresh = () => setStarred(kid != null ? isKnowledgeStarred(kid) : false);
+    window.addEventListener(STARRED_KNOWLEDGE_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(STARRED_KNOWLEDGE_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
   }, [kid]);
 
   if (kid === null) {
@@ -56,6 +73,33 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   return (
     <div className="knowledge-info">
       <div className="ki-row-1">
+        <button
+          type="button"
+          className={`star-btn${starred ? " active" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            const next = toggleKnowledgeStar(meta.id);
+            setStarred(next);
+            dispatch(showToast(next ? "Starred topic" : "Unstarred topic"));
+          }}
+          title={starred ? "Unstar this topic" : "Star this topic"}
+          aria-label={starred ? "Unstar this topic" : "Star this topic"}
+          aria-pressed={starred}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="17"
+            height="17"
+            fill={starred ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
         <button
           className={`info-btn${infoOpen ? " open" : ""}`}
           onClick={(e) => {
