@@ -10,6 +10,7 @@ import { ImageStore } from "../src/store/images.js";
 import { PromptLogStore } from "../src/store/promptLog.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
 import { SessionStore, UserStore } from "../src/store/users.js";
+import { PermissionStore } from "../src/store/permissions.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
 
@@ -29,8 +30,9 @@ describe("HTTP routes", () => {
     const activityLog = new ActivityLogStore(db);
     const users = new UserStore(db);
     const sessions = new SessionStore(db, users);
-    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" });
-    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, handlers, publicBaseUrl: "http://test" });
+    const permissions = new PermissionStore(db);
+    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions);
+    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, handlers, publicBaseUrl: "http://test" });
   });
 
   afterEach(() => {
@@ -54,6 +56,7 @@ describe("HTTP routes", () => {
       const activityLog = new ActivityLogStore(db);
       const users = new UserStore(db);
       const sessions = new SessionStore(db, users);
+      const permissions = new PermissionStore(db);
       users.create({
         email: "admin",
         password: "12345",
@@ -67,6 +70,7 @@ describe("HTTP routes", () => {
         promptLog,
         activityLog,
         { publicBaseUrl: "http://test" },
+        permissions,
       );
       const adminApp = buildApp({
         knowledge,
@@ -76,6 +80,7 @@ describe("HTTP routes", () => {
         activityLog,
         users,
         sessions,
+        permissions,
         handlers,
         publicBaseUrl: "http://test",
         webAuth: true,
@@ -172,6 +177,7 @@ describe("HTTP routes", () => {
       const activityLog = new ActivityLogStore(db);
       const users = new UserStore(db);
       const sessions = new SessionStore(db, users);
+      const permissions = new PermissionStore(db);
       users.create({
         email: "alice@example.com",
         password: "correct-horse-battery-staple",
@@ -184,6 +190,7 @@ describe("HTTP routes", () => {
         promptLog,
         activityLog,
         { publicBaseUrl: "http://test" },
+        permissions,
       );
       const authApp = buildApp({
         knowledge,
@@ -193,6 +200,7 @@ describe("HTTP routes", () => {
         activityLog,
         users,
         sessions,
+        permissions,
         handlers,
         publicBaseUrl: "http://test",
         webAuth: true,

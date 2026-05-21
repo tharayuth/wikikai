@@ -8,6 +8,7 @@ import { PageStore } from "../src/store/pages.js";
 import { ImageStore } from "../src/store/images.js";
 import { PromptLogStore } from "../src/store/promptLog.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
+import { PermissionStore } from "../src/store/permissions.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 
 describe("MCP tool handlers", () => {
@@ -24,7 +25,8 @@ describe("MCP tool handlers", () => {
     const images = new ImageStore(db, path.join(tmpDir, "images"));
     const promptLog = new PromptLogStore(db);
     const activityLog = new ActivityLogStore(db);
-    h = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" });
+    const permissions = new PermissionStore(db);
+    h = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions);
   });
 
   afterEach(() => {

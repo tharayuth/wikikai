@@ -4,6 +4,7 @@ import type { PageStore, PageEntry, PageWithStats } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
 import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
+import type { PermissionStore } from "../store/permissions.js";
 import {
   stripInlineStyles,
   stripHtmlEmbedStylesInMarkdown,
@@ -18,6 +19,8 @@ import {
 
 export interface HandlerContext {
   publicBaseUrl: string;
+  /** Defaults to true. When false, project-level ACL is bypassed. */
+  projectAclEnabled?: boolean;
 }
 
 const USER_PROMPT_EDIT_NOTE =
@@ -916,7 +919,12 @@ export function buildToolHandlers(
   promptLog: PromptLogStore,
   activityLog: ActivityLogStore,
   ctx: HandlerContext,
+  permissions?: PermissionStore,
 ): ToolHandlers {
+  const aclEnabled = ctx.projectAclEnabled ?? true;
+  // Reserved for upcoming ACL enforcement — Task 4 is pure plumbing.
+  void permissions;
+  void aclEnabled;
   // Snapshot title/caption helpers used by the activity-log recorder.
   // Best-effort — if the target doesn't exist (e.g. we're logging a
   // delete that already happened), fall back to null and let the entry

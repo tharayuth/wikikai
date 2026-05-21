@@ -6,6 +6,7 @@ import { ImageStore } from "./store/images.js";
 import { PromptLogStore } from "./store/promptLog.js";
 import { ActivityLogStore } from "./store/activityLog.js";
 import { SessionStore, UserStore } from "./store/users.js";
+import { PermissionStore } from "./store/permissions.js";
 import { buildToolHandlers } from "./mcp/handlers.js";
 import { createMcpServer } from "./mcp/server.js";
 import { buildApp } from "./web/app.js";
@@ -33,6 +34,7 @@ export async function startServer(): Promise<RunningServer> {
   const activityLog = new ActivityLogStore(db);
   const users = new UserStore(db);
   const sessions = new SessionStore(db, users);
+  const permissions = new PermissionStore(db);
   sessions.purgeExpired();
   // Backfill MCP tokens for any user that predates the column.
   const issued = users.ensureMcpTokens();
@@ -73,7 +75,9 @@ export async function startServer(): Promise<RunningServer> {
     activityLog,
     {
       publicBaseUrl: config.publicBaseUrl,
+      projectAclEnabled: config.projectAclEnabled,
     },
+    permissions,
   );
   const mcpHandler = createMcpHandler(() =>
     createMcpServer(handlers, { defaultUserId: mcpDefaultUserId }),
@@ -87,6 +91,8 @@ export async function startServer(): Promise<RunningServer> {
     activityLog,
     users,
     sessions,
+    permissions,
+    projectAclEnabled: config.projectAclEnabled,
     handlers,
     publicBaseUrl: config.publicBaseUrl,
     mcpHandler,

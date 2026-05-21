@@ -13,6 +13,7 @@ import {
 import type { PromptLogStore } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
 import type { UserStore, SessionStore } from "../store/users.js";
+import type { PermissionStore } from "../store/permissions.js";
 import type { ToolHandlers } from "../mcp/handlers.js";
 import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
@@ -35,6 +36,9 @@ export interface BuildAppOptions {
   activityLog: ActivityLogStore;
   users: UserStore;
   sessions: SessionStore;
+  permissions: PermissionStore;
+  /** Defaults to true. When false, project-level ACL is bypassed. */
+  projectAclEnabled?: boolean;
   handlers: ToolHandlers;
   publicBaseUrl: string;
   mcpHandler?: express.RequestHandler;
@@ -51,6 +55,10 @@ export function buildApp(opts: BuildAppOptions): Express {
   const app = express();
   app.use(express.json({ limit: "16mb" }));
   app.disable("x-powered-by");
+
+  const aclEnabled = opts.projectAclEnabled ?? true;
+  // Reserved for upcoming ACL-aware routes — Task 4 is pure plumbing.
+  void aclEnabled;
 
   const authOpts = {
     users: opts.users,
