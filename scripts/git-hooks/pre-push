@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# pre-push hook — warn when docs/skill/SKILL.md is out of sync with
+# the canonical skill source at ~/.claude/skills/wikikai/SKILL.md.
+#
+# Rationale: the global skill file lives outside this repo so it's
+# easy for the in-repo copy under docs/skill/ to drift behind.
+# Installers who copy the skill from a fresh clone then get stale
+# guidance. CLAUDE.md notes this explicitly:
+#
+#   "Plus the global skill file ~/.claude/skills/wikikai/SKILL.md —
+#    that one lives outside this repo but should stay in sync with
+#    the same information surface."
+#
+# Behaviour
+# - If the global file is missing (contributor without the skill
+#   installed), the hook prints nothing and exits 0.
+# - If the two files match, exits 0.
+# - If they differ, prints a clear warning + diff stats + the cp
+#   command to fix it, and blocks the push with exit 1.
+# - Bypass with `git push --no-verify` when you know better.
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+repo_skill="$repo_root/docs/skill/SKILL.md"
+global_skill="$HOME/.claude/skills/wikikai/SKILL.md"
+
+# Contributor without the global skill installed — nothing to compare.
+[ -f "$global_skill" ] || exit 0
+
+# In-repo file should exist; if it doesn't, that's its own problem.
+[ -f "$repo_skill" ] || exit 0
+
+if cmp -s "$repo_skill" "$global_skill"; then
+  exit 0
+fi
+
+# Show how big the drift is.
+added=$(diff "$repo_skill" "$global_skill" | grep -c '^>' || true)
+removed=$(diff "$repo_skill" "$global_skill" | grep -c '^<' || true)
+
+cat >&2 <<EOF
+
+⚠  SKILL.md is out of sync with the global skill file.
+
+   repo:   docs/skill/SKILL.md
+   global: ~/.claude/skills/wikikai/SKILL.md
+   drift:  +${added} / -${removed} lines
+
+   Fix:
+     cp ~/.claude/skills/wikikai/SKILL.md docs/skill/SKILL.md
+     git add docs/skill/SKILL.md
+     git commit -m "docs: sync SKILL.md with global skill"
+
+   Or bypass (not recommended):
+     git push --no-verify
+
+EOF
+
+exit 1

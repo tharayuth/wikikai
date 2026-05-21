@@ -128,8 +128,17 @@ three documentation surfaces in the same change set**:
    themed context. Same scripted edit approach.
 
 Plus the global skill file `~/.claude/skills/wikikai/SKILL.md` — that
-one lives outside this repo but should stay in sync with the same
-information surface.
+one lives outside this repo but should stay in sync with `docs/skill/SKILL.md`.
+A pre-push hook (`scripts/git-hooks/pre-push`) blocks the push when the
+two diverge. Enable it once per clone:
+
+```bash
+git config core.hooksPath scripts/git-hooks
+```
+
+When it fires, sync with `cp ~/.claude/skills/wikikai/SKILL.md docs/skill/SKILL.md`
+and recommit. Bypass with `--no-verify` only if the global file is
+intentionally ahead (e.g. you're prototyping skill content locally).
 
 A change that *only* updates one of these (e.g. ships a new tool
 without updating HelpModal) is incomplete; the agent / human reading
