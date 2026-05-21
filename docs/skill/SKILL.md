@@ -62,6 +62,10 @@ Skip WikiKai for: one-shot questions, code-only edits, chit-chat.
 ### Prompt log (opt-in)
 Every mutation tool accepts an optional `user_prompt` field. When supplied, the server truncates it to 500 chars and appends a row to `prompt_log` linked to the resulting page + version. **Opt-in by design** — send only when the user's message carries intent (a request, a correction). Skip for trivial retries or follow-ups. The info popover in the web UI shows the log as a timeline; `get_prompt_log` is the read-side.
 
+### Per-project permissions
+
+Non-admin users authenticated by their personal MCP token (`mcp_token`) only see knowledge in projects an admin has granted them. `view` allows read tools (`list_knowledge`, `get_*`, `read_page`, `search`); `edit` allows mutations (`add_*`, `edit_*`, `delete_*`). Admin-token callers bypass all checks. Forbidden calls throw with messages like "no access to project 'X'" or "edit not allowed on project 'Y'".
+
 ## Recommended workflows
 
 ### Creating a new knowledge

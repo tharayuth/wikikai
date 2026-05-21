@@ -177,6 +177,12 @@ All settings come from env vars (or `.env` in the project root). See [`.env.exam
 | `ITEMS_DIR` | `<DATA_DIR>/items` | Per-page raw markdown files |
 | `PUBLIC_BASE_URL` | derived from HOST + LAN IP | URL surfaced in tool responses |
 | `WIKIKAI_TOKEN` | unset | If set, `/mcp` requires `Authorization: Bearer <token>` |
+| `WIKIKAI_WEB_AUTH` | `0` | If `1`, enables multi-user auth + per-project permissions (requires reverse-proxy for HTTPS + OAuth2) |
+| `WIKIKAI_PROJECT_ACL` | `1` | If `0`, disables project permission enforcement (emergency rollback) |
+
+## Per-project permissions
+
+When `WIKIKAI_WEB_AUTH=1`, non-admin users start with no access. An admin can open **Manage users → Edit → Project access** to grant `view` or `edit` per project. The grant applies to the web portal and to the user's MCP token equally. Set `WIKIKAI_PROJECT_ACL=0` to disable enforcement temporarily (emergency rollback).
 
 ## Tech stack
 

@@ -181,6 +181,14 @@ function UserGuideEn() {
         the UI. Documents are created by an MCP client (e.g. Claude Code, Claude Desktop). See the{" "}
         <em>MCP</em> tab for details.
       </p>
+
+      <h3>Per-project permissions</h3>
+      <p>
+        Admins can grant each user <code>view</code> or <code>edit</code> access to specific
+        projects via <strong>Manage users → Edit → Project access</strong>. Users without a grant
+        see nothing in that project — the sidebar, search, and the MCP API all filter to what they
+        are allowed to see. Admins have full access to all projects automatically.
+      </p>
     </div>
   );
 }
@@ -283,6 +291,14 @@ function UserGuideTh() {
         Portal นี้ <strong>รับเนื้อหาผ่าน MCP</strong> — ไม่มีปุ่ม "Create new" ในหน้า UI
         เพราะการสร้างจะทำผ่าน MCP client (เช่น Claude Code, Claude Desktop) ดูรายละเอียดที่ tab{" "}
         <em>MCP</em>
+      </p>
+
+      <h3>สิทธิ์ระดับโปรเจกต์</h3>
+      <p>
+        Admin สามารถกำหนดสิทธิ์ <code>view</code> หรือ <code>edit</code> ให้ user รายคนต่อ
+        โปรเจกต์ผ่านเมนู <strong>Manage users → Edit → Project access</strong>. User ที่ไม่ได้รับ
+        สิทธิ์จะมองไม่เห็นเนื้อหาของโปรเจกต์นั้นเลย — sidebar, search, และ MCP API กรองให้อัตโนมัติ.
+        Admin มีสิทธิ์เต็มทุกโปรเจกต์โดยอัตโนมัติ.
       </p>
     </div>
   );
