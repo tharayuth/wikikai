@@ -186,6 +186,24 @@ export const ReorderPagesSchema = z.object({
   order: z.array(z.number().int().positive()).min(1),
 });
 
+export const MovePageSchema = z
+  .object({
+    page_id: z.number().int().positive(),
+    before: z.number().int().positive().optional(),
+    after: z.number().int().positive().optional(),
+    user_prompt: z.string().max(2000).optional(),
+  })
+  .refine(
+    (v) => (v.before === undefined) !== (v.after === undefined),
+    { message: "Provide either `before` or `after`, not both" },
+  );
+
+export const MovePageToSchema = z.object({
+  page_id: z.number().int().positive(),
+  position: z.number().int().min(1),
+  user_prompt: z.string().max(2000).optional(),
+});
+
 export const ReadPageSchema = z.object({
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1).optional(),
@@ -645,6 +663,8 @@ export type ToolInputs = {
   delete_page: z.infer<typeof DeletePageSchema>;
   list_pages: z.infer<typeof ListPagesSchema>;
   reorder_pages: z.infer<typeof ReorderPagesSchema>;
+  move_page: z.infer<typeof MovePageSchema>;
+  move_page_to: z.infer<typeof MovePageToSchema>;
   read_page: z.infer<typeof ReadPageSchema>;
   edit_lines: z.infer<typeof EditLinesSchema>;
   edit_section: z.infer<typeof EditSectionSchema>;
@@ -748,6 +768,8 @@ export interface ToolHandlers {
   }>;
   list_pages(input: ToolInputs["list_pages"]): Promise<(PageWithStats & { url: string })[]>;
   reorder_pages(input: ToolInputs["reorder_pages"]): Promise<{ ok: true; order: number[] }>;
+  move_page(input: ToolInputs["move_page"]): Promise<{ ok: true; order: number[] }>;
+  move_page_to(input: ToolInputs["move_page_to"]): Promise<{ ok: true; order: number[] }>;
 
   read_page(input: ToolInputs["read_page"]): Promise<{
     page_id: number;
@@ -1569,6 +1591,37 @@ export function buildToolHandlers(
         knowledge_id: parsed.knowledge_id,
       });
       return { ok: true, order: parsed.order };
+    },
+
+    async move_page(input) {
+      const parsed = MovePageSchema.parse(input);
+      gateEditByPid(parsed.page_id);
+      const r = pages.movePage(parsed.page_id, {
+        before: parsed.before,
+        after: parsed.after,
+      });
+      recordActivity({
+        action: "reorder",
+        target: "knowledge",
+        knowledge_id: r.knowledge_id,
+        page_id: parsed.page_id,
+      });
+      logIf("move_page", parsed.user_prompt, r.knowledge_id, parsed.page_id, null);
+      return { ok: true, order: r.order };
+    },
+
+    async move_page_to(input) {
+      const parsed = MovePageToSchema.parse(input);
+      gateEditByPid(parsed.page_id);
+      const r = pages.movePageTo(parsed.page_id, parsed.position);
+      recordActivity({
+        action: "reorder",
+        target: "knowledge",
+        knowledge_id: r.knowledge_id,
+        page_id: parsed.page_id,
+      });
+      logIf("move_page_to", parsed.user_prompt, r.knowledge_id, parsed.page_id, null);
+      return { ok: true, order: r.order };
     },
 
     // ─── line ops ───

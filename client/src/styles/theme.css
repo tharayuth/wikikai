@@ -636,6 +636,44 @@ a:hover { text-decoration: underline; }
   padding: 2px 6px 6px 28px;
 }
 .sidebar-pages li { margin: 0; }
+.sidebar-page-li {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.sidebar-page-li .sidebar-page {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sidebar-page-handle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #888);
+  cursor: grab;
+  opacity: 0;
+  border-radius: 4px;
+  transition: opacity 0.1s, background 0.1s, color 0.1s;
+  touch-action: none;
+}
+.sidebar-page-handle:hover,
+.sidebar-page-handle:focus-visible {
+  background: var(--surface-2);
+  color: var(--text);
+  opacity: 1;
+}
+.sidebar-page-li:hover .sidebar-page-handle {
+  opacity: 0.7;
+}
+.sidebar-page-handle:active {
+  cursor: grabbing;
+}
 .sidebar-page {
   display: block;
   padding: 5px 10px;

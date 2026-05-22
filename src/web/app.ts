@@ -321,6 +321,41 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Reorder pages within a knowledge. Body: { order: number[] } — full
+  // permutation of every existing page id. Used by the Sidebar's drag-drop UI.
+  app.post("/api/knowledge/:id/reorder", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      const order = Array.isArray(req.body?.order) ? req.body.order : null;
+      if (
+        !order ||
+        order.length === 0 ||
+        !order.every((n: unknown) => Number.isInteger(n) && (n as number) > 0)
+      ) {
+        res
+          .status(400)
+          .json({ error: "order must be a non-empty array of positive page ids" });
+        return;
+      }
+      const result = await opts.handlers.reorder_pages({
+        knowledge_id: id,
+        order,
+      });
+      res.json(result);
+    } catch (e) {
+      if (isNotFound(e)) {
+        res.status(404).json({ error: (e as Error).message });
+        return;
+      }
+      next(e);
+    }
+  });
+
   // ─── Projects: registry + derived names ───
   app.get("/api/projects", (req, res, next) => {
     try {

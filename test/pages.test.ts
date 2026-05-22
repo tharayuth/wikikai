@@ -145,6 +145,112 @@ describe("PageStore", () => {
     });
   });
 
+  describe("movePage (relative)", () => {
+    it("moves a page immediately before the target", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "" });
+      const c = pages.add({ knowledge_id: kid, title: "C", content: "" });
+      const d = pages.add({ knowledge_id: kid, title: "D", content: "" });
+      // Move D so it sits right before B → A, D, B, C
+      const r = pages.movePage(d.id, { before: b.id });
+      expect(r.knowledge_id).toBe(kid);
+      expect(r.order).toEqual([a.id, d.id, b.id, c.id]);
+      expect(pages.list(kid).map((p) => p.title)).toEqual(["A", "D", "B", "C"]);
+    });
+
+    it("moves a page immediately after the target", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "" });
+      const c = pages.add({ knowledge_id: kid, title: "C", content: "" });
+      // Move A so it sits right after B → B, A, C
+      const r = pages.movePage(a.id, { after: b.id });
+      expect(r.order).toEqual([b.id, a.id, c.id]);
+      expect(pages.list(kid).map((p) => p.title)).toEqual(["B", "A", "C"]);
+    });
+
+    it("rejects when both before and after are provided", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "" });
+      expect(() => pages.movePage(a.id, { before: b.id, after: b.id })).toThrow(
+        /Provide either `before` or `after`/,
+      );
+    });
+
+    it("rejects when neither before nor after is provided", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      expect(() => pages.movePage(a.id, {})).toThrow(
+        /Provide either `before` or `after`/,
+      );
+    });
+
+    it("rejects when target is in a different knowledge", () => {
+      const otherKid = knowledge.add({ title: "Other", project: "examples" }).id;
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const other = pages.add({
+        knowledge_id: otherKid,
+        title: "Other",
+        content: "",
+      });
+      expect(() => pages.movePage(a.id, { before: other.id })).toThrow(
+        /different knowledge/,
+      );
+    });
+
+    it("rejects when page_id == target", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      expect(() => pages.movePage(a.id, { before: a.id })).toThrow(
+        /must be different/,
+      );
+    });
+
+    it("rejects unknown page or target", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      expect(() => pages.movePage(99999, { before: a.id })).toThrow(/not found/);
+      expect(() => pages.movePage(a.id, { before: 99999 })).toThrow(/not found/);
+    });
+  });
+
+  describe("movePageTo (absolute)", () => {
+    it("position=1 makes the page first", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "" });
+      const c = pages.add({ knowledge_id: kid, title: "C", content: "" });
+      const r = pages.movePageTo(c.id, 1);
+      expect(r.order).toEqual([c.id, a.id, b.id]);
+      expect(pages.list(kid).map((p) => p.title)).toEqual(["C", "A", "B"]);
+    });
+
+    it("position=N (page_count) makes the page last", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "" });
+      const c = pages.add({ knowledge_id: kid, title: "C", content: "" });
+      const r = pages.movePageTo(a.id, 3);
+      expect(r.order).toEqual([b.id, c.id, a.id]);
+      expect(pages.list(kid).map((p) => p.title)).toEqual(["B", "C", "A"]);
+    });
+
+    it("position in the middle shifts other pages around", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "" });
+      const c = pages.add({ knowledge_id: kid, title: "C", content: "" });
+      const d = pages.add({ knowledge_id: kid, title: "D", content: "" });
+      // Move D to position 2 → A, D, B, C
+      const r = pages.movePageTo(d.id, 2);
+      expect(r.order).toEqual([a.id, d.id, b.id, c.id]);
+    });
+
+    it("rejects position out of range", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "" });
+      pages.add({ knowledge_id: kid, title: "B", content: "" });
+      expect(() => pages.movePageTo(a.id, 0)).toThrow(/out of range/);
+      expect(() => pages.movePageTo(a.id, 99)).toThrow(/out of range/);
+    });
+
+    it("rejects unknown page", () => {
+      expect(() => pages.movePageTo(99999, 1)).toThrow(/not found/);
+    });
+  });
+
   // ───────── Line ops ─────────
 
   describe("readLines", () => {

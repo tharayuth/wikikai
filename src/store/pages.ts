@@ -2096,6 +2096,84 @@ export class PageStore {
     })();
   }
 
+  /**
+   * Move a single page so it sits immediately before/after another page in
+   * the same knowledge. Internally derives the new permutation and delegates
+   * to {@link reorder} so we get the same two-pass renumber + knowledge bump.
+   */
+  movePage(
+    pageId: number,
+    target: { before?: number; after?: number },
+  ): { knowledge_id: number; order: number[] } {
+    const hasBefore = target.before !== undefined;
+    const hasAfter = target.after !== undefined;
+    if (hasBefore === hasAfter) {
+      throw new Error("Provide either `before` or `after`, not both");
+    }
+    const targetId = (target.before ?? target.after) as number;
+    if (pageId === targetId) {
+      throw new Error("page_id and target must be different");
+    }
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const targetMeta = this.getMetadata(targetId);
+    if (!targetMeta) throw new Error(`target page #${targetId} not found`);
+    if (meta.knowledge_id !== targetMeta.knowledge_id) {
+      throw new Error(
+        `page #${pageId} and target #${targetId} are in different knowledge`,
+      );
+    }
+    const knowledgeId = meta.knowledge_id;
+    const ids = this.list(knowledgeId).map((p) => p.id);
+    const without = ids.filter((id) => id !== pageId);
+    const targetIdx = without.indexOf(targetId);
+    if (targetIdx < 0) {
+      // Defensive — list returned the target a moment ago. Keep the message
+      // useful in case of races.
+      throw new Error(`target page #${targetId} not found in knowledge`);
+    }
+    const insertAt = hasBefore ? targetIdx : targetIdx + 1;
+    const next = [
+      ...without.slice(0, insertAt),
+      pageId,
+      ...without.slice(insertAt),
+    ];
+    this.reorder(knowledgeId, next);
+    return { knowledge_id: knowledgeId, order: next };
+  }
+
+  /**
+   * Move a single page to an absolute 1-based slot in its knowledge's page
+   * list. Other pages shift around. Delegates to {@link reorder}.
+   */
+  movePageTo(
+    pageId: number,
+    position: number,
+  ): { knowledge_id: number; order: number[] } {
+    if (!Number.isInteger(position) || position < 1) {
+      throw new Error(`position ${position} out of range (must be ≥ 1)`);
+    }
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const knowledgeId = meta.knowledge_id;
+    const ids = this.list(knowledgeId).map((p) => p.id);
+    if (position > ids.length) {
+      throw new Error(
+        `position ${position} out of range (knowledge has ${ids.length} page${
+          ids.length === 1 ? "" : "s"
+        })`,
+      );
+    }
+    const without = ids.filter((id) => id !== pageId);
+    const next = [
+      ...without.slice(0, position - 1),
+      pageId,
+      ...without.slice(position - 1),
+    ];
+    this.reorder(knowledgeId, next);
+    return { knowledge_id: knowledgeId, order: next };
+  }
+
   // ─────────── Line operations ───────────
 
   readLines(pageId: number, lineStart?: number, lineEnd?: number): {

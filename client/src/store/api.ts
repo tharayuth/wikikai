@@ -522,6 +522,54 @@ export const portalApi = createApi({
         },
       }),
     }),
+
+    /**
+     * Reorder all pages inside a knowledge. `order` must be the full
+     * permutation of existing page ids (new position = index + 1).
+     * Powers the Sidebar drag-drop UI.
+     */
+    reorderPages: builder.mutation<
+      { ok: true; order: number[] },
+      { knowledge_id: number; order: number[] }
+    >({
+      query: ({ knowledge_id, order }) => ({
+        url: `knowledge/${knowledge_id}/reorder`,
+        method: "POST",
+        body: { order },
+      }),
+      // Optimistic update — patch the cached getKnowledge response so the
+      // sidebar reflects the new order immediately. Roll back on error.
+      async onQueryStarted(
+        { knowledge_id, order },
+        { dispatch, queryFulfilled },
+      ) {
+        const patch = dispatch(
+          portalApi.util.updateQueryData(
+            "getKnowledge",
+            knowledge_id,
+            (draft) => {
+              if (!draft?.pages) return;
+              const byId = new Map(draft.pages.map((p) => [p.id, p]));
+              const next: typeof draft.pages = [];
+              order.forEach((id, idx) => {
+                const p = byId.get(id);
+                if (p) next.push({ ...p, position: idx + 1 });
+              });
+              draft.pages = next;
+            },
+          ),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Knowledge", id: arg.knowledge_id },
+        { type: "ActivityLog", id: "LIST" },
+      ],
+    }),
   }),
 });
 
@@ -558,4 +606,5 @@ export const {
   useUpdateUserPermissionsMutation,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
+  useReorderPagesMutation,
 } = portalApi;

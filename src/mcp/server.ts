@@ -132,6 +132,33 @@ const reorderPagesShape = {
   order: z.array(z.number().int().positive()).min(1).describe("Permutation of existing page ids (new position = index+1)"),
 };
 
+const movePageShape = {
+  page_id: z.number().int().positive().describe("Page to move"),
+  before: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Target page id; insert `page_id` immediately BEFORE it. Mutually exclusive with `after`."),
+  after: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Target page id; insert `page_id` immediately AFTER it. Mutually exclusive with `before`."),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
+const movePageToShape = {
+  page_id: z.number().int().positive().describe("Page to move"),
+  position: z
+    .number()
+    .int()
+    .min(1)
+    .describe("Target 1-based slot in the knowledge's page list (1 = first, page_count = last)"),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
 const readPageShape = {
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1).optional().describe("1-based; default 1"),
@@ -722,6 +749,31 @@ export function createMcpServer(
       inputSchema: reorderPagesShape,
     },
     async (input) => jsonContent(await handlers.reorder_pages(input)),
+  );
+
+  server.registerTool(
+    "move_page",
+    {
+      title: "Move a page (relative)",
+      description:
+        "Move one page so it sits immediately before or after another page in the SAME knowledge. " +
+        "Provide exactly one of `before` / `after`. Cheaper + less error-prone than `reorder_pages` " +
+        "when you only want to nudge a single page — server derives the full permutation.",
+      inputSchema: movePageShape,
+    },
+    async (input) => jsonContent(await handlers.move_page(input)),
+  );
+
+  server.registerTool(
+    "move_page_to",
+    {
+      title: "Move a page to absolute position",
+      description:
+        "Move one page to an absolute 1-based slot in its knowledge's page list. `position=1` makes it " +
+        "first, `position=N` (where N = page count) makes it last. Other pages shift around.",
+      inputSchema: movePageToShape,
+    },
+    async (input) => jsonContent(await handlers.move_page_to(input)),
   );
 
   // ─── Line / section operations ───

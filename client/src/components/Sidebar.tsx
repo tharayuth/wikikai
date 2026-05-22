@@ -3,7 +3,9 @@ import {
   useGetKnowledgeQuery,
   useListKnowledgeQuery,
   useListPageTitlesQuery,
+  useReorderPagesMutation,
   type KnowledgeMeta,
+  type PageMeta,
 } from "../store/api";
 import { useAppDispatch, useAppSelector } from "../store";
 import { navigateTo } from "../hooks/useHash";
@@ -13,6 +15,22 @@ import {
   STARRED_KNOWLEDGE_EVENT,
   toggleKnowledgeStar,
 } from "../lib/starredKnowledge";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface Props {
   activeKid: number | null;
@@ -53,6 +71,76 @@ interface RowProps {
   starred: boolean;
 }
 
+function SortablePageItem({
+  kid,
+  page,
+  isActive,
+  dragDisabled,
+}: {
+  kid: number;
+  page: PageMeta;
+  isActive: boolean;
+  dragDisabled: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: page.id, disabled: dragDisabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  return (
+    <li ref={setNodeRef} style={style} className="sidebar-page-li">
+      {!dragDisabled && (
+        <button
+          type="button"
+          className="sidebar-page-handle"
+          aria-label={`Reorder ${page.title}`}
+          title="Drag to reorder"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.preventDefault()}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="10"
+            height="14"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <circle cx="9" cy="6" r="1.5" />
+            <circle cx="15" cy="6" r="1.5" />
+            <circle cx="9" cy="12" r="1.5" />
+            <circle cx="15" cy="12" r="1.5" />
+            <circle cx="9" cy="18" r="1.5" />
+            <circle cx="15" cy="18" r="1.5" />
+          </svg>
+        </button>
+      )}
+      <a
+        className={`sidebar-page${isActive ? " active" : ""}`}
+        href={`/&${kid}/#${page.id}`}
+        title={page.summary ?? page.title}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          navigateTo({ kid, pid: page.id });
+        }}
+      >
+        <span className="page-title">{page.title}</span>
+      </a>
+    </li>
+  );
+}
+
 function KnowledgeRow({
   item,
   isActive,
@@ -63,6 +151,7 @@ function KnowledgeRow({
 }: RowProps) {
   const [open, setOpen] = useState(isActive);
   const dispatch = useAppDispatch();
+  const [reorderPages] = useReorderPagesMutation();
 
   // Auto-expand when this knowledge becomes the active one.
   useEffect(() => {
@@ -73,6 +162,39 @@ function KnowledgeRow({
   const { data } = useGetKnowledgeQuery(item.id, { skip: !effectiveOpen });
   const allPages = data?.pages ?? [];
   const pages = pageFilter ? allPages.filter((p) => pageFilter.has(p.id)) : allPages;
+
+  // Drag-drop disabled while a page-filter is active — the rendered list
+  // isn't the full knowledge order, so dropping would scramble positions.
+  const dragDisabled = pageFilter != null || allPages.length < 2;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Require a small drag distance so plain clicks on the handle don't
+      // trigger a drag-start (and the page link below still gets clicks).
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const ids = allPages.map((p) => p.id);
+    const oldIdx = ids.indexOf(Number(active.id));
+    const newIdx = ids.indexOf(Number(over.id));
+    if (oldIdx < 0 || newIdx < 0) return;
+    const next = [...ids];
+    next.splice(oldIdx, 1);
+    next.splice(newIdx, 0, Number(active.id));
+    try {
+      await reorderPages({ knowledge_id: item.id, order: next }).unwrap();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reorder";
+      dispatch(showToast(`Reorder failed: ${msg}`));
+    }
+  }
 
   return (
     <div className={`sidebar-row has-star-action${isActive ? " active-row" : ""}`}>
@@ -149,28 +271,28 @@ function KnowledgeRow({
         </svg>
       </button>
       {effectiveOpen && pages.length > 0 && (
-        <ul className="sidebar-pages">
-          {pages.map((p) => {
-            const pageActive = isActive && p.id === activePid;
-            return (
-              <li key={p.id}>
-                <a
-                  className={`sidebar-page${pageActive ? " active" : ""}`}
-                  href={`/&${item.id}/#${p.id}`}
-                  title={p.summary ?? p.title}
-                  onClick={(e) => {
-                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)
-                      return;
-                    e.preventDefault();
-                    navigateTo({ kid: item.id, pid: p.id });
-                  }}
-                >
-                  <span className="page-title">{p.title}</span>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={pages.map((p) => p.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="sidebar-pages">
+              {pages.map((p) => (
+                <SortablePageItem
+                  key={p.id}
+                  kid={item.id}
+                  page={p}
+                  isActive={isActive && p.id === activePid}
+                  dragDisabled={dragDisabled}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
