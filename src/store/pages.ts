@@ -712,6 +712,8 @@ export class PageStore {
       "steps",
       "html-embed",
       "images",
+      "md",
+      "markdown",
     ]);
     const TABLE_ROW = /^\s*\|.*\|\s*$/;
     const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;

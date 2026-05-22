@@ -398,6 +398,24 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     if (info === "images") {
       return renderImages(token.content, blockId, caption) + "\n";
     }
+    if (info === "md" || info === "markdown") {
+      // Syntax-highlight as markdown source, then wrap in the rich-block
+      // frame so a {@N "caption"} annotation produces a badge + caption
+      // exactly like mermaid/chart/etc. When the fence has no annotation,
+      // blockId is null → frame renders without badge/caption (same look
+      // as before for unannotated md fences).
+      const code = token.content;
+      let body: string;
+      try {
+        body = highlighter.codeToHtml(code, {
+          lang: "markdown",
+          themes: { light: "github-light", dark: "github-dark" },
+        });
+      } catch {
+        body = `<pre class="plain"><code>${escapeHtml(code)}</code></pre>`;
+      }
+      return `<div class="rich-block-md"${blockIdAttr(blockId)}>${body}${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
+    }
     if (info === "html-embed") {
       // Raw HTML for flexible content — richer tables, custom layouts,
       // gradient cards, <details>, inline SVG, iframes. Dropped as-is

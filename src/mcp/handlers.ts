@@ -193,7 +193,8 @@ export const ReadPageSchema = z.object({
     .enum(["full", "summary"])
     .optional()
     .describe(
-      "How to return the page body. `summary` (DEFAULT) returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line of the form `[@N kind 25 lines: caption]` (or `[@N table 12r × 3c: caption]`). The page reads as headings + prose + 1-line-per-block. Use this for first reads, navigation, and 'tell me what's on this page' / 'find @47' probes — typical 5-10× token saving on pages with diagrams or large tables. **`hash` is OMITTED in summary mode** — switch to `mode: \"full\"` (or pass `line_start`/`line_end`) before any `edit_lines` call. `full` returns verbatim markdown with hash, line numbers matching source — use when you're about to edit.",
+      "How to return the page body. `summary` (DEFAULT) returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line of the form `[@N kind 25 lines: caption]` (or `[@N table 12r × 3c: caption]`). The page reads as headings + prose + 1-line-per-block. Use this for first reads, navigation, and 'tell me what's on this page' / 'find @47' probes — typical 5-10× token saving on pages with diagrams or large tables. **`hash` is OMITTED in summary mode** — switch to `mode: \"full\"` (or pass `line_start`/`line_end`) before any `edit_lines` call. `full` returns verbatim markdown with hash, line numbers matching source — use when you're about to edit. " +
+        "Tip: use ```md``` fences (with optional `{@N \"caption\"}`) for ASCII diagrams, card templates, and simple structural examples — cheaper than mermaid and shows up as `[@N md N lines: caption]` in summary mode just like other rich blocks.",
     ),
   include_styles: z
     .boolean()
@@ -349,7 +350,8 @@ export const GetBlockSchema = z.object({
     .int()
     .positive()
     .describe(
-      "Global block id (the `N` in `@N`). Returns the block's source + inner body + parent page/knowledge context in one call. `kind` is the fence language for rich blocks, or `\"table\"` when `@N` annotates a plain markdown table.",
+      "Global block id (the `N` in `@N`). Returns the block's source + inner body + parent page/knowledge context in one call. `kind` is the fence language for rich blocks, or `\"table\"` when `@N` annotates a plain markdown table. " +
+        "Tip: ```md``` fences (with optional `{@N \"caption\"}`) are first-class rich blocks like mermaid/chart/stats — prefer them for ASCII diagrams, card templates, and simple structural examples (cheaper than mermaid, no client-side compile).",
     ),
   summary: z
     .boolean()

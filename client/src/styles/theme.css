@@ -1628,6 +1628,7 @@ a:hover { text-decoration: underline; }
 .markdown-body .html-embed,
 .markdown-body .image-grid,
 .markdown-body .rich-block-mermaid,
+.markdown-body .rich-block-md,
 .markdown-body .table-wrap {
   position: relative;
 }
@@ -1669,6 +1670,7 @@ a:hover { text-decoration: underline; }
 .markdown-body .html-embed:hover .block-badge,
 .markdown-body .image-grid:hover .block-badge,
 .markdown-body .rich-block-mermaid:hover .block-badge,
+.markdown-body .rich-block-md:hover .block-badge,
 .markdown-body .table-wrap:hover .block-badge {
   opacity: 1;
   pointer-events: auto;
@@ -3554,4 +3556,18 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-sm);
   color: var(--text-2);
   font-size: 13px;
+}
+
+/* Markdown-source rich block — ASCII diagrams, card templates, sub-
+ * document structure examples. Visually similar to a plain code block
+ * but framed like mermaid/chart/etc. so a {@N "caption"} annotation
+ * reads as a labelled block. Inherits the existing .block-caption /
+ * .block-badge rules used by every other rich block; positioning +
+ * hover were wired up in the lists above. */
+.markdown-body .rich-block-md {
+  margin: 14px 0;
+}
+.markdown-body .rich-block-md pre.shiki {
+  border-left: 3px solid var(--accent);
+  margin: 0;
 }
