@@ -679,6 +679,304 @@ export class PageStore {
     return base;
   }
 
+  /**
+   * Get a contiguous range of data rows from a markdown-table block.
+   * `start` and `end` (or `offset`) are both 0-based; negative wraps from
+   * the end like `getTableRow`. If neither `end` nor `offset` is given,
+   * returns the single row at `start`. Resulting range is clamped to
+   * [0, row_count - 1] and trimmed by `limit` (default 100, max 500).
+   *
+   * Throws if `@N` is not a table or `start` is out of range. Throws when
+   * BOTH `end` and `offset` are supplied (use one).
+   */
+  getTableRows(
+    blockId: number,
+    opts: {
+      start: number;
+      end?: number;
+      offset?: number;
+      limit?: number;
+    },
+  ): {
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    knowledge_title: string;
+    page_title: string;
+    project: string | null;
+    columns: string[];
+    row_count: number;
+    matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+    }>;
+    truncated: boolean;
+  } {
+    if (opts.end !== undefined && opts.offset !== undefined) {
+      throw new Error("Provide either `end` or `offset`, not both");
+    }
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(`@${blockId} is a ${b.kind} block, not a table`);
+    }
+    const dataRows = b.inner.split("\n").filter((l) => /\S/.test(l));
+    const N = dataRows.length;
+    const limit = Math.min(Math.max(Math.floor(opts.limit ?? 100), 1), 500);
+    const startResolved = opts.start < 0 ? N + opts.start : opts.start;
+    if (startResolved < 0 || startResolved >= N) {
+      throw new Error(
+        `start ${opts.start} out of range (table @${blockId} has ${N} data row${
+          N === 1 ? "" : "s"
+        })`,
+      );
+    }
+    let endResolved: number;
+    if (opts.end !== undefined) {
+      endResolved = opts.end < 0 ? N + opts.end : opts.end;
+    } else if (opts.offset !== undefined) {
+      endResolved = startResolved + Math.max(0, opts.offset - 1);
+    } else {
+      endResolved = startResolved;
+    }
+    // Clamp end to [startResolved, N-1]
+    if (endResolved < startResolved) endResolved = startResolved;
+    if (endResolved >= N) endResolved = N - 1;
+    const headers = parseTableRow(b.source.split("\n")[0]);
+    const fullCount = endResolved - startResolved + 1;
+    const cap = Math.min(fullCount, limit);
+    const matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+    }> = [];
+    for (let i = 0; i < cap; i++) {
+      const idx = startResolved + i;
+      const cells = parseTableRow(dataRows[idx]);
+      const cols: Record<string, string> = {};
+      for (let j = 0; j < headers.length; j++) {
+        cols[headers[j]] = cells[j] ?? "";
+      }
+      matches.push({
+        row_index: idx,
+        columns: cols,
+        source_line: b.line_start + 2 + idx,
+      });
+    }
+    return {
+      block_id: blockId,
+      knowledge_id: b.knowledge_id,
+      page_id: b.page_id,
+      knowledge_title: b.knowledge_title,
+      page_title: b.page_title,
+      project: b.project,
+      columns: headers,
+      row_count: N,
+      matches,
+      truncated: cap < fullCount,
+    };
+  }
+
+  /**
+   * Walk all data rows of a markdown-table block and return only those
+   * containing at least one `[ ]` / `[x]` / `[X]` checkbox. Uses the same
+   * detection as `toggleTaskAtIndex`: the bracket pair must be bounded
+   * by whitespace or the cell separator `|`, so `[abc]` and markdown
+   * links `[link](url)` are skipped.
+   *
+   * Filter semantics for `checked`:
+   *   • `true`  — keep rows where EVERY detected checkbox is `[x]`.
+   *   • `false` — keep rows where EVERY detected checkbox is `[ ]`.
+   *   • `undefined` — keep any row that has at least one checkbox.
+   *
+   * Mixed rows (some checked, some not) are excluded when `checked` is
+   * given a value.
+   */
+  getTableRowsWithCheckbox(
+    blockId: number,
+    opts: { checked?: boolean; limit?: number } = {},
+  ): {
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    knowledge_title: string;
+    page_title: string;
+    project: string | null;
+    columns: string[];
+    row_count: number;
+    matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+    }>;
+    truncated: boolean;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(`@${blockId} is a ${b.kind} block, not a table`);
+    }
+    const limit = Math.min(Math.max(Math.floor(opts.limit ?? 100), 1), 500);
+    const headers = parseTableRow(b.source.split("\n")[0]);
+    const dataRows = b.inner.split("\n").filter((l) => /\S/.test(l));
+    // Same regex toggleTaskAtIndex uses to enumerate table-cell checkboxes.
+    const cellTaskRe = /\[([ xX])\](?=\s|\|)/g;
+    const matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+    }> = [];
+    let fullCount = 0;
+    for (let i = 0; i < dataRows.length; i++) {
+      cellTaskRe.lastIndex = 0;
+      const states: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = cellTaskRe.exec(dataRows[i])) !== null) {
+        states.push(m[1].toLowerCase());
+      }
+      if (states.length === 0) continue;
+      if (opts.checked === true && !states.every((s) => s === "x")) continue;
+      if (opts.checked === false && !states.every((s) => s === " ")) continue;
+      fullCount++;
+      if (matches.length >= limit) continue;
+      const cells = parseTableRow(dataRows[i]);
+      const cols: Record<string, string> = {};
+      for (let j = 0; j < headers.length; j++) {
+        cols[headers[j]] = cells[j] ?? "";
+      }
+      matches.push({
+        row_index: i,
+        columns: cols,
+        source_line: b.line_start + 2 + i,
+      });
+    }
+    return {
+      block_id: blockId,
+      knowledge_id: b.knowledge_id,
+      page_id: b.page_id,
+      knowledge_title: b.knowledge_title,
+      page_title: b.page_title,
+      project: b.project,
+      columns: headers,
+      row_count: dataRows.length,
+      matches,
+      truncated: fullCount > matches.length,
+    };
+  }
+
+  /**
+   * Replace a contiguous range of data rows in a markdown-table block.
+   * `start`/`end`/`offset` follow the same rules as `getTableRows`.
+   * `newRows` may differ in length from the range size (shrink/expand).
+   * Each entry of `newRows` must be a raw table row of the form
+   * `| a | b |` (validated). The table's trailing `{@N}` annotation
+   * line — which lives below the data rows — is left untouched.
+   *
+   * Returns `{ page_id, page_version, updated_count }` where
+   * `updated_count` reflects `newRows.length` (post-write row positions
+   * occupied by the new content).
+   */
+  updateTableRows(
+    blockId: number,
+    opts: {
+      start: number;
+      end?: number;
+      offset?: number;
+      newRows: string[];
+      expectedVersion?: number;
+    },
+  ): { page_id: number; page_version: number; updated_count: number; knowledge_id: number } {
+    if (opts.end !== undefined && opts.offset !== undefined) {
+      throw new Error("Provide either `end` or `offset`, not both");
+    }
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(
+        `update_table_rows: not a markdown table block (kind=${b.kind})`,
+      );
+    }
+    // Validate row syntax up-front so we don't half-write on bad input.
+    for (let i = 0; i < opts.newRows.length; i++) {
+      const r = opts.newRows[i];
+      if (typeof r !== "string") {
+        throw new Error(`new_rows[${i}] is not a string`);
+      }
+      const trimmed = r.trim();
+      if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+        throw new Error(
+          `new_rows[${i}] must start and end with \`|\` — got: ${r.slice(0, 80)}`,
+        );
+      }
+      if (/\n/.test(r)) {
+        throw new Error(`new_rows[${i}] must not contain newlines`);
+      }
+    }
+    const meta = this.getMetadata(b.page_id);
+    if (!meta) throw new Error(`page #${b.page_id} not found`);
+    if (
+      opts.expectedVersion !== undefined &&
+      opts.expectedVersion !== meta.version
+    ) {
+      throw new Error(
+        `STALE: page #${b.page_id} version mismatch: expected v${opts.expectedVersion}, current v${meta.version} — re-read the page and try again`,
+      );
+    }
+    const content = this.readContent(meta.knowledge_id, b.page_id);
+    const lines = content.split("\n");
+    // Header is at b.line_start (1-based), separator at b.line_start + 1,
+    // first data row at b.line_start + 2. line_end is the last data row.
+    const dataStart0 = b.line_start + 2 - 1; // 0-based index of first data row
+    const dataEnd0 = b.line_end - 1; // 0-based index of last data row
+    const N = dataEnd0 - dataStart0 + 1;
+    const startResolved = opts.start < 0 ? N + opts.start : opts.start;
+    if (startResolved < 0 || startResolved >= N) {
+      throw new Error(
+        `start ${opts.start} out of range (table @${blockId} has ${N} data row${
+          N === 1 ? "" : "s"
+        })`,
+      );
+    }
+    let endResolved: number;
+    if (opts.end !== undefined) {
+      endResolved = opts.end < 0 ? N + opts.end : opts.end;
+    } else if (opts.offset !== undefined) {
+      endResolved = startResolved + Math.max(0, opts.offset - 1);
+    } else {
+      endResolved = startResolved;
+    }
+    if (endResolved < startResolved) endResolved = startResolved;
+    if (endResolved >= N) endResolved = N - 1;
+    const absStart = dataStart0 + startResolved;
+    const absEnd = dataStart0 + endResolved; // inclusive
+    const newLines = opts.newRows.map((r) => r);
+    const draft = [
+      ...lines.slice(0, absStart),
+      ...newLines,
+      ...lines.slice(absEnd + 1),
+    ].join("\n");
+    const next = this.writeContent(meta.knowledge_id, b.page_id, draft);
+    const r = this.bumpVersion(b.page_id);
+    this.syncFts(b.page_id, meta.title, meta.keywords, next);
+    this.saveRevision(
+      b.page_id,
+      r.version,
+      meta.title,
+      next,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      new Date().toISOString(),
+    );
+    this.bumpKnowledge(meta.knowledge_id, b.page_id);
+    return {
+      page_id: b.page_id,
+      page_version: r.version,
+      updated_count: newLines.length,
+      knowledge_id: meta.knowledge_id,
+    };
+  }
+
   // ─────────── Block IDs (@N) ───────────
 
   /**

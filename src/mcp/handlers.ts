@@ -431,6 +431,102 @@ export const FindTableRowsSchema = z.object({
     .describe("Cap on returned rows. Default 50, max 500. `total_matched` always reflects the full match count so callers know when results were truncated."),
 });
 
+export const GetTableRowsSchema = z.object({
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  start: z
+    .number()
+    .int()
+    .describe(
+      "0-based start row index. Negative wraps from the end (-1 = last row).",
+    ),
+  end: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Inclusive end row index, 0-based. Negative wraps from end. Mutually exclusive with `offset`.",
+    ),
+  offset: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      "Count of rows to take from `start` (so `start=2, offset=3` returns rows 2,3,4). Mutually exclusive with `end`.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Safety cap on returned rows. Default 100, max 500."),
+});
+
+export const GetTableRowsWithCheckboxSchema = z.object({
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  checked: z
+    .boolean()
+    .optional()
+    .describe(
+      "Filter by checkbox state. `true` = rows where EVERY checkbox is `[x]`. `false` = rows where EVERY checkbox is `[ ]`. Omit to return any row containing at least one `[ ]`/`[x]` checkbox (mixed-state rows included).",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Cap on returned rows. Default 100, max 500."),
+});
+
+export const UpdateTableRowsSchema = z.object({
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  start: z
+    .number()
+    .int()
+    .describe(
+      "0-based start row index. Negative wraps from end (-1 = last data row).",
+    ),
+  end: z
+    .number()
+    .int()
+    .optional()
+    .describe("Inclusive end. Mutually exclusive with `offset`."),
+  offset: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Number of rows to replace from `start`. Mutually exclusive with `end`."),
+  new_rows: z
+    .array(z.string())
+    .describe(
+      "Replacement rows — each a raw markdown table row like `| a | b |`. Length may differ from the range size (shrink/expand the table). Each entry must start and end with `|` and contain no newlines.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Page `version` from the most recent read. The server rejects the update with a `STALE` error when the page has changed since.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
 export const GetExampleSchema = z.object({
   kind: z.enum(EXAMPLE_KINDS).optional(),
   outline_only: z
@@ -474,6 +570,9 @@ export type ToolInputs = {
   get_block: z.infer<typeof GetBlockSchema>;
   get_table_row: z.infer<typeof GetTableRowSchema>;
   find_table_rows: z.infer<typeof FindTableRowsSchema>;
+  get_table_rows: z.infer<typeof GetTableRowsSchema>;
+  get_table_rows_with_checkbox: z.infer<typeof GetTableRowsWithCheckboxSchema>;
+  update_table_rows: z.infer<typeof UpdateTableRowsSchema>;
   set_block_caption: z.infer<typeof SetBlockCaptionSchema>;
   add_image: z.infer<typeof AddImageSchema>;
   get_image: z.infer<typeof GetImageSchema>;
@@ -712,6 +811,54 @@ export interface ToolHandlers {
     }>;
     total_matched: number;
     truncated: boolean;
+  }>;
+
+  get_table_rows(input: ToolInputs["get_table_rows"]): Promise<{
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    knowledge_title: string;
+    page_title: string;
+    project: string | null;
+    url: string;
+    columns: string[];
+    row_count: number;
+    matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+      url: string;
+    }>;
+    truncated: boolean;
+  }>;
+
+  get_table_rows_with_checkbox(
+    input: ToolInputs["get_table_rows_with_checkbox"],
+  ): Promise<{
+    block_id: number;
+    knowledge_id: number;
+    page_id: number;
+    knowledge_title: string;
+    page_title: string;
+    project: string | null;
+    url: string;
+    columns: string[];
+    row_count: number;
+    matches: Array<{
+      row_index: number;
+      columns: Record<string, string>;
+      source_line: number;
+      url: string;
+    }>;
+    truncated: boolean;
+  }>;
+
+  update_table_rows(input: ToolInputs["update_table_rows"]): Promise<{
+    page_id: number;
+    knowledge_id: number;
+    page_version: number;
+    updated_count: number;
+    url: string;
   }>;
 
   set_block_caption(input: ToolInputs["set_block_caption"]): Promise<{
@@ -1559,6 +1706,77 @@ export function buildToolHandlers(
           ...m,
           url: urlFor(ctx, r.knowledge_id, r.page_id, m.source_line),
         })),
+      };
+    },
+
+    async get_table_rows(input) {
+      const parsed = GetTableRowsSchema.parse(input);
+      const r = pages.getTableRows(parsed.block_id, {
+        start: parsed.start,
+        end: parsed.end,
+        offset: parsed.offset,
+        limit: parsed.limit,
+      });
+      gateReadByKid(r.knowledge_id);
+      return {
+        ...r,
+        url: urlFor(ctx, r.knowledge_id, r.page_id),
+        matches: r.matches.map((m) => ({
+          ...m,
+          url: urlFor(ctx, r.knowledge_id, r.page_id, m.source_line),
+        })),
+      };
+    },
+
+    async get_table_rows_with_checkbox(input) {
+      const parsed = GetTableRowsWithCheckboxSchema.parse(input);
+      const r = pages.getTableRowsWithCheckbox(parsed.block_id, {
+        checked: parsed.checked,
+        limit: parsed.limit,
+      });
+      gateReadByKid(r.knowledge_id);
+      return {
+        ...r,
+        url: urlFor(ctx, r.knowledge_id, r.page_id),
+        matches: r.matches.map((m) => ({
+          ...m,
+          url: urlFor(ctx, r.knowledge_id, r.page_id, m.source_line),
+        })),
+      };
+    },
+
+    async update_table_rows(input) {
+      const parsed = UpdateTableRowsSchema.parse(input);
+      // Project-edit gate via the owning page.
+      const summary = pages.getBlockSummary(parsed.block_id);
+      if (summary) gateEditByProject(summary.project);
+      const r = pages.updateTableRows(parsed.block_id, {
+        start: parsed.start,
+        end: parsed.end,
+        offset: parsed.offset,
+        newRows: parsed.new_rows,
+        expectedVersion: parsed.expected_version,
+      });
+      logIf(
+        "update_table_rows",
+        parsed.user_prompt,
+        r.knowledge_id,
+        r.page_id,
+        r.page_version,
+      );
+      recordActivity({
+        action: "edit",
+        target: "block",
+        knowledge_id: r.knowledge_id,
+        page_id: r.page_id,
+        block_id: parsed.block_id,
+      });
+      return {
+        page_id: r.page_id,
+        knowledge_id: r.knowledge_id,
+        page_version: r.page_version,
+        updated_count: r.updated_count,
+        url: urlFor(ctx, r.knowledge_id, r.page_id),
       };
     },
 

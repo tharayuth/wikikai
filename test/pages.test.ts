@@ -819,6 +819,199 @@ describe("PageStore", () => {
       const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
       expect(() => pages.findTableRows(id, { q: "x" })).toThrow(/not a table/);
     });
+
+    it("getTableRows returns a slice via offset (start=1, offset=2)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| n | v |\n|---|---|\n| a | 1 |\n| b | 2 |\n| c | 3 |\n| d | 4 |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.getTableRows(id, { start: 1, offset: 2 });
+      expect(r.matches.map((m) => m.columns.n)).toEqual(["b", "c"]);
+      expect(r.matches.map((m) => m.row_index)).toEqual([1, 2]);
+      expect(r.row_count).toBe(4);
+      expect(r.truncated).toBe(false);
+    });
+
+    it("getTableRows handles end + negative wrap", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| n |\n|---|\n| a |\n| b |\n| c |\n| d |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      // start=-2 (= row 2), end=-1 (= last row 3) → rows c, d
+      const r = pages.getTableRows(id, { start: -2, end: -1 });
+      expect(r.matches.map((m) => m.columns.n)).toEqual(["c", "d"]);
+    });
+
+    it("getTableRows returns single row when neither end nor offset", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n| b |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.getTableRows(id, { start: 0 });
+      expect(r.matches).toHaveLength(1);
+      expect(r.matches[0].columns.n).toBe("a");
+    });
+
+    it("getTableRows throws when both end and offset supplied", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() =>
+        pages.getTableRows(id, { start: 0, end: 0, offset: 1 }),
+      ).toThrow(/either `end` or `offset`/);
+    });
+
+    it("getTableRowsWithCheckbox filters by all-checked / all-unchecked", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| Task | Done |\n|------|------|\n| a    | [ ]  |\n| b    | [x]  |\n| c    | plain text |\n| d    | [x]  |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const all = pages.getTableRowsWithCheckbox(id);
+      // Rows with any checkbox: a, b, d (not c)
+      expect(all.matches.map((m) => m.columns.Task)).toEqual(["a", "b", "d"]);
+      const checked = pages.getTableRowsWithCheckbox(id, { checked: true });
+      expect(checked.matches.map((m) => m.columns.Task)).toEqual(["b", "d"]);
+      const unchecked = pages.getTableRowsWithCheckbox(id, { checked: false });
+      expect(unchecked.matches.map((m) => m.columns.Task)).toEqual(["a"]);
+    });
+
+    it("updateTableRows replaces rows in-place and preserves {@N}", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "| n | v |\n|---|---|\n| a | 1 |\n| b | 2 |\n| c | 3 |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.updateTableRows(id, {
+        start: 1,
+        end: 1,
+        newRows: ["| B | 20 |"],
+      });
+      expect(r.page_version).toBe(2);
+      expect(r.updated_count).toBe(1);
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      expect(after).toContain("| a | 1 |");
+      expect(after).toContain("| B | 20 |");
+      expect(after).toContain("| c | 3 |");
+      expect(after).toContain(`{@${id}}`);
+      // Row b should be gone
+      expect(after).not.toContain("| b | 2 |");
+    });
+
+    it("updateTableRows can grow the table (shrink/expand via new_rows length)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n| b |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.updateTableRows(id, {
+        start: 0,
+        end: 1,
+        newRows: ["| x |", "| y |", "| z |"],
+      });
+      expect(r.updated_count).toBe(3);
+      const after = pages.getTableRows(id, { start: 0, end: 99 });
+      expect(after.matches.map((m) => m.columns.n)).toEqual(["x", "y", "z"]);
+    });
+
+    it("updateTableRows throws on STALE expected_version", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() =>
+        pages.updateTableRows(id, {
+          start: 0,
+          newRows: ["| Q |"],
+          expectedVersion: 999,
+        }),
+      ).toThrow(/STALE/);
+    });
+
+    it("updateTableRows rejects invalid row syntax", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() =>
+        pages.updateTableRows(id, { start: 0, newRows: ["no pipes here"] }),
+      ).toThrow(/start and end with/);
+    });
+
+    it("updateTableRows throws on non-table blocks", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: '```stats\n[{"num":"1","label":"x"}]\n```\n',
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() =>
+        pages.updateTableRows(id, { start: 0, newRows: ["| a |"] }),
+      ).toThrow(/not a markdown table block/);
+    });
   });
 
   describe("setInlineImageSize", () => {

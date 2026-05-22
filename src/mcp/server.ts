@@ -295,6 +295,98 @@ const setBlockCaptionShape = {
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
 
+const getTableRowsShape = {
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  start: z
+    .number()
+    .int()
+    .describe(
+      "0-based start row index. Negative wraps from end (`-1` = last row).",
+    ),
+  end: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Inclusive end row index, 0-based. Negative wraps from end. Mutually exclusive with `offset` — supplying both throws.",
+    ),
+  offset: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      "Count of rows to return starting at `start` (e.g. `start=2, offset=3` returns rows 2,3,4). Mutually exclusive with `end`.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(
+      "Safety cap on returned rows. Default 100, max 500. `truncated: true` when the requested range exceeded the limit.",
+    ),
+};
+
+const getTableRowsWithCheckboxShape = {
+  block_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Table block id (`@N`)."),
+  checked: z
+    .boolean()
+    .optional()
+    .describe(
+      "Filter by row checkbox state. `true` keeps rows where EVERY `[ ]`/`[x]` checkbox in the row is `[x]`. `false` keeps rows where EVERY checkbox is `[ ]`. Mixed-state rows are EXCLUDED when this is set. Omit to return any row containing at least one checkbox (mixed rows included).",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Cap on returned rows. Default 100, max 500."),
+};
+
+const updateTableRowsShape = {
+  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
+  start: z
+    .number()
+    .int()
+    .describe("0-based start row index. Negative wraps from end."),
+  end: z
+    .number()
+    .int()
+    .optional()
+    .describe("Inclusive end row index. Mutually exclusive with `offset`."),
+  offset: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Number of rows to replace from `start`. Mutually exclusive with `end`."),
+  new_rows: z
+    .array(z.string())
+    .describe(
+      "Replacement rows. Each entry is a raw markdown table row like `| a | b | c |` (must start AND end with `|`, no newlines). Length may differ from the original range to grow or shrink the table.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Page `version` from the most recent `read_page` / `get_block`. The server rejects the update with a `STALE` error when the page has changed since — guards AI workflows that read → think → write.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
 const findTableRowsShape = {
   block_id: z
     .number()
@@ -658,6 +750,52 @@ export function createMcpServer(
       inputSchema: findTableRowsShape,
     },
     async (input) => jsonContent(await handlers.find_table_rows(input)),
+  );
+
+  server.registerTool(
+    "get_table_rows",
+    {
+      title: "Get a contiguous range of rows from a markdown table",
+      description:
+        "Get a contiguous range of rows from a markdown pipe-table. Provide `start` plus either `end` (inclusive) or `offset` (count). With neither, returns just the single row at `start` (like `get_table_row`). " +
+        "`start`/`end` are 0-based; negative values wrap from the end (`-1` = last data row). The resulting range is clamped to `[0, row_count-1]` and trimmed by `limit` (default 100, max 500). " +
+        "`truncated: true` indicates the requested range was capped by `limit`. Throws when the block isn't a table, when both `end` and `offset` are supplied, or when `start` is out of range. " +
+        "Use for sliding windows over large tables (paginated reads) instead of pulling the whole body via `get_block`.",
+      inputSchema: getTableRowsShape,
+    },
+    async (input) => jsonContent(await handlers.get_table_rows(input)),
+  );
+
+  server.registerTool(
+    "get_table_rows_with_checkbox",
+    {
+      title: "Get rows from a markdown table that contain a `[ ]`/`[x]` checkbox",
+      description:
+        "Walk every data row of a markdown-table block and return only those containing at least one `[ ]` / `[x]` / `[X]` checkbox. Uses the same detection as the rendered UI / `toggle_task`: the bracket pair must be bounded by whitespace or the cell separator `|`, so `[abc]` and markdown links `[link](url)` are skipped. " +
+        "Filter by checked state via `checked`:\\n" +
+        "  • `true`  → keep rows where EVERY checkbox is `[x]` (fully completed)\\n" +
+        "  • `false` → keep rows where EVERY checkbox is `[ ]` (nothing done)\\n" +
+        "  • omit    → keep any row containing at least one checkbox (mixed-state rows included)\\n" +
+        "Mixed rows (some `[x]`, some `[ ]`) are EXCLUDED when `checked` is specified. " +
+        "`limit` defaults to 100, max 500; `truncated: true` when the unrestricted match count exceeded the cap. Throws when the block isn't a table.",
+      inputSchema: getTableRowsWithCheckboxShape,
+    },
+    async (input) => jsonContent(await handlers.get_table_rows_with_checkbox(input)),
+  );
+
+  server.registerTool(
+    "update_table_rows",
+    {
+      title: "Replace a contiguous range of rows in a markdown table",
+      description:
+        "Replace a contiguous range of data rows in a markdown pipe-table block. `start` + (`end` xor `offset`) selects the rows to replace; `new_rows` provides the replacement text. " +
+        "Each entry of `new_rows` is a raw table row string like `| a | b |` — must start AND end with `|`, no newlines (validated up-front, no partial writes). `new_rows.length` MAY differ from the range size, so the table can shrink or grow. " +
+        "The table's trailing `{@N}` annotation line sits below the data rows and is preserved automatically (only the data-row region is rewritten). Header + separator are also untouched. " +
+        "`expected_version` (recommended) — pass the page `version` from your most recent read; the server returns a `STALE` error if the page has changed since. " +
+        "Throws when the block isn't a markdown table (e.g. html-embed), when both `end` and `offset` are given, when `start` is out of range, or when a `new_rows` entry doesn't look like a pipe row. Bumps page version + snapshots a revision like any other edit.",
+      inputSchema: updateTableRowsShape,
+    },
+    async (input) => jsonContent(await handlers.update_table_rows(input)),
   );
 
   server.registerTool(
