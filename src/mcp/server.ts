@@ -387,6 +387,84 @@ const updateTableRowsShape = {
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
 
+const appendTableRowShape = {
+  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
+  new_rows: z
+    .array(z.string())
+    .describe(
+      "Rows to append at the END of the table (after the last data row, BEFORE the trailing `{@N}` annotation). Each entry must be a raw pipe row like `| a | b |` — starts AND ends with `|`, no newlines.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Page `version` from the most recent read; `STALE` error on mismatch."),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
+const insertTableRowShape = {
+  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
+  at: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      "0-based row index. Rows are inserted BEFORE this row; existing rows from `at` onward shift down by `new_rows.length`. `at = 0` puts the new rows at the top; `at = row_count` is equivalent to `append_table_row`. Negative not accepted (throws).",
+    ),
+  new_rows: z
+    .array(z.string())
+    .describe(
+      "Replacement rows, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Page `version` from the most recent read; `STALE` error on mismatch."),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
+const insertLinesShape = {
+  page_id: z.number().int().positive(),
+  at: z
+    .number()
+    .int()
+    .min(1)
+    .describe(
+      "1-based line number (matches `read_page` / `edit_lines`). The first inserted line lands at `at`; the original line at `at` shifts to `at + N` where N = number of lines in `new_text`. `at = total_lines + 1` appends — prefer `add_lines` for that.",
+    ),
+  new_text: z
+    .string()
+    .describe(
+      "Lines to insert. May span multiple lines via `\\n`. If `new_text` doesn't end with `\\n`, one is appended automatically so the next line isn't joined.",
+    ),
+  expected_hash: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Hash of the single line at `at` (from `read_page({ line_start: at, line_end: at })`). Empty-line hash when `at = total_lines + 1`. Server rejects on mismatch.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
+const addLinesShape = {
+  page_id: z.number().int().positive(),
+  new_text: z
+    .string()
+    .describe(
+      "Text to append at the END of the page. The server adds a separating newline to existing content first when needed. `new_text` itself may or may not end with `\\n`.",
+    ),
+  expected_hash: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Hash of the LAST line of the page (line_start = line_end = total_lines from a recent read_page).",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
 const findTableRowsShape = {
   block_id: z
     .number()
@@ -679,6 +757,33 @@ export function createMcpServer(
   );
 
   server.registerTool(
+    "insert_lines",
+    {
+      title: "Insert lines BEFORE a position on a page",
+      description:
+        "Insert `new_text` BEFORE 1-based line `at`. The first line of `new_text` lands at `at`; the line previously at `at` shifts down by N (the number of newline-separated lines in `new_text`). `at = total_lines + 1` appends — for that case prefer `add_lines` (clearer intent). " +
+        "If `new_text` doesn't already end with `\\n`, one is appended automatically so the inserted block doesn't accidentally join with the line below it. " +
+        "Optional `expected_hash` gates against drift — pass the hash of the single line at `at` from a recent `read_page({ line_start: at, line_end: at, mode: \"full\" })`. The server rejects on mismatch (same shape as `edit_lines`). " +
+        "Use when you want to splice content in without touching the lines around it. For replacing existing lines, use `edit_lines`; for pure append, use `add_lines`.",
+      inputSchema: insertLinesShape,
+    },
+    async (input) => jsonContent(await handlers.insert_lines(input)),
+  );
+
+  server.registerTool(
+    "add_lines",
+    {
+      title: "Append text to the END of a page",
+      description:
+        "Append `new_text` to the bottom of a page. A separating newline is added to the existing content first if it doesn't already end with one — so `new_text` always starts on a fresh line. `new_text` itself may or may not end with `\\n` (both are fine). " +
+        "Optional `expected_hash` gates against drift — hash of the LAST line of the page (`read_page({ line_start: total_lines, line_end: total_lines })`). Server rejects on mismatch. " +
+        "Equivalent to `append_page` for the pure text-append case but lives in the line-based op family next to `edit_lines` / `insert_lines`. Use when you have content to add at the bottom and don't want to compute a line range.",
+      inputSchema: addLinesShape,
+    },
+    async (input) => jsonContent(await handlers.add_lines(input)),
+  );
+
+  server.registerTool(
     "replace_text",
     {
       title: "Find/replace literal text",
@@ -796,6 +901,34 @@ export function createMcpServer(
       inputSchema: updateTableRowsShape,
     },
     async (input) => jsonContent(await handlers.update_table_rows(input)),
+  );
+
+  server.registerTool(
+    "append_table_row",
+    {
+      title: "Append rows at the END of a markdown table",
+      description:
+        "Add one or more rows to the bottom of a markdown pipe-table block — inserted AFTER the last data row but BEFORE the trailing `{@N}` annotation line, so the table's id stays put. " +
+        "Each `new_rows[i]` is a raw row like `| a | b |` — validated up-front (no half-writes). Pass `expected_version` from the most recent `read_page` / `get_block` to make the server reject the call with a `STALE` error if the page has changed since. " +
+        "Returns `{ page_id, page_version, appended_count, new_row_indices, url }` — `new_row_indices` are the 0-based positions the new rows now occupy, ready to feed straight into `get_table_row` / `update_table_rows`. " +
+        "Cheaper than `update_table_rows` for the pure-append case (no `start` / `end` math).",
+      inputSchema: appendTableRowShape,
+    },
+    async (input) => jsonContent(await handlers.append_table_row(input)),
+  );
+
+  server.registerTool(
+    "insert_table_row",
+    {
+      title: "Insert rows BEFORE a position in a markdown table",
+      description:
+        "Insert one or more rows into a markdown pipe-table at a specific 0-based position. The new rows go in BEFORE the row currently at `at`; existing rows from `at` onward shift down by `new_rows.length`. " +
+        "Boundary cases: `at = 0` puts the new rows at the top of the table; `at = row_count` is equivalent to `append_table_row` (no shift, just appended after the last row). Negative `at` is NOT accepted — it throws (deliberately different from `get_table_row`'s wrap-from-end semantics; for inserts, negative indices are footgun-prone). " +
+        "Each `new_rows[i]` is a raw pipe row like `| a | b |` — validated up-front, no half-writes. `expected_version` (recommended) gates against stale concurrent edits. " +
+        "Returns `{ page_id, page_version, inserted_count, new_row_indices, url }` where `new_row_indices` are the 0-based positions the new rows now occupy (always `at .. at + N - 1`).",
+      inputSchema: insertTableRowShape,
+    },
+    async (input) => jsonContent(await handlers.insert_table_row(input)),
   );
 
   server.registerTool(

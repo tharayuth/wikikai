@@ -1012,6 +1012,229 @@ describe("PageStore", () => {
         pages.updateTableRows(id, { start: 0, newRows: ["| a |"] }),
       ).toThrow(/not a markdown table block/);
     });
+
+    it("appendTableRows adds rows at the END (above the {@N} annotation)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n | v |\n|---|---|\n| a | 1 |\n| b | 2 |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.appendTableRows(id, {
+        newRows: ["| c | 3 |", "| d | 4 |"],
+      });
+      expect(r.appended_count).toBe(2);
+      expect(r.new_row_indices).toEqual([2, 3]);
+      const after = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      // Rows must appear above the annotation line.
+      const lines = after.split("\n");
+      const annLine = lines.findIndex((l) => l.trim() === `{@${id}}`);
+      const cLine = lines.findIndex((l) => l.includes("| c | 3 |"));
+      const dLine = lines.findIndex((l) => l.includes("| d | 4 |"));
+      expect(cLine).toBeGreaterThan(-1);
+      expect(dLine).toBeGreaterThan(-1);
+      expect(cLine).toBeLessThan(annLine);
+      expect(dLine).toBeLessThan(annLine);
+      // Sequence: a, b, c, d
+      const slice = pages.getTableRows(id, { start: 0, end: 99 });
+      expect(slice.matches.map((m) => m.columns.n)).toEqual([
+        "a",
+        "b",
+        "c",
+        "d",
+      ]);
+    });
+
+    it("appendTableRows rejects non-table block and bad row syntax", () => {
+      const p1 = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: '```stats\n[{"num":"1","label":"x"}]\n```\n',
+      });
+      const raw1 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p1.id}.md`),
+        "utf8",
+      );
+      const id1 = Number(/\{@(\d+)\}/.exec(raw1)![1]);
+      expect(() =>
+        pages.appendTableRows(id1, { newRows: ["| a |"] }),
+      ).toThrow(/not a markdown table block/);
+
+      const p2 = pages.add({
+        knowledge_id: kid,
+        title: "t2",
+        content: "| n |\n|---|\n| a |\n",
+      });
+      const raw2 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p2.id}.md`),
+        "utf8",
+      );
+      const id2 = Number(/\{@(\d+)\}/.exec(raw2)![1]);
+      expect(() =>
+        pages.appendTableRows(id2, { newRows: ["nopipe"] }),
+      ).toThrow(/start and end with/);
+      // STALE
+      expect(() =>
+        pages.appendTableRows(id2, {
+          newRows: ["| z |"],
+          expectedVersion: 999,
+        }),
+      ).toThrow(/STALE/);
+    });
+
+    it("insertTableRows at=0 puts rows at the top", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n| b |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.insertTableRows(id, { at: 0, newRows: ["| Z |"] });
+      expect(r.inserted_count).toBe(1);
+      expect(r.new_row_indices).toEqual([0]);
+      const slice = pages.getTableRows(id, { start: 0, end: 99 });
+      expect(slice.matches.map((m) => m.columns.n)).toEqual(["Z", "a", "b"]);
+    });
+
+    it("insertTableRows at=row_count behaves like append", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n| b |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const r = pages.insertTableRows(id, { at: 2, newRows: ["| c |"] });
+      expect(r.new_row_indices).toEqual([2]);
+      const slice = pages.getTableRows(id, { start: 0, end: 99 });
+      expect(slice.matches.map((m) => m.columns.n)).toEqual(["a", "b", "c"]);
+    });
+
+    it("insertTableRows rejects out-of-range and negative at", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "| n |\n|---|\n| a |\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      expect(() =>
+        pages.insertTableRows(id, { at: 2, newRows: ["| Q |"] }),
+      ).toThrow(/out of range/);
+      expect(() =>
+        pages.insertTableRows(id, { at: -1, newRows: ["| Q |"] }),
+      ).toThrow(/out of range/);
+      // STALE
+      expect(() =>
+        pages.insertTableRows(id, {
+          at: 0,
+          newRows: ["| Q |"],
+          expectedVersion: 999,
+        }),
+      ).toThrow(/STALE/);
+    });
+  });
+
+  describe("insertLines & addLines", () => {
+    it("insertLines puts new content BEFORE the given line", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "A\nB\nC\n",
+      });
+      const r = pages.insertLines(p.id, 2, "X");
+      expect(r.inserted_lines).toBe(1);
+      const cur = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      expect(cur).toBe("A\nX\nB\nC\n");
+    });
+
+    it("insertLines multi-line, at=1 (top), at=total+1 (end)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "B\nC\n",
+      });
+      pages.insertLines(p.id, 1, "A1\nA2");
+      let cur = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      expect(cur).toBe("A1\nA2\nB\nC\n");
+      // total_lines is now 4 → at=5 appends
+      const r2 = pages.insertLines(p.id, 5, "D");
+      expect(r2.inserted_lines).toBe(1);
+      cur = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      expect(cur).toBe("A1\nA2\nB\nC\nD\n");
+    });
+
+    it("insertLines rejects out-of-range and honours expected_hash", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "A\nB\nC\n",
+      });
+      expect(() => pages.insertLines(p.id, 0, "X")).toThrow(/out of range/);
+      expect(() => pages.insertLines(p.id, 5, "X")).toThrow(/out of range/);
+      const ref = pages.readLines(p.id, 2, 2);
+      expect(() =>
+        pages.insertLines(p.id, 2, "X", ref.hash),
+      ).not.toThrow();
+      expect(() =>
+        pages.insertLines(p.id, 2, "X", "badhash"),
+      ).toThrow(/hash mismatch/);
+    });
+
+    it("addLines appends to the end (with separator)", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "A\nB",
+      });
+      const r = pages.addLines(p.id, "C\nD");
+      expect(r.appended_lines).toBe(2);
+      const cur = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      // Original had no trailing newline → server adds one before append.
+      expect(cur).toBe("A\nB\nC\nD");
+    });
+
+    it("addLines honours expected_hash on last line", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "A\nB\nC\n",
+      });
+      const last = pages.readLines(p.id, 3, 3);
+      expect(() => pages.addLines(p.id, "D", last.hash)).not.toThrow();
+      expect(() => pages.addLines(p.id, "E", "badhash")).toThrow(
+        /hash mismatch/,
+      );
+    });
   });
 
   describe("setInlineImageSize", () => {

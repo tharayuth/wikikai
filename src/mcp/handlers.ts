@@ -527,6 +527,88 @@ export const UpdateTableRowsSchema = z.object({
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
+export const AppendTableRowSchema = z.object({
+  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
+  new_rows: z
+    .array(z.string())
+    .describe(
+      "Rows to append, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines. Validated up-front so nothing is half-written on bad input.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Page `version` from the most recent read. The server returns a `STALE` error if the page changed since.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
+export const InsertTableRowSchema = z.object({
+  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
+  at: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      "0-based row index. The new rows are inserted BEFORE this row; existing rows from `at` onward shift down. `at = 0` → top; `at = row_count` → equivalent to `append_table_row`. Negative not allowed (throws).",
+    ),
+  new_rows: z
+    .array(z.string())
+    .describe(
+      "Rows to insert, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines.",
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Page `version` from the most recent read. The server returns a `STALE` error if the page changed since.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
+export const InsertLinesSchema = z.object({
+  page_id: z.number().int().positive(),
+  at: z
+    .number()
+    .int()
+    .min(1)
+    .describe(
+      "1-based line number (matches `read_page` / `edit_lines`). Insert BEFORE this line; original line `at` shifts to `at + N`. `at = total_lines + 1` appends (prefer `add_lines` for that).",
+    ),
+  new_text: z
+    .string()
+    .describe(
+      "Lines to insert. May span multiple lines via `\\n`. If `new_text` doesn't end with `\\n`, one is appended automatically so the next line isn't joined.",
+    ),
+  expected_hash: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Hash of the single line at `at` from a recent `read_page({ line_start: at, line_end: at })`. Empty-line hash when `at = total_lines + 1`. Server rejects on mismatch.",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
+export const AddLinesSchema = z.object({
+  page_id: z.number().int().positive(),
+  new_text: z
+    .string()
+    .describe(
+      "Text to append at the END of the page. A newline is prepended to existing content if it doesn't already end with one. `new_text` itself may or may not end with `\\n` — both are fine.",
+    ),
+  expected_hash: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Hash of the LAST line of the page (line_start = line_end = total_lines from a recent read_page).",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+});
+
 export const GetExampleSchema = z.object({
   kind: z.enum(EXAMPLE_KINDS).optional(),
   outline_only: z
@@ -573,6 +655,10 @@ export type ToolInputs = {
   get_table_rows: z.infer<typeof GetTableRowsSchema>;
   get_table_rows_with_checkbox: z.infer<typeof GetTableRowsWithCheckboxSchema>;
   update_table_rows: z.infer<typeof UpdateTableRowsSchema>;
+  append_table_row: z.infer<typeof AppendTableRowSchema>;
+  insert_table_row: z.infer<typeof InsertTableRowSchema>;
+  insert_lines: z.infer<typeof InsertLinesSchema>;
+  add_lines: z.infer<typeof AddLinesSchema>;
   set_block_caption: z.infer<typeof SetBlockCaptionSchema>;
   add_image: z.infer<typeof AddImageSchema>;
   get_image: z.infer<typeof GetImageSchema>;
@@ -858,6 +944,42 @@ export interface ToolHandlers {
     knowledge_id: number;
     page_version: number;
     updated_count: number;
+    url: string;
+  }>;
+
+  append_table_row(input: ToolInputs["append_table_row"]): Promise<{
+    page_id: number;
+    knowledge_id: number;
+    page_version: number;
+    appended_count: number;
+    new_row_indices: number[];
+    url: string;
+  }>;
+
+  insert_table_row(input: ToolInputs["insert_table_row"]): Promise<{
+    page_id: number;
+    knowledge_id: number;
+    page_version: number;
+    inserted_count: number;
+    new_row_indices: number[];
+    url: string;
+  }>;
+
+  insert_lines(input: ToolInputs["insert_lines"]): Promise<{
+    id: number;
+    knowledge_id: number;
+    version: number;
+    new_line_count: number;
+    inserted_lines: number;
+    url: string;
+  }>;
+
+  add_lines(input: ToolInputs["add_lines"]): Promise<{
+    id: number;
+    knowledge_id: number;
+    version: number;
+    new_line_count: number;
+    appended_lines: number;
     url: string;
   }>;
 
@@ -1777,6 +1899,138 @@ export function buildToolHandlers(
         page_version: r.page_version,
         updated_count: r.updated_count,
         url: urlFor(ctx, r.knowledge_id, r.page_id),
+      };
+    },
+
+    async append_table_row(input) {
+      const parsed = AppendTableRowSchema.parse(input);
+      const summary = pages.getBlockSummary(parsed.block_id);
+      if (summary) gateEditByProject(summary.project);
+      const r = pages.appendTableRows(parsed.block_id, {
+        newRows: parsed.new_rows,
+        expectedVersion: parsed.expected_version,
+      });
+      logIf(
+        "append_table_row",
+        parsed.user_prompt,
+        r.knowledge_id,
+        r.page_id,
+        r.page_version,
+      );
+      recordActivity({
+        action: "edit",
+        target: "block",
+        knowledge_id: r.knowledge_id,
+        page_id: r.page_id,
+        block_id: parsed.block_id,
+      });
+      return {
+        page_id: r.page_id,
+        knowledge_id: r.knowledge_id,
+        page_version: r.page_version,
+        appended_count: r.appended_count,
+        new_row_indices: r.new_row_indices,
+        url: urlFor(ctx, r.knowledge_id, r.page_id),
+      };
+    },
+
+    async insert_table_row(input) {
+      const parsed = InsertTableRowSchema.parse(input);
+      const summary = pages.getBlockSummary(parsed.block_id);
+      if (summary) gateEditByProject(summary.project);
+      const r = pages.insertTableRows(parsed.block_id, {
+        at: parsed.at,
+        newRows: parsed.new_rows,
+        expectedVersion: parsed.expected_version,
+      });
+      logIf(
+        "insert_table_row",
+        parsed.user_prompt,
+        r.knowledge_id,
+        r.page_id,
+        r.page_version,
+      );
+      recordActivity({
+        action: "edit",
+        target: "block",
+        knowledge_id: r.knowledge_id,
+        page_id: r.page_id,
+        block_id: parsed.block_id,
+      });
+      return {
+        page_id: r.page_id,
+        knowledge_id: r.knowledge_id,
+        page_version: r.page_version,
+        inserted_count: r.inserted_count,
+        new_row_indices: r.new_row_indices,
+        url: urlFor(ctx, r.knowledge_id, r.page_id),
+      };
+    },
+
+    async insert_lines(input) {
+      const parsed = InsertLinesSchema.parse(input);
+      gateEditByPid(parsed.page_id);
+      const meta = pages.getMetadata(parsed.page_id);
+      if (!meta) throw new Error(`page #${parsed.page_id} not found`);
+      const r = pages.insertLines(
+        parsed.page_id,
+        parsed.at,
+        parsed.new_text,
+        parsed.expected_hash,
+      );
+      logIf(
+        "insert_lines",
+        parsed.user_prompt,
+        meta.knowledge_id,
+        r.id,
+        r.version,
+      );
+      recordActivity({
+        action: "edit",
+        target: "page",
+        knowledge_id: meta.knowledge_id,
+        page_id: r.id,
+      });
+      return {
+        id: r.id,
+        knowledge_id: meta.knowledge_id,
+        version: r.version,
+        new_line_count: r.new_line_count,
+        inserted_lines: r.inserted_lines,
+        url: urlFor(ctx, meta.knowledge_id, r.id, parsed.at),
+      };
+    },
+
+    async add_lines(input) {
+      const parsed = AddLinesSchema.parse(input);
+      gateEditByPid(parsed.page_id);
+      const meta = pages.getMetadata(parsed.page_id);
+      if (!meta) throw new Error(`page #${parsed.page_id} not found`);
+      const r = pages.addLines(
+        parsed.page_id,
+        parsed.new_text,
+        parsed.expected_hash,
+      );
+      logIf(
+        "add_lines",
+        parsed.user_prompt,
+        meta.knowledge_id,
+        r.id,
+        r.version,
+      );
+      recordActivity({
+        action: "edit",
+        target: "page",
+        knowledge_id: meta.knowledge_id,
+        page_id: r.id,
+      });
+      return {
+        id: r.id,
+        knowledge_id: meta.knowledge_id,
+        version: r.version,
+        new_line_count: r.new_line_count,
+        appended_lines: r.appended_lines,
+        url: urlFor(ctx, meta.knowledge_id, r.id),
       };
     },
 

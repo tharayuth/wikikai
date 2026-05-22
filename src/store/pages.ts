@@ -122,6 +122,28 @@ export function hashRange(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
 }
 
+/** Validate that every entry of `newRows` is a single raw pipe-table row
+ *  (starts AND ends with `|`, contains no newlines). Shared by
+ *  `updateTableRows` / `appendTableRows` / `insertTableRows` so we fail
+ *  fast and never half-write a table. */
+function validateRawRows(newRows: string[]): void {
+  for (let i = 0; i < newRows.length; i++) {
+    const r = newRows[i];
+    if (typeof r !== "string") {
+      throw new Error(`new_rows[${i}] is not a string`);
+    }
+    const trimmed = r.trim();
+    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+      throw new Error(
+        `new_rows[${i}] must start and end with \`|\` — got: ${r.slice(0, 80)}`,
+      );
+    }
+    if (/\n/.test(r)) {
+      throw new Error(`new_rows[${i}] must not contain newlines`);
+    }
+  }
+}
+
 /** Render a single-line placeholder used by `summarizePageContent`.
  *  Format: `[@N kind: caption]` or `[@N kind — extra: caption]` when
  *  extra hint info is available (e.g. table dimensions). Stays on one
@@ -898,21 +920,7 @@ export class PageStore {
       );
     }
     // Validate row syntax up-front so we don't half-write on bad input.
-    for (let i = 0; i < opts.newRows.length; i++) {
-      const r = opts.newRows[i];
-      if (typeof r !== "string") {
-        throw new Error(`new_rows[${i}] is not a string`);
-      }
-      const trimmed = r.trim();
-      if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
-        throw new Error(
-          `new_rows[${i}] must start and end with \`|\` — got: ${r.slice(0, 80)}`,
-        );
-      }
-      if (/\n/.test(r)) {
-        throw new Error(`new_rows[${i}] must not contain newlines`);
-      }
-    }
+    validateRawRows(opts.newRows);
     const meta = this.getMetadata(b.page_id);
     if (!meta) throw new Error(`page #${b.page_id} not found`);
     if (
@@ -973,6 +981,163 @@ export class PageStore {
       page_id: b.page_id,
       page_version: r.version,
       updated_count: newLines.length,
+      knowledge_id: meta.knowledge_id,
+    };
+  }
+
+  /**
+   * Append rows at the END of a markdown table (after the last data row,
+   * but BEFORE the standalone `{@N}` annotation line). Validates every
+   * row up-front so we don't half-write on bad input.
+   *
+   * Returns `{ page_id, page_version, appended_count, new_row_indices,
+   * knowledge_id }` where `new_row_indices` are the 0-based positions
+   * the appended rows now occupy.
+   */
+  appendTableRows(
+    blockId: number,
+    opts: { newRows: string[]; expectedVersion?: number },
+  ): {
+    page_id: number;
+    page_version: number;
+    appended_count: number;
+    new_row_indices: number[];
+    knowledge_id: number;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(
+        `append_table_row: not a markdown table block (kind=${b.kind})`,
+      );
+    }
+    validateRawRows(opts.newRows);
+    const meta = this.getMetadata(b.page_id);
+    if (!meta) throw new Error(`page #${b.page_id} not found`);
+    if (
+      opts.expectedVersion !== undefined &&
+      opts.expectedVersion !== meta.version
+    ) {
+      throw new Error(
+        `STALE: page #${b.page_id} version mismatch: expected v${opts.expectedVersion}, current v${meta.version} — re-read the page and try again`,
+      );
+    }
+    const content = this.readContent(meta.knowledge_id, b.page_id);
+    const lines = content.split("\n");
+    // Last data row is at b.line_end (1-based) → 0-based dataEnd0.
+    const dataStart0 = b.line_start + 2 - 1;
+    const dataEnd0 = b.line_end - 1;
+    const N = dataEnd0 - dataStart0 + 1;
+    // Insert immediately after the last data row, which leaves the
+    // trailing `{@N}` annotation (which lives on a later line) intact.
+    const insertAt = dataEnd0 + 1;
+    const draft = [
+      ...lines.slice(0, insertAt),
+      ...opts.newRows,
+      ...lines.slice(insertAt),
+    ].join("\n");
+    const next = this.writeContent(meta.knowledge_id, b.page_id, draft);
+    const r = this.bumpVersion(b.page_id);
+    this.syncFts(b.page_id, meta.title, meta.keywords, next);
+    this.saveRevision(
+      b.page_id,
+      r.version,
+      meta.title,
+      next,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      new Date().toISOString(),
+    );
+    this.bumpKnowledge(meta.knowledge_id, b.page_id);
+    const new_row_indices: number[] = [];
+    for (let i = 0; i < opts.newRows.length; i++) new_row_indices.push(N + i);
+    return {
+      page_id: b.page_id,
+      page_version: r.version,
+      appended_count: opts.newRows.length,
+      new_row_indices,
+      knowledge_id: meta.knowledge_id,
+    };
+  }
+
+  /**
+   * Insert rows into a markdown table BEFORE the row currently at
+   * 0-based index `at`. Existing rows from `at` onward shift down by
+   * `newRows.length`.
+   *
+   * `at = 0` puts the new rows at the top; `at = row_count` is
+   * equivalent to {@link appendTableRows}. Negative `at` throws — the
+   * caller should use `appendTableRows` for tail inserts, and explicit
+   * 0 for head inserts (matches typical splice semantics; negative
+   * indices here would be footgun-prone for an inserting op).
+   */
+  insertTableRows(
+    blockId: number,
+    opts: { at: number; newRows: string[]; expectedVersion?: number },
+  ): {
+    page_id: number;
+    page_version: number;
+    inserted_count: number;
+    new_row_indices: number[];
+    knowledge_id: number;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    if (b.kind !== "table") {
+      throw new Error(
+        `insert_table_row: not a markdown table block (kind=${b.kind})`,
+      );
+    }
+    validateRawRows(opts.newRows);
+    const meta = this.getMetadata(b.page_id);
+    if (!meta) throw new Error(`page #${b.page_id} not found`);
+    if (
+      opts.expectedVersion !== undefined &&
+      opts.expectedVersion !== meta.version
+    ) {
+      throw new Error(
+        `STALE: page #${b.page_id} version mismatch: expected v${opts.expectedVersion}, current v${meta.version} — re-read the page and try again`,
+      );
+    }
+    const content = this.readContent(meta.knowledge_id, b.page_id);
+    const lines = content.split("\n");
+    const dataStart0 = b.line_start + 2 - 1;
+    const dataEnd0 = b.line_end - 1;
+    const N = dataEnd0 - dataStart0 + 1;
+    if (!Number.isInteger(opts.at) || opts.at < 0 || opts.at > N) {
+      throw new Error(
+        `at ${opts.at} out of range (table @${blockId} has ${N} data row${
+          N === 1 ? "" : "s"
+        } — valid: 0..${N})`,
+      );
+    }
+    const insertAt = dataStart0 + opts.at; // 0-based line position
+    const draft = [
+      ...lines.slice(0, insertAt),
+      ...opts.newRows,
+      ...lines.slice(insertAt),
+    ].join("\n");
+    const next = this.writeContent(meta.knowledge_id, b.page_id, draft);
+    const r = this.bumpVersion(b.page_id);
+    this.syncFts(b.page_id, meta.title, meta.keywords, next);
+    this.saveRevision(
+      b.page_id,
+      r.version,
+      meta.title,
+      next,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      new Date().toISOString(),
+    );
+    this.bumpKnowledge(meta.knowledge_id, b.page_id);
+    const new_row_indices: number[] = [];
+    for (let i = 0; i < opts.newRows.length; i++)
+      new_row_indices.push(opts.at + i);
+    return {
+      page_id: b.page_id,
+      page_version: r.version,
+      inserted_count: opts.newRows.length,
+      new_row_indices,
       knowledge_id: meta.knowledge_id,
     };
   }
@@ -1999,6 +2164,159 @@ export class PageStore {
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
     this.bumpKnowledge(meta.knowledge_id, pageId);
     return { id: pageId, version: r.version, new_line_count: countLines(next) };
+  }
+
+  /**
+   * Insert `newText` immediately BEFORE 1-based line `at`. The first
+   * inserted line takes position `at`; original line `at` shifts to
+   * `at + N` where N is the number of newline-separated lines in
+   * `newText`.
+   *
+   * `at = total_lines + 1` appends (prefer {@link addLines} for that
+   * case — clearer intent). Validates `1 <= at <= total_lines + 1`.
+   *
+   * When `newText` doesn't already end with `\n`, one is appended so
+   * the insert doesn't accidentally join with the line currently at
+   * `at`. This matches how the rest of the line-based ops keep one
+   * logical line per array slot.
+   */
+  insertLines(
+    pageId: number,
+    at: number,
+    newText: string,
+    expectedHash?: string,
+  ): {
+    id: number;
+    version: number;
+    new_line_count: number;
+    inserted_lines: number;
+  } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const all = this.readContent(meta.knowledge_id, pageId);
+    const lines = all.split("\n");
+    const total = countLines(all);
+    if (!Number.isInteger(at) || at < 1 || at > total + 1) {
+      throw new Error(
+        `at ${at} out of range (page #${pageId} has ${total} line${
+          total === 1 ? "" : "s"
+        } — valid: 1..${total + 1})`,
+      );
+    }
+    // Hash-gate against drift if caller supplied a hash. We use the
+    // single line at `at` as the reference range (or empty when
+    // appending past the last line). Same shape as `edit_lines` so
+    // callers can reuse `read_page({ line_start: at, line_end: at })`.
+    if (expectedHash) {
+      const refSlice =
+        at <= total ? lines[at - 1] ?? "" : "";
+      if (hashRange(refSlice) !== expectedHash) {
+        throw new Error(
+          `hash mismatch — expected ${expectedHash} but got ${hashRange(refSlice)}. ` +
+            `Re-read the line before inserting.`,
+        );
+      }
+    }
+    // Guarantee one newline at the end of `newText` so split-by-"\n"
+    // arithmetic doesn't accidentally join the last inserted line with
+    // the one that was at `at`.
+    const normalized = newText.endsWith("\n") ? newText : newText + "\n";
+    const insertedLines = normalized.split("\n");
+    // `split` on a string ending with "\n" leaves a trailing "" — drop
+    // it so we don't insert a spurious blank line.
+    insertedLines.pop();
+    // For the canonical "append to end" case (at = total + 1) we use a
+    // direct concat to avoid array juggling when `lines` has a trailing
+    // "" from the source ending with "\n".
+    let draft: string;
+    if (at === total + 1) {
+      const sep = all.length > 0 && !all.endsWith("\n") ? "\n" : "";
+      draft = all + sep + insertedLines.join("\n") + "\n";
+    } else {
+      // `lines` may have a trailing "" when `all` ends with "\n". We
+      // want to insert before the (1-based) `at` row, so 0-based index
+      // is `at - 1`.
+      draft = [
+        ...lines.slice(0, at - 1),
+        ...insertedLines,
+        ...lines.slice(at - 1),
+      ].join("\n");
+    }
+    const next = this.writeContent(meta.knowledge_id, pageId, draft);
+    const r = this.bumpVersion(pageId);
+    this.syncFts(pageId, meta.title, meta.keywords, next);
+    this.saveRevision(
+      pageId,
+      r.version,
+      meta.title,
+      next,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      new Date().toISOString(),
+    );
+    this.bumpKnowledge(meta.knowledge_id, pageId);
+    return {
+      id: pageId,
+      version: r.version,
+      new_line_count: countLines(next),
+      inserted_lines: insertedLines.length,
+    };
+  }
+
+  /**
+   * Append `newText` to the end of the page. Adds a trailing newline to
+   * the existing content first if it doesn't already have one, so the
+   * appended text starts on a fresh line. `newText` itself may or may
+   * not end with `\n` — both are fine.
+   *
+   * Optional `expectedHash` checks the LAST line of the page (matches
+   * `edit_lines` semantics) so concurrent appends can detect drift.
+   */
+  addLines(
+    pageId: number,
+    newText: string,
+    expectedHash?: string,
+  ): {
+    id: number;
+    version: number;
+    new_line_count: number;
+    appended_lines: number;
+  } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const all = this.readContent(meta.knowledge_id, pageId);
+    const total = countLines(all);
+    if (expectedHash) {
+      const lastSlice = total > 0 ? all.split("\n")[total - 1] ?? "" : "";
+      if (hashRange(lastSlice) !== expectedHash) {
+        throw new Error(
+          `hash mismatch — expected ${expectedHash} but got ${hashRange(lastSlice)}. ` +
+            `Re-read the page tail before appending.`,
+        );
+      }
+    }
+    const sep = all.length > 0 && !all.endsWith("\n") ? "\n" : "";
+    const draft = all + sep + newText;
+    const next = this.writeContent(meta.knowledge_id, pageId, draft);
+    const r = this.bumpVersion(pageId);
+    this.syncFts(pageId, meta.title, meta.keywords, next);
+    this.saveRevision(
+      pageId,
+      r.version,
+      meta.title,
+      next,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      new Date().toISOString(),
+    );
+    this.bumpKnowledge(meta.knowledge_id, pageId);
+    const newTotal = countLines(next);
+    return {
+      id: pageId,
+      version: r.version,
+      new_line_count: newTotal,
+      appended_lines: Math.max(0, newTotal - total),
+    };
   }
 
   editSection(
