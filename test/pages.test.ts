@@ -379,6 +379,87 @@ describe("PageStore", () => {
       expect(out.pages[0].headings[1].line).toBe(3);
       expect(out.pages[1].headings.map((h) => h.text)).toEqual(["Last", "Wrap"]);
     });
+
+    it("omits `blocks` field when include_blocks: false", () => {
+      pages.add({
+        knowledge_id: kid,
+        title: "Intro",
+        content:
+          "# Top\n\n```stats {@1 \"KPI cards\"}\n[]\n```\n",
+      });
+      const out = pages.outline(kid, { include_blocks: false });
+      expect(out.pages).toHaveLength(1);
+      expect("blocks" in out.pages[0]).toBe(false);
+    });
+
+    it("includes blocks by default (no arg) and for include_blocks: true", () => {
+      pages.add({
+        knowledge_id: kid,
+        title: "Intro",
+        content:
+          "# Top\n\n```stats {@1 \"KPI cards\"}\n[]\n```\n",
+      });
+      const a = pages.outline(kid);
+      const b = pages.outline(kid, { include_blocks: true });
+      expect(a.pages[0].blocks).toBeDefined();
+      expect(b.pages[0].blocks).toBeDefined();
+      expect(a.pages[0].blocks).toEqual(b.pages[0].blocks);
+    });
+
+    it("enumerates fence + table blocks with kind, caption, line range, and row_count for tables", () => {
+      const content = [
+        "# Page",
+        "",
+        "```stats {@10 \"KPI\"}",
+        "[{\"label\":\"a\",\"value\":1}]",
+        "```",
+        "",
+        "Some prose.",
+        "",
+        "| name | qty |",
+        "| --- | --- |",
+        "| apple | 3 |",
+        "| banana | 5 |",
+        "| cherry | 7 |",
+        "",
+        "{@20 \"Inventory\"}",
+        "",
+        "```mermaid {@30}",
+        "flowchart LR; A-->B",
+        "```",
+      ].join("\n");
+      pages.add({ knowledge_id: kid, title: "P", content });
+      const out = pages.outline(kid);
+      const blocks = out.pages[0].blocks!;
+      expect(blocks.map((b) => b.id)).toEqual([10, 20, 30]);
+      // sorted by line_start ascending
+      for (let i = 1; i < blocks.length; i++) {
+        expect(blocks[i].line_start).toBeGreaterThan(blocks[i - 1].line_start);
+      }
+      const stats = blocks.find((b) => b.id === 10)!;
+      expect(stats.kind).toBe("stats");
+      expect(stats.caption).toBe("KPI");
+      expect("row_count" in stats).toBe(false);
+      const table = blocks.find((b) => b.id === 20)!;
+      expect(table.kind).toBe("table");
+      expect(table.caption).toBe("Inventory");
+      expect(table.row_count).toBe(3);
+      expect(table.line_start).toBe(9); // header row
+      expect(table.line_end).toBe(13); // last data row (1-based)
+      const mermaid = blocks.find((b) => b.id === 30)!;
+      expect(mermaid.kind).toBe("mermaid");
+      expect(mermaid.caption).toBeNull();
+    });
+
+    it("returns an empty blocks array for a page with no annotated blocks", () => {
+      pages.add({
+        knowledge_id: kid,
+        title: "Plain",
+        content: "# Top\n\nJust prose, no blocks.\n",
+      });
+      const out = pages.outline(kid);
+      expect(out.pages[0].blocks).toEqual([]);
+    });
   });
 
   // ───────── Search (FTS5) ─────────

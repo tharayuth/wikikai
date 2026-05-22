@@ -134,6 +134,7 @@ export const DeleteKnowledgeSchema = z.object({
 
 export const GetOutlineSchema = z.object({
   knowledge_id: z.number().int().positive(),
+  include_blocks: z.boolean().optional(),
 });
 
 // ─────────── Page schemas ───────────
@@ -697,15 +698,26 @@ export interface ToolHandlers {
   get_outline(input: ToolInputs["get_outline"]): Promise<{
     knowledge_id: number;
     title: string;
-    pages: {
-      id: number;
-      title: string;
-      position: number;
-      summary: string | null;
-      line_count: number;
-      url: string;
-      headings: { level: number; text: string; line: number; id: string }[];
-    }[];
+    pages: Array<
+      {
+        id: number;
+        title: string;
+        position: number;
+        summary: string | null;
+        line_count: number;
+        url: string;
+        headings: { level: number; text: string; line: number; id: string }[];
+      } & {
+        blocks?: Array<{
+          id: number;
+          kind: string;
+          caption: string | null;
+          line_start: number;
+          line_end: number;
+          row_count?: number;
+        }>;
+      }
+    >;
   }>;
 
   add_page(input: ToolInputs["add_page"]): Promise<{
@@ -1431,7 +1443,9 @@ export function buildToolHandlers(
       gateReadByKid(parsed.knowledge_id);
       const meta = knowledge.get(parsed.knowledge_id);
       if (!meta) throw new Error(`knowledge #${parsed.knowledge_id} not found`);
-      const out = pages.outline(parsed.knowledge_id);
+      const out = pages.outline(parsed.knowledge_id, {
+        include_blocks: parsed.include_blocks,
+      });
       return {
         knowledge_id: meta.id,
         title: meta.title,

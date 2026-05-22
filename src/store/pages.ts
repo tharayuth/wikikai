@@ -2452,21 +2452,36 @@ export class PageStore {
 
   // ─────────── Outline ───────────
 
-  outline(knowledgeId: number): {
-    pages: {
-      id: number;
-      title: string;
-      position: number;
-      summary: string | null;
-      line_count: number;
-      headings: { level: number; text: string; line: number; id: string }[];
-    }[];
+  outline(
+    knowledgeId: number,
+    opts: { include_blocks?: boolean } = {},
+  ): {
+    pages: Array<
+      {
+        id: number;
+        title: string;
+        position: number;
+        summary: string | null;
+        line_count: number;
+        headings: { level: number; text: string; line: number; id: string }[];
+      } & {
+        blocks?: Array<{
+          id: number;
+          kind: string;
+          caption: string | null;
+          line_start: number;
+          line_end: number;
+          row_count?: number;
+        }>;
+      }
+    >;
   } {
+    const includeBlocks = opts.include_blocks !== false; // default true
     const pages = this.list(knowledgeId);
     return {
       pages: pages.map((p) => {
         const content = this.readContent(knowledgeId, p.id);
-        return {
+        const base = {
           id: p.id,
           title: p.title,
           position: p.position,
@@ -2474,6 +2489,8 @@ export class PageStore {
           line_count: p.line_count,
           headings: extractHeadings(content),
         };
+        if (!includeBlocks) return base;
+        return { ...base, blocks: extractBlocks(content) };
       }),
     };
   }
@@ -2861,6 +2878,115 @@ function findHeadingForLine(
     else break;
   }
   return best;
+}
+
+/**
+ * Enumerate every annotated block on a page in source order.
+ *
+ * Recognizes both shapes used by `getBlock`:
+ *   - Fence blocks: ```<lang> {@N "caption"?}
+ *   - Table blocks: markdown table immediately followed by a
+ *     standalone `{@N "caption"?}` line (with at most one blank line
+ *     between).
+ *
+ * Returns minimal descriptors (no body) — designed for `outline`.
+ * For tables, also returns `row_count` (data rows only, excluding
+ * header + separator).
+ */
+function extractBlocks(content: string): Array<{
+  id: number;
+  kind: string;
+  caption: string | null;
+  line_start: number;
+  line_end: number;
+  row_count?: number;
+}> {
+  const lines = content.split("\n");
+  const out: Array<{
+    id: number;
+    kind: string;
+    caption: string | null;
+    line_start: number;
+    line_end: number;
+    row_count?: number;
+  }> = [];
+
+  const TABLE_ROW = /^\s*\|.*\|\s*$/;
+  const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // ─── Path A: fence open with {@N "caption"?} on info string ───
+    const fenceOpen = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)([^\n]*)$/.exec(line);
+    if (fenceOpen) {
+      const marker = fenceOpen[2];
+      const kind = fenceOpen[3].toLowerCase();
+      const ann = parseAnnotation(fenceOpen[4]);
+      const closeRe = new RegExp(`^\\s*${marker.replace(/`/g, "`")}+\\s*$`);
+      // find matching close
+      let j = i + 1;
+      while (j < lines.length && !closeRe.test(lines[j])) j++;
+      if (j >= lines.length) {
+        // unterminated fence — skip past this line so we don't loop forever
+        i++;
+        continue;
+      }
+      if (ann) {
+        out.push({
+          id: ann.id,
+          kind,
+          caption: ann.caption,
+          line_start: i + 1,
+          line_end: j + 1,
+        });
+      }
+      i = j + 1;
+      continue;
+    }
+
+    // ─── Path B: standalone {@N "caption"?} attached to a table above ───
+    const trimmed = line.trim();
+    const ann =
+      trimmed.length > 0 ? parseAnnotation(trimmed) : null;
+    if (ann && ann.start === 0 && ann.end === trimmed.length) {
+      // Walk back over optional blank line + table rows.
+      let cursor = i - 1;
+      if (cursor >= 0 && lines[cursor].trim() === "") cursor--;
+      const lastRow = cursor;
+      let start = cursor;
+      while (start >= 0 && TABLE_ROW.test(lines[start])) start--;
+      start++;
+      if (
+        lastRow - start + 1 >= 2 &&
+        TABLE_SEP.test(lines[start + 1])
+      ) {
+        // data rows = rows after header + separator, excluding blanks
+        const dataRows = lines
+          .slice(start + 2, lastRow + 1)
+          .filter((l) => /\S/.test(l)).length;
+        out.push({
+          id: ann.id,
+          kind: "table",
+          caption: ann.caption,
+          line_start: start + 1,
+          line_end: lastRow + 1,
+          row_count: dataRows,
+        });
+      }
+      i++;
+      continue;
+    }
+
+    i++;
+  }
+
+  // Sort by line_start ascending (Path A already enumerates in source
+  // order, but Path B can introduce earlier line_start values when the
+  // annotation line follows the table — be explicit).
+  out.sort((a, b) => a.line_start - b.line_start);
+  return out;
 }
 
 function extractHeadings(content: string): { level: number; text: string; line: number; id: string }[] {

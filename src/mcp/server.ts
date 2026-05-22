@@ -66,7 +66,15 @@ const getKnowledgeShape = {
 };
 
 const deleteKnowledgeShape = { id: z.number().int().positive() };
-const getOutlineShape = { knowledge_id: z.number().int().positive() };
+const getOutlineShape = {
+  knowledge_id: z.number().int().positive(),
+  include_blocks: z
+    .boolean()
+    .optional()
+    .describe(
+      "Include per-page `blocks` array (id, kind, caption, line range; row_count for tables). Default true. Set false for the original outline shape.",
+    ),
+};
 
 const addPageShape = {
   knowledge_id: z.number().int().positive(),
@@ -649,7 +657,7 @@ export function createMcpServer(
     {
       title: "Get token-efficient outline",
       description:
-        "Return tree of page titles + heading hierarchy (no body). Best first call when reading existing knowledge — scan cheaply, then `read_page` the parts you care about.",
+        "Return tree of page titles + heading hierarchy (no body), plus per-page `blocks` (id, kind, caption, line range; `row_count` for tables) so you can spot rich content without `read_page`. Pass `include_blocks: false` for the original heading-only shape. Best first call when reading existing knowledge — scan cheaply, then `read_page` / `get_block` the parts you care about.",
       inputSchema: getOutlineShape,
     },
     async (input) => jsonContent(await handlers.get_outline(input)),
