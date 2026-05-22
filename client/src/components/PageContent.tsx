@@ -147,19 +147,39 @@ export function PageContent({ pageId, line, block }: Props) {
   }, [pageId, meta.data?.version, dispatch]);
 
   // Block-badge "Edit this block" → enter edit mode + scroll editor to
-  // the line of the `{@N}` annotation.
+  // the first CONTENT line of the block (not the fence-opening or the
+  // standalone {@N} annotation line itself).
+  //
+  // Fence block:                Table block:
+  //   ```mermaid {@N "..."}       | Col1 | Col2 |   ← target (table header)
+  //   graph TD                    |------|------|
+  //     ...           ← target    | a    | b    |
+  //   ```                         {@N "caption"}
   useEffect(() => {
     const onEditBlock = (e: Event) => {
       const detail = (e as CustomEvent).detail as { blockId: number };
       if (!meta.data) return;
       const lines = meta.data.content.split("\n");
       let target = 1;
+      const annRe = new RegExp(`\\{@${detail.blockId}(?:\\s|\\})`);
       for (let i = 0; i < lines.length; i++) {
-        const m = /\{@(\d+)\}/.exec(lines[i]);
-        if (m && Number(m[1]) === detail.blockId) {
-          target = i + 1;
-          break;
+        if (!annRe.test(lines[i])) continue;
+        const isFenceOpen = /^\s*```/.test(lines[i]);
+        if (isFenceOpen) {
+          // First content line of the fence body — skip the opening
+          // fence marker. (Empty block? Falls to the closing fence,
+          // which is still inside the block geometry.)
+          target = i + 2;
+        } else {
+          // Standalone {@N} sits BELOW the table. Walk back past an
+          // optional blank line + every table row to find the header.
+          let k = i - 1;
+          if (k >= 0 && lines[k].trim() === "") k--;
+          const tableRow = /^\s*\|.*\|\s*$/;
+          while (k > 0 && tableRow.test(lines[k])) k--;
+          target = k + 2; // first row (1-based)
         }
+        break;
       }
       setDraft(meta.data.content);
       setEditing(true);
