@@ -138,7 +138,7 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
               badge: btn,
               copyText: `&${meta.id}`,
               contentUrl: `/api/knowledge/${meta.id}/content`,
-              editLabel: "Edit this knowledge",
+              editLabel: "Edit knowledge name",
               onEdit: () => setInfoOpen(true),
               deleteLabel: "Delete this knowledge",
               confirmDelete: () =>

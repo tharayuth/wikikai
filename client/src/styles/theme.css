@@ -3509,7 +3509,10 @@ a:hover { text-decoration: underline; }
 }
 .add-user-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr auto;
+  /* Auto-wrap into as many comfortable columns as fit. Inputs stay at
+     least ~190px wide so placeholders don't get clipped — when the
+     modal can't fit 5 across, the form gracefully drops to 2 rows. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px 14px;
   align-items: end;
 }
@@ -3539,6 +3542,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: 5px;
   padding-bottom: 7px;
+  min-width: 0;
 }
 .add-user-actions {
   display: flex;

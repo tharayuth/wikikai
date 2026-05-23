@@ -358,7 +358,7 @@ export function PageContent({ pageId, line, block }: Props) {
               badge: btn,
               copyText: `#${pageId}`,
               contentUrl: `/api/pages/${pageId}/raw`,
-              editLabel: "Edit this page",
+              editLabel: "Edit page name",
               onEdit: () => {
                 void onStartEdit();
               },
