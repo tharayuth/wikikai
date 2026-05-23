@@ -744,6 +744,55 @@ describe("HTTP routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("DELETE /api/blocks/:id removes the block lines, leaves rest", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const p = pages.add({
+      knowledge_id: k.id,
+      title: "P",
+      content: "intro line\n\n```typescript\nconst x = 1;\n```\n\ntrailing line\n",
+    });
+    const md = pages.get(p.id)!.content;
+    const id = Number(/\{@(\d+)\}/.exec(md)![1]);
+
+    const res = await request(app).delete(`/api/blocks/${id}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      block_id: id,
+      page_id: p.id,
+      deleted: true,
+    });
+
+    const after = pages.get(p.id)!.content;
+    expect(after).not.toContain("```");
+    expect(after).not.toContain("const x = 1");
+    expect(after).toContain("intro line");
+    expect(after).toContain("trailing line");
+  });
+
+  it("DELETE /api/blocks/:id returns 404 for unknown id", async () => {
+    const res = await request(app).delete(`/api/blocks/9999999`);
+    expect(res.status).toBe(404);
+  });
+
+  it("GET /api/knowledge/:id/content concatenates pages in sidebar order", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    pages.add({ knowledge_id: k.id, title: "First", content: "hello first" });
+    pages.add({ knowledge_id: k.id, title: "Second", content: "hello second" });
+    const res = await request(app).get(`/api/knowledge/${k.id}/content`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("## First");
+    expect(res.text).toContain("hello first");
+    expect(res.text).toContain("---");
+    expect(res.text).toContain("## Second");
+    expect(res.text).toContain("hello second");
+    expect(res.text.indexOf("First")).toBeLessThan(res.text.indexOf("Second"));
+  });
+
+  it("GET /api/knowledge/:id/content returns 404 for unknown knowledge", async () => {
+    const res = await request(app).get(`/api/knowledge/9999999/content`);
+    expect(res.status).toBe(404);
+  });
+
   it("PATCH /api/pages/:pid updates content", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "old" });

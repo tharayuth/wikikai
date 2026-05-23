@@ -14,6 +14,7 @@ import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { useChecklistToggles } from "../hooks/useChecklistToggles";
 import { useImageResize } from "../hooks/useImageResize";
 import { navigateTo } from "../hooks/useHash";
+import { openBadgeMenu } from "../lib/badgeMenu";
 import { PageEditor, type PageEditorHandle } from "./PageEditor";
 import { PageDiffModal } from "./PageDiffModal";
 import { ImageUploadModal } from "./ImageUploadModal";
@@ -189,6 +190,25 @@ export function PageContent({ pageId, line, block }: Props) {
     return () => window.removeEventListener("wikikai-edit-block", onEditBlock);
   }, [meta.data]);
 
+  // Invalidate page caches when a block was just deleted via the
+  // shared badge menu — the lines are gone server-side and we want the
+  // rendered article + revisions list to catch up.
+  useEffect(() => {
+    const onBlockDeleted = () => {
+      dispatch(
+        portalApi.util.invalidateTags([
+          { type: "Page", id: pageId },
+          { type: "PageRendered", id: pageId },
+          { type: "Revisions", id: pageId },
+        ]),
+      );
+      dispatch(showToast("deleted block"));
+    };
+    window.addEventListener("wikikai-block-deleted", onBlockDeleted);
+    return () =>
+      window.removeEventListener("wikikai-block-deleted", onBlockDeleted);
+  }, [pageId, dispatch]);
+
   useEffect(() => {
     if (!rendered.data) return;
     if (block == null && !line) return;
@@ -330,11 +350,52 @@ export function PageContent({ pageId, line, block }: Props) {
       <div className="page-id-header">
         <button
           className="page-id-badge"
-          onClick={() => {
-            navigator.clipboard.writeText(`#${pageId}`);
-            dispatch(showToast(`copied #${pageId}`));
+          onClick={(e) => {
+            const btn = e.currentTarget;
+            openBadgeMenu({
+              kind: "page",
+              id: pageId,
+              badge: btn,
+              copyText: `#${pageId}`,
+              contentUrl: `/api/pages/${pageId}/raw`,
+              editLabel: "Edit this page",
+              onEdit: () => {
+                void onStartEdit();
+              },
+              deleteLabel: "Delete this page",
+              confirmDelete: () =>
+                window.confirm(
+                  `Delete page "${meta.data?.title ?? `#${pageId}`}" (#${pageId})?\n\nThis is permanent — the page and all its revisions are removed.`,
+                ),
+              onDelete: async () => {
+                await delPage({ page_id: pageId, knowledge_id: kid }).unwrap();
+              },
+              onDeleteSuccess: () => {
+                dispatch(showToast(`deleted page #${pageId}`));
+                navigateTo({ kid });
+              },
+              onDeleteError: (err) => {
+                const e2 = err as { status?: number; data?: { error?: string } };
+                dispatch(
+                  showToast({
+                    message: `Delete failed: ${e2.data?.error ?? e2.status ?? "error"}`,
+                    kind: "error",
+                  }),
+                );
+              },
+              onCopied: (what) =>
+                dispatch(
+                  showToast(
+                    what === "id"
+                      ? `copied #${pageId}`
+                      : `copied page #${pageId} content`,
+                  ),
+                ),
+              onCopyError: () =>
+                dispatch(showToast({ message: "Copy failed", kind: "error" })),
+            });
           }}
-          title="copy page id (#N)"
+          title="page actions: copy / edit / delete"
         >
           #{pageId}
         </button>

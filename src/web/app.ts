@@ -402,6 +402,36 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Concatenated `text/plain` of every page in this knowledge, in
+  // sidebar order. Pages are separated by `\n\n---\n\n` and each is
+  // prefixed with `## <page title>\n\n` so a copied knowledge round-trips
+  // as readable markdown. Same view-level ACL as `/outline`.
+  //
+  // No hard cap right now — knowledges are usually a few dozen pages of
+  // markdown so the payload stays in the low-MB range. If a huge
+  // knowledge starts hurting clients we can stream this instead.
+  app.get("/api/knowledge/:id/content", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      const k = opts.knowledge.get(id);
+      if (!k) {
+        res.status(404).type("text/plain").send("not found");
+        return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        assertProjectAccess(req.user, k.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
+      }
+      const pages = opts.pages.list(id);
+      const parts = pages.map((p) => {
+        const body = opts.pages.readLines(p.id).content;
+        return `## ${p.title}\n\n${body}`;
+      });
+      res.type("text/plain").send(parts.join("\n\n---\n\n"));
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.get("/api/knowledge/:id/outline", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
@@ -612,6 +642,40 @@ export function buildApp(opts: BuildAppOptions): Express {
       // a "Copy content" action wants.
       const content = block.kind === "table" ? block.source : block.inner;
       res.type("text/plain").send(content);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // Delete a `{@N}` block by removing its source lines from the owning
+  // page. Resolves block → (page_id, line_start, line_end) via getBlock,
+  // then calls `editLines` with `new_text: ""` so the rest of the page
+  // shifts up. Returns the new page version.
+  //
+  // ACL: edit-level on the block's knowledge project — same as a manual
+  // page edit. Reuses the same gate used by PATCH /api/pages/:pid.
+  app.delete("/api/blocks/:id", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      const block = opts.pages.getBlock(id);
+      if (!block) {
+        res.status(404).json({ error: `block @${id} not found` });
+        return;
+      }
+      gateEdit(req, block.knowledge_id);
+      const r = opts.pages.editLines(
+        block.page_id,
+        block.line_start,
+        block.line_end,
+        "",
+      );
+      res.json({
+        block_id: id,
+        page_id: block.page_id,
+        version: r.version,
+        new_line_count: r.new_line_count,
+        deleted: true,
+      });
     } catch (e) {
       next(e);
     }

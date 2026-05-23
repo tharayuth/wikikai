@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useGetKnowledgeQuery } from "../store/api";
+import { useDeleteKnowledgeMutation, useGetKnowledgeQuery } from "../store/api";
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
+import { openBadgeMenu } from "../lib/badgeMenu";
+import { navigateTo } from "../hooks/useHash";
 import {
   isKnowledgeStarred,
   STARRED_KNOWLEDGE_EVENT,
@@ -20,6 +22,7 @@ interface Props {
 export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   const dispatch = useAppDispatch();
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: kid === null });
+  const [deleteKnowledge] = useDeleteKnowledgeMutation();
   const [infoOpen, setInfoOpen] = useState(false);
   const [starred, setStarred] = useState(false);
 
@@ -127,11 +130,55 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
         </button>
         <button
           className="ki-id-badge"
-          onClick={() => {
-            navigator.clipboard.writeText(`&${meta.id}`);
-            dispatch(showToast(`copied &${meta.id}`));
+          onClick={(e) => {
+            const btn = e.currentTarget;
+            openBadgeMenu({
+              kind: "knowledge",
+              id: meta.id,
+              badge: btn,
+              copyText: `&${meta.id}`,
+              contentUrl: `/api/knowledge/${meta.id}/content`,
+              editLabel: "Edit this knowledge",
+              onEdit: () => setInfoOpen(true),
+              deleteLabel: "Delete this knowledge",
+              confirmDelete: () =>
+                window.confirm(
+                  `⚠️ Delete knowledge "${meta.title}" (&${meta.id})?\n\nEvery page, revision, and any image used only by this knowledge will be removed permanently. This cannot be undone.`,
+                ),
+              onDelete: async () => {
+                await deleteKnowledge(meta.id).unwrap();
+              },
+              onDeleteSuccess: () => {
+                dispatch(
+                  showToast({
+                    message: `Deleted "${meta.title}"`,
+                    kind: "success",
+                  }),
+                );
+                navigateTo({ kid: null });
+              },
+              onDeleteError: (err) => {
+                const e2 = err as { status?: number; data?: { error?: string } };
+                dispatch(
+                  showToast({
+                    message: `Delete failed: ${e2.data?.error ?? e2.status ?? "error"}`,
+                    kind: "error",
+                  }),
+                );
+              },
+              onCopied: (what) =>
+                dispatch(
+                  showToast(
+                    what === "id"
+                      ? `copied &${meta.id}`
+                      : `copied &${meta.id} content`,
+                  ),
+                ),
+              onCopyError: () =>
+                dispatch(showToast({ message: "Copy failed", kind: "error" })),
+            });
           }}
-          title="copy knowledge id (&N)"
+          title="knowledge actions: copy / edit / delete"
         >
           &amp;{meta.id}
         </button>

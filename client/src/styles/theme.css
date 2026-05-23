@@ -1765,6 +1765,13 @@ a:hover { text-decoration: underline; }
   background: var(--accent-light);
   color: var(--accent-strong);
 }
+.block-menu button.danger {
+  color: var(--danger, #c53030);
+}
+.block-menu button.danger:hover {
+  background: var(--danger-light, rgba(197, 48, 48, 0.12));
+  color: var(--danger, #c53030);
+}
 
 .markdown-body .rich-block-mermaid {
   width: fit-content;

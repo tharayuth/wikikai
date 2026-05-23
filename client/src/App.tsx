@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { useHash } from "./hooks/useHash";
 import { useServerEvents } from "./hooks/useServerEvents";
 import { useDocumentTitle } from "./hooks/useDocumentTitle";
-import { useAppSelector } from "./store";
+import { useAppDispatch, useAppSelector } from "./store";
+import { showToast } from "./store/uiSlice";
 import { useGetAuthMeQuery } from "./store/api";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
@@ -17,6 +18,7 @@ import { Toast } from "./components/Toast";
 
 export function App() {
   const { location, navigate } = useHash();
+  const dispatch = useAppDispatch();
   const theme = useAppSelector((s) => s.ui.theme);
   const [searchText, setSearchText] = useState("");
   const authMe = useGetAuthMeQuery();
@@ -26,6 +28,20 @@ export function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // Bridge non-React `wikikai-toast` CustomEvents (dispatched from the
+  // shared badge menu in `lib/badgeMenu.ts`) onto the redux toast queue.
+  useEffect(() => {
+    const onToast = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { message: string; kind?: "success" | "error" | "info" }
+        | undefined;
+      if (!detail) return;
+      dispatch(showToast({ message: detail.message, kind: detail.kind }));
+    };
+    window.addEventListener("wikikai-toast", onToast);
+    return () => window.removeEventListener("wikikai-toast", onToast);
+  }, [dispatch]);
 
   // Restore the article width preference before first paint so the
   // article doesn't jump from the default to the user's chosen size.

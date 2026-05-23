@@ -1,133 +1,62 @@
 import { useEffect, type RefObject } from "react";
 import mermaid from "mermaid";
 import Chart from "chart.js/auto";
+import { openBadgeMenu } from "../lib/badgeMenu.js";
 
 /**
- * Hidden textarea + execCommand("copy") fallback for non-secure
- * origins (e.g. http://192.168.x.x) where navigator.clipboard isn't
- * exposed.
+ * Open the shared badge menu for an `@N` block badge. The "Edit" path
+ * dispatches a `wikikai-edit-block` event that PageContent listens for
+ * to jump the editor to the right source line. "Delete" calls
+ * `DELETE /api/blocks/:id` which removes the block's lines via
+ * `editLines` on the server.
  */
-function copyFallback(text: string, onOk: () => void): void {
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    ta.style.pointerEvents = "none";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    if (ok) onOk();
-  } catch {
-    /* ignore */
-  }
-}
-
-/**
- * Open a small popup menu anchored to a block badge with two actions:
- * copy `@N` to the clipboard, or enter the page editor positioned at
- * that block's source line. The "edit" path emits a custom event the
- * PageContent component listens for.
- */
-function openBlockMenu(badge: HTMLElement, id: string): void {
-  document.querySelectorAll(".block-menu").forEach((m) => m.remove());
-
-  const menu = document.createElement("div");
-  menu.className = "block-menu";
-
-  const copyBtn = document.createElement("button");
-  copyBtn.type = "button";
-  copyBtn.dataset.action = "copy";
-  copyBtn.textContent = `Copy @${id}`;
-  const copyContentBtn = document.createElement("button");
-  copyContentBtn.type = "button";
-  copyContentBtn.dataset.action = "copy-content";
-  copyContentBtn.textContent = "Copy content";
-  const editBtn = document.createElement("button");
-  editBtn.type = "button";
-  editBtn.dataset.action = "edit";
-  editBtn.textContent = "Edit this block";
-  menu.appendChild(copyBtn);
-  menu.appendChild(copyContentBtn);
-  menu.appendChild(editBtn);
-
-  const rect = badge.getBoundingClientRect();
-  menu.style.position = "fixed";
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${rect.left}px`;
-  document.body.appendChild(menu);
-
-  const close = () => {
-    menu.remove();
-    document.removeEventListener("mousedown", onOutside);
-    document.removeEventListener("keydown", onEsc);
-  };
-  const onOutside = (e: MouseEvent) => {
-    if (!menu.contains(e.target as Node)) close();
-  };
-  const onEsc = (e: KeyboardEvent) => {
-    if (e.key === "Escape") close();
-  };
-
-  copyBtn.addEventListener("click", () => {
-    const text = `@${id}`;
-    const flash = () => {
-      badge.classList.add("copied");
-      setTimeout(() => badge.classList.remove("copied"), 600);
-    };
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(flash, () => copyFallback(text, flash));
-    } else {
-      copyFallback(text, flash);
-    }
-    close();
-  });
-  copyContentBtn.addEventListener("click", () => {
-    // Fetch the raw inner source from the server — same source the
-    // `get_block` MCP tool sees — so what gets copied matches what the
-    // author wrote, not the rendered DOM. Uses session-cookie auth, same
-    // as every other /api call on this page.
-    const flash = () => {
-      badge.classList.add("copied");
-      setTimeout(() => badge.classList.remove("copied"), 600);
-    };
-    const writeClip = (text: string) => {
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).then(flash, () =>
-          copyFallback(text, flash),
-        );
-      } else {
-        copyFallback(text, flash);
-      }
-    };
-    fetch(`/api/blocks/${encodeURIComponent(id)}/content`, {
-      credentials: "same-origin",
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then(writeClip)
-      .catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn("Copy content failed:", err);
+function openBlockBadgeMenu(badge: HTMLElement, id: string): void {
+  openBadgeMenu({
+    kind: "block",
+    id,
+    badge,
+    copyText: `@${id}`,
+    contentUrl: `/api/blocks/${encodeURIComponent(id)}/content`,
+    editLabel: "Edit this block",
+    onEdit: () => {
+      window.dispatchEvent(
+        new CustomEvent("wikikai-edit-block", {
+          detail: { blockId: Number(id) },
+        }),
+      );
+    },
+    deleteLabel: "Delete this block",
+    confirmDelete: () =>
+      window.confirm(
+        `Delete block @${id}?\n\nThis removes those lines from the page. The page itself stays — you can undo via the revisions list.`,
+      ),
+    onDelete: async () => {
+      const res = await fetch(`/api/blocks/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
       });
-    close();
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+    },
+    onDeleteSuccess: () => {
+      window.dispatchEvent(
+        new CustomEvent("wikikai-block-deleted", {
+          detail: { blockId: Number(id) },
+        }),
+      );
+    },
+    onDeleteError: (err) => {
+      // eslint-disable-next-line no-console
+      console.warn("Delete block failed:", err);
+      window.dispatchEvent(
+        new CustomEvent("wikikai-toast", {
+          detail: { message: `Delete failed: ${(err as Error).message ?? err}`, kind: "error" },
+        }),
+      );
+    },
   });
-  editBtn.addEventListener("click", () => {
-    window.dispatchEvent(
-      new CustomEvent("wikikai-edit-block", {
-        detail: { blockId: Number(id) },
-      }),
-    );
-    close();
-  });
-
-  setTimeout(() => {
-    document.addEventListener("mousedown", onOutside);
-    document.addEventListener("keydown", onEsc);
-  }, 0);
 }
 
 // Lazy init mermaid once per theme change
@@ -348,7 +277,7 @@ export function useMermaidCharts(
       if (!id) continue;
       const handler = (e: Event) => {
         e.stopPropagation(); // don't trigger parent click (chart/mermaid open)
-        openBlockMenu(btn, id);
+        openBlockBadgeMenu(btn, id);
       };
       btn.addEventListener("click", handler);
       badgeHandlers.push({ el: btn, handler });
