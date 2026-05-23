@@ -360,7 +360,32 @@ export function PageContent({ pageId, line, block }: Props) {
               contentUrl: `/api/pages/${pageId}/raw`,
               editLabel: "Edit page name",
               onEdit: () => {
-                void onStartEdit();
+                // Page-name rename. The big "Edit" button in the
+                // header still opens the full content editor; this
+                // menu item is specifically for the title that shows
+                // up in the sidebar / tab list.
+                const current = meta.data?.title ?? "";
+                const next = window.prompt("Page name:", current);
+                if (next == null) return; // cancelled
+                const trimmed = next.trim();
+                if (!trimmed || trimmed === current) return;
+                updatePage({ page_id: pageId, title: trimmed })
+                  .unwrap()
+                  .then(() => {
+                    dispatch(showToast(`renamed to "${trimmed}"`));
+                  })
+                  .catch((err: unknown) => {
+                    const e2 = err as {
+                      status?: number;
+                      data?: { error?: string };
+                    };
+                    dispatch(
+                      showToast({
+                        message: `Rename failed: ${e2.data?.error ?? e2.status ?? "error"}`,
+                        kind: "error",
+                      }),
+                    );
+                  });
               },
               deleteLabel: "Delete this page",
               confirmDelete: () =>
