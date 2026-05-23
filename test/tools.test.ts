@@ -20,18 +20,21 @@ describe("MCP tool handlers", () => {
   let pages: PageStore;
   let permissions: PermissionStore;
   let users: UserStore;
+  let images: ImageStore;
+  let imagesDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aim-tools-"));
     const db = openDb(":memory:");
     knowledge = new KnowledgeStore(db);
     pages = new PageStore(db, tmpDir);
-    const images = new ImageStore(db, path.join(tmpDir, "images"));
+    imagesDir = path.join(tmpDir, "images");
+    images = new ImageStore(db, imagesDir);
     const promptLog = new PromptLogStore(db);
     const activityLog = new ActivityLogStore(db);
     permissions = new PermissionStore(db);
     users = new UserStore(db);
-    h = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users);
+    h = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users, db);
   });
 
   afterEach(() => {
@@ -547,6 +550,142 @@ describe("MCP tool handlers", () => {
           () => h.edit_page({ page_id: p.id, content: "new" }),
         ),
       ).resolves.toBeTruthy();
+    });
+  });
+
+  describe("auto-cleanup orphaned images on edit", () => {
+    // 1x1 transparent PNG — enough bytes to satisfy the store.
+    const PNG_1x1 = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+      "base64",
+    );
+
+    async function addPng(altText = "x"): Promise<{ hash: string; src: string; ext: string }> {
+      const meta = await h.add_image({
+        data_base64: PNG_1x1.toString("base64"),
+        mime_type: "image/png",
+        alt: altText,
+      });
+      return { hash: meta.hash, src: meta.src, ext: meta.ext };
+    }
+
+    it("removes image from disk + DB when its only referencing edit drops it", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("only-ref");
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: `before\n![alt](${img.src})\nafter`,
+      });
+      const fp = path.join(imagesDir, img.hash.slice(0, 2), `${img.hash}.${img.ext}`);
+      expect(fs.existsSync(fp)).toBe(true);
+      expect(images.get(img.hash)).not.toBeNull();
+
+      await h.edit_page({ page_id: p.id, content: "no image here" });
+
+      expect(images.get(img.hash)).toBeNull();
+      expect(fs.existsSync(fp)).toBe(false);
+    });
+
+    it("keeps image alive when another page still references it", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("shared");
+      const md = `body\n![alt](${img.src})\n`;
+      const p1 = await h.add_page({ knowledge_id: k.id, title: "P1", content: md });
+      await h.add_page({ knowledge_id: k.id, title: "P2", content: md });
+      const fp = path.join(imagesDir, img.hash.slice(0, 2), `${img.hash}.${img.ext}`);
+      expect(fs.existsSync(fp)).toBe(true);
+
+      await h.edit_page({ page_id: p1.id, content: "dropped" });
+
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(fs.existsSync(fp)).toBe(true);
+    });
+
+    it("edit that keeps the image ref does not delete the image", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("kept");
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: `first line\n![alt](${img.src})\nlast line`,
+      });
+
+      await h.edit_page({
+        page_id: p.id,
+        content: `changed prose\n![alt](${img.src})\nmore prose`,
+      });
+
+      expect(images.get(img.hash)).not.toBeNull();
+    });
+
+    it("edit that ADDS an image does not delete it (diff direction sanity)", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("new");
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "no img" });
+
+      await h.edit_page({
+        page_id: p.id,
+        content: `now there is\n![alt](${img.src})`,
+      });
+
+      expect(images.get(img.hash)).not.toBeNull();
+    });
+
+    it("edit_lines removing the image-bearing line cleans up", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("lines");
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: `top\n![alt](${img.src})\nbottom`,
+      });
+
+      await h.edit_lines({
+        page_id: p.id,
+        line_start: 2,
+        line_end: 2,
+        new_text: "plain text instead",
+      });
+
+      expect(images.get(img.hash)).toBeNull();
+    });
+
+    it("edit_section removing the image-bearing body cleans up", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("section");
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: `## A\n![alt](${img.src})\n\n## B\nbye`,
+      });
+
+      await h.edit_section({
+        page_id: p.id,
+        heading: "## A",
+        new_content: "no image now",
+      });
+
+      expect(images.get(img.hash)).toBeNull();
+    });
+
+    it("replace_text scoped to a page cleans up the dropped image", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("replace");
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: `keep\n![alt](${img.src})\nend`,
+      });
+
+      await h.replace_text({
+        knowledge_id: k.id,
+        page_id: p.id,
+        find: `![alt](${img.src})`,
+        replace: "removed",
+      });
+
+      expect(images.get(img.hash)).toBeNull();
     });
   });
 });

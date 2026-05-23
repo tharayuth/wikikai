@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
 import type { PageStore, PageEntry, PageWithStats } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
+import { cleanupRemovedImageRefs, extractImageHashesSet } from "../store/images.js";
+import type { Db } from "../store/db.js";
 import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
 import type { PermissionStore } from "../store/permissions.js";
@@ -1229,6 +1231,7 @@ export function buildToolHandlers(
   ctx: HandlerContext,
   permissions: PermissionStore,
   users: UserStore,
+  db: Db,
 ): ToolHandlers {
   const aclEnabled = ctx.projectAclEnabled ?? true;
 
@@ -1504,9 +1507,15 @@ export function buildToolHandlers(
     async edit_page(input) {
       const parsed = EditPageSchema.parse(input);
       gateEditByPid(parsed.page_id);
-      const before = pages.getMetadata(parsed.page_id);
-      if (!before) throw new Error(`page #${parsed.page_id} not found`);
+      const beforePage = pages.get(parsed.page_id);
+      if (!beforePage) throw new Error(`page #${parsed.page_id} not found`);
+      const before = beforePage;
+      const oldHashes = extractImageHashesSet(beforePage.content);
       const r = pages.update(parsed.page_id, parsed);
+      const afterPage = pages.get(parsed.page_id);
+      const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
+      const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
+      cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
       logIf(
         "edit_page",
         parsed.user_prompt,
@@ -1534,6 +1543,8 @@ export function buildToolHandlers(
       gateEditByPid(parsed.page_id);
       const before = pages.getMetadata(parsed.page_id);
       if (!before) throw new Error(`page #${parsed.page_id} not found`);
+      // append is purely additive — it can't drop an existing image
+      // reference. Skip the before/after diff entirely.
       const r = pages.append(parsed.page_id, parsed.text);
       logIf(
         "append_page",
@@ -1716,8 +1727,10 @@ export function buildToolHandlers(
     async edit_lines(input) {
       const parsed = EditLinesSchema.parse(input);
       gateEditByPid(parsed.page_id);
-      const meta = pages.getMetadata(parsed.page_id);
-      if (!meta) throw new Error(`page #${parsed.page_id} not found`);
+      const beforePage = pages.get(parsed.page_id);
+      if (!beforePage) throw new Error(`page #${parsed.page_id} not found`);
+      const meta = beforePage;
+      const oldHashes = extractImageHashesSet(beforePage.content);
       const r = pages.editLines(
         parsed.page_id,
         parsed.line_start,
@@ -1725,6 +1738,10 @@ export function buildToolHandlers(
         parsed.new_text,
         parsed.expected_hash,
       );
+      const afterPage = pages.get(parsed.page_id);
+      const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
+      const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
+      cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
       logIf(
         "edit_lines",
         parsed.user_prompt,
@@ -1750,9 +1767,15 @@ export function buildToolHandlers(
     async edit_section(input) {
       const parsed = EditSectionSchema.parse(input);
       gateEditByPid(parsed.page_id);
-      const meta = pages.getMetadata(parsed.page_id);
-      if (!meta) throw new Error(`page #${parsed.page_id} not found`);
+      const beforePage = pages.get(parsed.page_id);
+      if (!beforePage) throw new Error(`page #${parsed.page_id} not found`);
+      const meta = beforePage;
+      const oldHashes = extractImageHashesSet(beforePage.content);
       const r = pages.editSection(parsed.page_id, parsed.heading, parsed.new_content);
+      const afterPage = pages.get(parsed.page_id);
+      const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
+      const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
+      cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
       logIf(
         "edit_section",
         parsed.user_prompt,
@@ -1783,6 +1806,23 @@ export function buildToolHandlers(
       } else {
         gateEditByKid(parsed.knowledge_id);
       }
+      // Only snapshot when `find` could plausibly contain an image
+      // hash — otherwise the diff is provably empty and we skip the
+      // overhead. Same heuristic for the rare cross-page rename case.
+      const mayAffectImages = /\/img\//i.test(parsed.find);
+      const beforeSnapshots = new Map<number, Set<string>>();
+      if (mayAffectImages) {
+        const targets =
+          parsed.page_id != null
+            ? [pages.getMetadata(parsed.page_id)].filter(
+                (m): m is NonNullable<typeof m> => m !== null,
+              )
+            : pages.list(parsed.knowledge_id);
+        for (const t of targets) {
+          const got = pages.get(t.id);
+          if (got) beforeSnapshots.set(t.id, extractImageHashesSet(got.content));
+        }
+      }
       const r = pages.replaceText(
         parsed.knowledge_id,
         parsed.page_id,
@@ -1790,6 +1830,17 @@ export function buildToolHandlers(
         parsed.replace,
         parsed.count,
       );
+      if (mayAffectImages) {
+        for (const rep of r.replacements) {
+          const oldHashes = beforeSnapshots.get(rep.page_id) ?? new Set<string>();
+          const after = pages.get(rep.page_id);
+          const newHashes = after ? extractImageHashesSet(after.content) : new Set<string>();
+          const removed = new Set<string>(
+            [...oldHashes].filter((h) => !newHashes.has(h)),
+          );
+          cleanupRemovedImageRefs(removed, rep.page_id, db, images);
+        }
+      }
       const total = r.replacements.reduce((sum, it) => sum + it.count, 0);
       // Log once at the knowledge level — the prompt usually intended
       // the change conceptually, not per affected page.

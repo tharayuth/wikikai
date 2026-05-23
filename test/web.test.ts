@@ -31,7 +31,7 @@ describe("HTTP routes", () => {
     const users = new UserStore(db);
     const sessions = new SessionStore(db, users);
     const permissions = new PermissionStore(db);
-    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users);
+    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users, db);
     app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, handlers, publicBaseUrl: "http://test" });
   });
 
@@ -72,6 +72,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const adminApp = buildApp({
         knowledge,
@@ -193,6 +194,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const adminApp = buildApp({
         knowledge,
@@ -314,6 +316,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const authApp = buildApp({
         knowledge,
@@ -383,6 +386,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const authApp = buildApp({
         knowledge, pages, images, promptLog, activityLog,
@@ -449,6 +453,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const authApp = buildApp({
         knowledge, pages, images, promptLog, activityLog,
@@ -515,6 +520,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const authApp = buildApp({
         knowledge, pages, images, promptLog, activityLog,
@@ -572,6 +578,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const authApp = buildApp({
         knowledge, pages, images, promptLog, activityLog,
@@ -623,6 +630,7 @@ describe("HTTP routes", () => {
         { publicBaseUrl: "http://test" },
         permissions,
         users,
+        db,
       );
       const authApp = buildApp({
         knowledge, pages, images, promptLog, activityLog,

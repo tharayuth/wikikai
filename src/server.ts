@@ -79,6 +79,7 @@ export async function startServer(): Promise<RunningServer> {
     },
     permissions,
     users,
+    db,
   );
   const mcpHandler = createMcpHandler(() =>
     createMcpServer(handlers, { defaultUserId: mcpDefaultUserId }),
