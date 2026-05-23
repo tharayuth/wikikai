@@ -1177,6 +1177,12 @@ export class PageStore {
       "images",
       "md",
       "markdown",
+      // Plain code-fence languages that opt into the `@N` block-id system
+      // (renderer wraps these in `rich-block-code` and shows a hover badge).
+      // Must match `CODE_FENCE_BLOCK_LANGS` in src/render/markdown.ts.
+      "text",
+      "typescript",
+      "bash",
     ]);
     const TABLE_ROW = /^\s*\|.*\|\s*$/;
     const TABLE_SEP = /^\s*\|[-:|\s]+\|\s*$/;

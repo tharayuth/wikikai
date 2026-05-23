@@ -311,6 +311,51 @@ describe("renderMarkdown", () => {
     expect(out).toContain("{@42}");
     expect(out).not.toMatch(/data-block-id="42"/);
   });
+
+  it("wraps annotated `text` code fences in rich-block-code with badge", async () => {
+    const out = await renderMarkdown(
+      "```text {@101}\nhello world\n```",
+    );
+    expect(out).toMatch(
+      /<div class="rich-block-code language-text"[^>]+data-block-id="101"/,
+    );
+    expect(out).toMatch(/<code[^>]+data-block-id="101"/);
+    expect(out).toMatch(
+      /<button[^>]+class="block-badge"[^>]+data-block-id="101"[^>]*>@101<\/button>/,
+    );
+  });
+
+  it("wraps annotated `typescript` code fences in rich-block-code with badge", async () => {
+    const out = await renderMarkdown(
+      "```typescript {@102}\nconst x: number = 1;\n```",
+    );
+    expect(out).toMatch(
+      /<div class="rich-block-code language-typescript"[^>]+data-block-id="102"/,
+    );
+    expect(out).toMatch(/<code[^>]+data-block-id="102"/);
+    expect(out).toMatch(/data-block-id="102"[^>]*>@102/);
+  });
+
+  it("wraps annotated `bash` code fences in rich-block-code with badge", async () => {
+    const out = await renderMarkdown(
+      "```bash {@103}\necho hello\n```",
+    );
+    expect(out).toMatch(
+      /<div class="rich-block-code language-bash"[^>]+data-block-id="103"/,
+    );
+    expect(out).toMatch(/<code[^>]+data-block-id="103"/);
+    expect(out).toMatch(/data-block-id="103"[^>]*>@103/);
+  });
+
+  it("does NOT wrap `python` code fences in rich-block-code (not in allow-list)", async () => {
+    const out = await renderMarkdown(
+      "```python {@104}\nprint('hi')\n```",
+    );
+    // No code wrapper, no badge — python falls through the standard
+    // highlight path with the `{@104}` info stripped.
+    expect(out).not.toMatch(/rich-block-code/);
+    expect(out).not.toMatch(/class="block-badge"[^>]+data-block-id="104"/);
+  });
 });
 
 describe("buildToc", () => {

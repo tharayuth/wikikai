@@ -582,6 +582,41 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Return the raw inner content of a block (`{@N}`) as `text/plain`.
+  // For fenced blocks this is the fence body without the ``` markers;
+  // for markdown tables it's the full source (header + separator +
+  // rows) so a "Copy content" UI in the client can paste a usable
+  // chunk back. ACL: viewer-level on the owning project, same as the
+  // page raw endpoint.
+  app.get("/api/blocks/:id/content", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      const block = opts.pages.getBlock(id);
+      if (!block) {
+        res.status(404).type("text/plain").send("not found");
+        return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        const k = opts.knowledge.get(block.knowledge_id);
+        assertProjectAccess(
+          req.user,
+          k?.project ?? "",
+          "view",
+          opts.permissions,
+          { enabled: aclEnabled },
+        );
+      }
+      // For tables, `inner` strips the header — return `source` so the
+      // copied markdown is self-contained. For every fenced kind,
+      // `inner` is exactly the body between ``` markers, which is what
+      // a "Copy content" action wants.
+      const content = block.kind === "table" ? block.source : block.inner;
+      res.type("text/plain").send(content);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.patch("/api/pages/:pid", async (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);

@@ -870,6 +870,46 @@ describe("PageStore", () => {
       expect(() => pages.getTableRow(id, 0)).toThrow(/not a table/);
     });
 
+    it("stamps {@N} into the info string of text/typescript/bash code fences", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content:
+          "```text\nplain\n```\n\n" +
+          "```typescript\nconst x = 1;\n```\n\n" +
+          "```bash\necho hi\n```\n\n" +
+          "```python\nprint('hi')\n```\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      expect(raw).toMatch(/```text \{@\d+\}/);
+      expect(raw).toMatch(/```typescript \{@\d+\}/);
+      expect(raw).toMatch(/```bash \{@\d+\}/);
+      // python must NOT receive an id (still in allow-list audit)
+      expect(raw).not.toMatch(/```python \{@\d+\}/);
+    });
+
+    it("getBlock resolves a code-fence block and reports kind = language", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "```typescript\nconst foo = 42;\nconsole.log(foo);\n```\n",
+      });
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${p.id}.md`),
+        "utf8",
+      );
+      const id = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const b = pages.getBlock(id);
+      expect(b).toBeTruthy();
+      expect(b!.kind).toBe("typescript");
+      expect(b!.inner).toBe("const foo = 42;\nconsole.log(foo);");
+      expect(b!.source).toContain("```typescript");
+      expect(b!.source).toContain("```");
+    });
+
     it("getBlockSummary returns schema+row_count without source/inner for tables", () => {
       const p = pages.add({
         knowledge_id: kid,

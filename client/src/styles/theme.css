@@ -1667,8 +1667,16 @@ a:hover { text-decoration: underline; }
 .markdown-body .image-grid,
 .markdown-body .rich-block-mermaid,
 .markdown-body .rich-block-md,
+.markdown-body .rich-block-code,
 .markdown-body .table-wrap {
   position: relative;
+}
+/* The code wrapper exists only as a positioning context for the
+   `@N` badge — it should not introduce extra spacing beyond what
+   the inner Shiki `<pre>` already brings. */
+.markdown-body .rich-block-code {
+  display: block;
+  margin: 0;
 }
 /* The table wrapper exists only as a positioning context for the
    `@N` badge — it should not affect the table's layout. */
@@ -1709,6 +1717,7 @@ a:hover { text-decoration: underline; }
 .markdown-body .image-grid:hover .block-badge,
 .markdown-body .rich-block-mermaid:hover .block-badge,
 .markdown-body .rich-block-md:hover .block-badge,
+.markdown-body .rich-block-code:hover .block-badge,
 .markdown-body .table-wrap:hover .block-badge {
   opacity: 1;
   pointer-events: auto;

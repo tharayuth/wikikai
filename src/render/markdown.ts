@@ -95,6 +95,26 @@ const COLOR_WHITELIST = new Set([
   "cyan",
 ]);
 
+/**
+ * Plain code-fence languages that participate in the block-id / `@N`
+ * system. These render through the standard Shiki highlight path but
+ * get wrapped in a `rich-block-code` div so the hover badge has a
+ * positioning context — matching mermaid/chart/stats/steps/etc.
+ *
+ * Keep this list small + audited; other languages (python/json/yaml)
+ * still render verbatim without an id badge.
+ *
+ * IMPORTANT: this set must match the `CODE` set in
+ * `PageStore.injectBlockIds` and `summarizePageContent`, otherwise the
+ * server may stamp an id the renderer doesn't recognize (or vice
+ * versa).
+ */
+export const CODE_FENCE_BLOCK_LANGS = new Set<string>([
+  "text",
+  "typescript",
+  "bash",
+]);
+
 /** Extract the `{@N "caption"?}` annotation from a fence info string and
  *  return the id, the optional caption, and the cleaned-up info. */
 function extractBlockId(info: string): {
@@ -428,6 +448,41 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       // fence and the server can update its inline `style` in source.
       const annotated = annotateHtmlEmbedImages(token.content, blockId);
       return `<div class="html-embed"${blockIdAttr(blockId)}>\n${annotated}\n${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
+    }
+    // ─── Plain code-fence languages eligible for `@N` block ids ───
+    // text / typescript / bash get wrapped in a `rich-block-code`
+    // container so the hover badge has somewhere to anchor. The
+    // highlighted body still comes from Shiki via the default highlight
+    // path. The badge only shows when the fence actually has an id —
+    // unannotated fences in these languages still render with the
+    // wrapper (so future authoring can add an id without changing the
+    // surrounding markup) but the badge stays hidden because blockId is
+    // null.
+    if (CODE_FENCE_BLOCK_LANGS.has(info)) {
+      // Rebuild a fresh token so the default highlighter sees a clean
+      // info string (without any leftover `{@N}` text in case the
+      // extractor missed something) and the language alone.
+      const codeToken: Token = Object.assign(
+        Object.create(Object.getPrototypeOf(token)),
+        token,
+        { info, meta: token.meta },
+      );
+      let body = defaultFence(
+        [codeToken, ...tokens.slice(idx + 1)],
+        0,
+        options,
+        env,
+        self,
+      );
+      // Inject `data-block-id` onto the inner <code> element so the
+      // existing `[data-block-id]` selectors keep working.
+      if (blockId != null) {
+        body = body.replace(
+          /<code(\s[^>]*)?>/,
+          (_m, attrs) => `<code${attrs ?? ""} data-block-id="${blockId}">`,
+        );
+      }
+      return `<div class="rich-block-code language-${escapeAttr(info)}"${blockIdAttr(blockId)}>${body}${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
     }
     return defaultFence(tokens, idx, options, env, self);
   };

@@ -40,11 +40,16 @@ function openBlockMenu(badge: HTMLElement, id: string): void {
   copyBtn.type = "button";
   copyBtn.dataset.action = "copy";
   copyBtn.textContent = `Copy @${id}`;
+  const copyContentBtn = document.createElement("button");
+  copyContentBtn.type = "button";
+  copyContentBtn.dataset.action = "copy-content";
+  copyContentBtn.textContent = "Copy content";
   const editBtn = document.createElement("button");
   editBtn.type = "button";
   editBtn.dataset.action = "edit";
   editBtn.textContent = "Edit this block";
   menu.appendChild(copyBtn);
+  menu.appendChild(copyContentBtn);
   menu.appendChild(editBtn);
 
   const rect = badge.getBoundingClientRect();
@@ -76,6 +81,38 @@ function openBlockMenu(badge: HTMLElement, id: string): void {
     } else {
       copyFallback(text, flash);
     }
+    close();
+  });
+  copyContentBtn.addEventListener("click", () => {
+    // Fetch the raw inner source from the server — same source the
+    // `get_block` MCP tool sees — so what gets copied matches what the
+    // author wrote, not the rendered DOM. Uses session-cookie auth, same
+    // as every other /api call on this page.
+    const flash = () => {
+      badge.classList.add("copied");
+      setTimeout(() => badge.classList.remove("copied"), 600);
+    };
+    const writeClip = (text: string) => {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(flash, () =>
+          copyFallback(text, flash),
+        );
+      } else {
+        copyFallback(text, flash);
+      }
+    };
+    fetch(`/api/blocks/${encodeURIComponent(id)}/content`, {
+      credentials: "same-origin",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then(writeClip)
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("Copy content failed:", err);
+      });
     close();
   });
   editBtn.addEventListener("click", () => {

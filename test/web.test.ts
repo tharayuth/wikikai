@@ -724,6 +724,26 @@ describe("HTTP routes", () => {
     expect(raw.text).toBe("# H\n\ntext");
   });
 
+  it("GET /api/blocks/:id/content returns raw inner for a fence block", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const p = pages.add({
+      knowledge_id: k.id,
+      title: "P",
+      content: "```typescript\nconst x = 1;\n```\n",
+    });
+    // Re-read after injectBlockIds stamps the {@N}.
+    const md = pages.get(p.id)!.content;
+    const id = Number(/\{@(\d+)\}/.exec(md)![1]);
+    const res = await request(app).get(`/api/blocks/${id}/content`);
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("const x = 1;");
+  });
+
+  it("GET /api/blocks/:id/content returns 404 for unknown id", async () => {
+    const res = await request(app).get(`/api/blocks/9999999/content`);
+    expect(res.status).toBe(404);
+  });
+
   it("PATCH /api/pages/:pid updates content", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "old" });
