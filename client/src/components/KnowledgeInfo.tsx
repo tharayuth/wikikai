@@ -1,5 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useDeleteKnowledgeMutation, useGetKnowledgeQuery } from "../store/api";
+import {
+  useDeleteKnowledgeMutation,
+  useGetKnowledgeQuery,
+  useUpdateKnowledgeMutation,
+} from "../store/api";
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
@@ -23,6 +27,7 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   const dispatch = useAppDispatch();
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: kid === null });
   const [deleteKnowledge] = useDeleteKnowledgeMutation();
+  const [updateKnowledge] = useUpdateKnowledgeMutation();
   const [infoOpen, setInfoOpen] = useState(false);
   const [starred, setStarred] = useState(false);
 
@@ -139,7 +144,39 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
               copyText: `&${meta.id}`,
               contentUrl: `/api/knowledge/${meta.id}/content`,
               editLabel: "Edit knowledge name",
-              onEdit: () => setInfoOpen(true),
+              onEdit: () => {
+                // Knowledge title rename. The `i` button next to the
+                // badge still opens InfoPopover for viewing all
+                // metadata; this menu item is the dedicated rename
+                // path so the sidebar entry updates immediately.
+                const current = meta.title;
+                const next = window.prompt("Knowledge name:", current);
+                if (next == null) return; // cancelled
+                const trimmed = next.trim();
+                if (!trimmed || trimmed === current) return;
+                updateKnowledge({ id: meta.id, title: trimmed })
+                  .unwrap()
+                  .then(() => {
+                    dispatch(
+                      showToast({
+                        message: `Renamed to "${trimmed}"`,
+                        kind: "success",
+                      }),
+                    );
+                  })
+                  .catch((err: unknown) => {
+                    const e2 = err as {
+                      status?: number;
+                      data?: { error?: string };
+                    };
+                    dispatch(
+                      showToast({
+                        message: `Rename failed: ${e2.data?.error ?? e2.status ?? "error"}`,
+                        kind: "error",
+                      }),
+                    );
+                  });
+              },
               deleteLabel: "Delete this knowledge",
               confirmDelete: () =>
                 window.confirm(
