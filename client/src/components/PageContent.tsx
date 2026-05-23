@@ -284,18 +284,6 @@ export function PageContent({ pageId, line, block }: Props) {
     }
   };
 
-  const onDelete = async () => {
-    if (!confirm(`Delete page #${pageId} "${meta.data!.title}"?`)) return;
-    try {
-      await delPage({ page_id: pageId, knowledge_id: kid }).unwrap();
-      dispatch(showToast(`deleted page #${pageId}`));
-      navigateTo({ kid });
-    } catch (e) {
-      const err = e as { status?: number };
-      dispatch(showToast(`delete failed: ${err.status ?? "error"}`));
-    }
-  };
-
   const onStartEdit = async () => {
     // Pull fresh raw + rendered HTML before opening the editor. Checkbox
     // toggles and other optimistic mutations skip the Page tag invalidation
@@ -518,9 +506,6 @@ export function PageContent({ pageId, line, block }: Props) {
                 }
               >
                 {pruneState.isLoading ? "Pruning…" : "Delete revisions"}
-              </button>
-              <button className="danger" onClick={onDelete} title="Delete this page">
-                Delete page
               </button>
             </>
           )}
