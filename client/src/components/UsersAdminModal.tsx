@@ -113,6 +113,9 @@ function AddUserForm({ onClose }: { onClose: () => void }): JSX.Element {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [create, { isLoading, error }] = useCreateAdminUserMutation();
 
@@ -121,8 +124,18 @@ function AddUserForm({ onClose }: { onClose: () => void }): JSX.Element {
       ? (error.data as { error: string }).error
       : null;
 
+  const mismatch = confirmPassword.length > 0 && confirmPassword !== password;
+  const missingConfirm = password.length > 0 && confirmPassword.length === 0;
+  const showMismatchHint = mismatch;
+  const canSubmit =
+    !isLoading &&
+    password.length > 0 &&
+    confirmPassword.length > 0 &&
+    password === confirmPassword;
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
     create({
       email: email.trim(),
       display_name: name.trim(),
@@ -134,6 +147,9 @@ function AddUserForm({ onClose }: { onClose: () => void }): JSX.Element {
         setEmail("");
         setName("");
         setPassword("");
+        setConfirmPassword("");
+        setShowPassword(false);
+        setShowConfirmPassword(false);
         setIsAdmin(false);
         onClose();
       })
@@ -163,12 +179,27 @@ function AddUserForm({ onClose }: { onClose: () => void }): JSX.Element {
         </label>
         <label>
           Password
-          <input
-            type="text"
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
+            visible={showPassword}
+            onToggleVisible={() => setShowPassword((v) => !v)}
             required
           />
+        </label>
+        <label>
+          Confirm Password
+          <PasswordInput
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            visible={showConfirmPassword}
+            onToggleVisible={() => setShowConfirmPassword((v) => !v)}
+            required
+            invalid={mismatch || missingConfirm}
+          />
+          {showMismatchHint && (
+            <div className="password-mismatch">Passwords don't match</div>
+          )}
         </label>
         <label className="add-user-admin">
           <input
@@ -184,11 +215,108 @@ function AddUserForm({ onClose }: { onClose: () => void }): JSX.Element {
         <button type="button" className="account-btn" onClick={onClose}>
           Cancel
         </button>
-        <button type="submit" className="account-btn primary" disabled={isLoading}>
+        <button
+          type="submit"
+          className="account-btn primary"
+          disabled={!canSubmit}
+        >
           {isLoading ? "Creating…" : "Create user"}
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Password input with an inline show/hide eye toggle. Kept local to this
+ * module so admin and self-service password fields share the same UX
+ * without pulling in a new component file.
+ */
+function PasswordInput({
+  value,
+  onChange,
+  visible,
+  onToggleVisible,
+  required,
+  placeholder,
+  invalid,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  visible: boolean;
+  onToggleVisible: () => void;
+  required?: boolean;
+  placeholder?: string;
+  invalid?: boolean;
+}): JSX.Element {
+  return (
+    <div
+      className={`password-input-wrap${invalid ? " password-input-wrap-invalid" : ""}`}
+    >
+      <input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        placeholder={placeholder}
+        autoComplete="new-password"
+      />
+      <button
+        type="button"
+        className="password-toggle"
+        aria-label={visible ? "Hide password" : "Show password"}
+        title={visible ? "Hide password" : "Show password"}
+        aria-pressed={visible}
+        onClick={onToggleVisible}
+        tabIndex={-1}
+      >
+        {visible ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </div>
+  );
+}
+
+function EyeIcon(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      data-icon="eye-open"
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      data-icon="eye-off"
+    >
+      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.77 19.77 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-3.17 4.19" />
+      <path d="M14.12 14.12A3 3 0 1 1 9.88 9.88" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
   );
 }
 
@@ -333,6 +461,9 @@ function EditUserForm({
   const [name, setName] = useState(user.display_name);
   const [email, setEmail] = useState(user.email);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [update, { isLoading, error }] = useUpdateAdminUserMutation();
 
   const errMsg =
@@ -340,8 +471,17 @@ function EditUserForm({
       ? (error.data as { error: string }).error
       : null;
 
+  // Confirm matters only when a new password is being set. Empty means
+  // "keep current" and bypasses confirm validation entirely.
+  const changingPassword = password.length > 0;
+  const mismatch = changingPassword && confirmPassword !== password;
+  const missingConfirm = changingPassword && confirmPassword.length === 0;
+  const showMismatchHint = changingPassword && (mismatch || missingConfirm);
+  const canSubmit = !isLoading && (!changingPassword || !mismatch);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
     const patch: {
       id: number;
       display_name?: string;
@@ -355,7 +495,13 @@ function EditUserForm({
     if (password) patch.password = password;
     update(patch)
       .unwrap()
-      .then(() => onClose())
+      .then(() => {
+        setPassword("");
+        setConfirmPassword("");
+        setShowPassword(false);
+        setShowConfirmPassword(false);
+        onClose();
+      })
       .catch(() => undefined);
   };
 
@@ -372,12 +518,29 @@ function EditUserForm({
         </label>
         <label>
           New password
-          <input
-            type="text"
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
+            visible={showPassword}
+            onToggleVisible={() => setShowPassword((v) => !v)}
             placeholder="leave blank to keep current"
           />
+        </label>
+        <label>
+          Confirm Password
+          <PasswordInput
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            visible={showConfirmPassword}
+            onToggleVisible={() => setShowConfirmPassword((v) => !v)}
+            placeholder="repeat new password"
+            invalid={mismatch || missingConfirm}
+          />
+          {showMismatchHint && (
+            <div className="password-mismatch">
+              {mismatch ? "Passwords don't match" : "Please confirm the new password"}
+            </div>
+          )}
         </label>
       </div>
       {errMsg && <div className="login-error">{errMsg}</div>}
@@ -385,7 +548,11 @@ function EditUserForm({
         <button type="button" className="account-btn" onClick={onClose}>
           Cancel
         </button>
-        <button type="submit" className="account-btn primary" disabled={isLoading}>
+        <button
+          type="submit"
+          className="account-btn primary"
+          disabled={!canSubmit}
+        >
           {isLoading ? "Saving…" : "Save changes"}
         </button>
       </div>

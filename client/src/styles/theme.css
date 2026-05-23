@@ -3509,7 +3509,7 @@ a:hover { text-decoration: underline; }
 }
 .add-user-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr 1fr auto;
   gap: 10px 14px;
   align-items: end;
 }
@@ -3519,8 +3519,10 @@ a:hover { text-decoration: underline; }
   gap: 4px;
   font-size: 12px;
   color: var(--text-2);
+  min-width: 0;
 }
 .add-user-row input[type="text"],
+.add-user-row input[type="password"],
 .add-user-row input:not([type]) {
   padding: 6px 10px;
   font: inherit;
@@ -3529,6 +3531,8 @@ a:hover { text-decoration: underline; }
   border-radius: 5px;
   background: var(--surface);
   color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
 }
 .add-user-row .add-user-admin {
   flex-direction: row;
@@ -3541,6 +3545,53 @@ a:hover { text-decoration: underline; }
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* Password input with inline show/hide eye toggle. Used in both the
+   admin "Add user" and "Edit user" forms — keeps the input's existing
+   look while reserving room on the right for the toggle button. */
+.password-input-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 32px !important;
+  box-sizing: border-box;
+}
+.password-input-wrap-invalid input {
+  border-color: var(--danger, #ef4444) !important;
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.password-toggle:hover {
+  color: var(--text);
+  background: var(--surface-2, rgba(127, 127, 127, 0.1));
+}
+.password-toggle:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 1px;
+}
+.password-mismatch {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--danger, #ef4444);
 }
 
 .project-access {
