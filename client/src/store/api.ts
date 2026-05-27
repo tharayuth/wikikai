@@ -183,6 +183,16 @@ export const portalApi = createApi({
       }),
       invalidatesTags: [{ type: "Projects", id: "LIST" }],
     }),
+    addKnowledge: builder.mutation<
+      KnowledgeMeta,
+      { title: string; project: string; tags?: string[]; author?: string }
+    >({
+      query: (body) => ({ url: "knowledge", method: "POST", body }),
+      invalidatesTags: [
+        { type: "KnowledgeList", id: "LIST" },
+        { type: "Projects", id: "LIST" },
+      ],
+    }),
 
     listPageTitles: builder.query<
       { knowledge_id: number; id: number; position: number; title: string }[],
@@ -591,6 +601,7 @@ export const {
   useListProjectsQuery,
   useAddProjectMutation,
   useRemoveProjectMutation,
+  useAddKnowledgeMutation,
   useGetPromptLogQuery,
   useGetActivityLogQuery,
   useGetAuthMeQuery,

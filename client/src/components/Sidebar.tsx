@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  useAddKnowledgeMutation,
   useGetKnowledgeQuery,
   useListKnowledgeQuery,
   useListPageTitlesQuery,
@@ -539,19 +540,68 @@ function ProjectGroup({
     });
   };
 
+  const dispatch = useAppDispatch();
+  const [addKnowledge, { isLoading: adding }] = useAddKnowledgeMutation();
+
+  const onAddKnowledge = async () => {
+    const title = window.prompt(`New knowledge in "${project}" — title?`, "");
+    if (!title || !title.trim()) return;
+    try {
+      const created = await addKnowledge({
+        title: title.trim(),
+        project,
+      }).unwrap();
+      // Make sure the group is expanded so the user sees the new entry
+      if (!open) {
+        writeStoredOpen(project, true);
+        setOpen(true);
+      }
+      navigateTo({ kid: created.id });
+      dispatch(showToast(`Created "${created.title}"`));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to create";
+      dispatch(showToast(`Create failed: ${msg}`));
+    }
+  };
+
   return (
     <div className={`sidebar-group${open ? "" : " collapsed"}`}>
-      <button
-        type="button"
-        className={`sidebar-group-title${open ? " open" : ""}`}
-        aria-expanded={open}
-        onClick={toggle}
-      >
-        <span className="group-chevron" aria-hidden>
-          {open ? "📖" : "📕"}
-        </span>
-        <span className="group-name">{project}</span>
-      </button>
+      <div className="sidebar-group-header">
+        <button
+          type="button"
+          className={`sidebar-group-title${open ? " open" : ""}`}
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          <span className="group-chevron" aria-hidden>
+            {open ? "📖" : "📕"}
+          </span>
+          <span className="group-name">{project}</span>
+        </button>
+        <button
+          type="button"
+          className="sidebar-group-add-btn"
+          onClick={onAddKnowledge}
+          disabled={adding}
+          title={`Add knowledge to ${project}`}
+          aria-label={`Add knowledge to ${project}`}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
       {/* `hidden` rather than removing children — preserves each
           KnowledgeRow's local expand state across project collapse / re-open. */}
       <div className="sidebar-group-body" hidden={!open}>

@@ -472,11 +472,17 @@ a:hover { text-decoration: underline; }
 .sidebar-group.collapsed {
   margin-bottom: 0;
 }
-.sidebar-group-title {
+/* Sticky moved up to the header wrapper so the new "+" Add-knowledge
+ * button sits in the same sticky band as the title. */
+.sidebar-group-header {
   position: sticky;
   top: var(--search-h);
   z-index: 2;
   background: var(--surface);
+  display: flex;
+  align-items: stretch;
+}
+.sidebar-group-title {
   font: inherit;
   font-size: 15px;
   font-weight: 700;
@@ -484,17 +490,53 @@ a:hover { text-decoration: underline; }
   padding: 6px 12px;
   margin: 0;
   border: none;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: left;
   text-decoration: none;
   transition: color .12s;
 }
 .sidebar-group-title:hover { color: var(--accent-strong); }
 .sidebar-group-title:hover .group-chevron { color: var(--accent); }
+
+/* "+" Add-knowledge button — hidden until mouse hovers the project header */
+.sidebar-group-add-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: auto 8px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .15s, visibility .15s, background .12s, border-color .12s, color .12s;
+}
+.sidebar-group-header:hover .sidebar-group-add-btn,
+.sidebar-group-add-btn:focus-visible {
+  opacity: 1;
+  visibility: visible;
+}
+.sidebar-group-add-btn:hover {
+  background: var(--surface-2, var(--surface));
+  border-color: var(--border);
+  color: var(--accent);
+}
+.sidebar-group-add-btn:disabled {
+  cursor: wait;
+  opacity: .6 !important;
+}
 .sidebar-group-title .group-name {
   text-decoration: underline;
   text-decoration-color: var(--accent);
