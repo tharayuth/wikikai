@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
-import type { PageStore, PageEntry, PageWithStats } from "../store/pages.js";
+import type { PageStore, PageEntry, PageWithStats, EditFeedback } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
 import { cleanupRemovedImageRefs, extractImageHashesSet } from "../store/images.js";
 import type { Db } from "../store/db.js";
@@ -54,6 +54,19 @@ function urlFor(ctx: HandlerContext, kid: number, pid?: number, line?: number): 
 
 function withUrl<T extends { id: number }>(ctx: HandlerContext, k: T): T & { url: string } {
   return { ...k, url: urlFor(ctx, k.id) };
+}
+
+/** Merge a handler's base response with the scoped mutation feedback
+ *  (Phase 2a, &50 #324). Undefined optional fields are dropped so a no-op
+ *  edit returns a lean shape. `page_hash` is always present. */
+function withFeedback<B extends object>(base: B, r: EditFeedback): B & EditFeedback {
+  return {
+    ...base,
+    status: r.status,
+    ...(r.changed_range ? { changed_range: r.changed_range } : {}),
+    ...(r.changed_range_hash ? { changed_range_hash: r.changed_range_hash } : {}),
+    page_hash: r.page_hash,
+  };
 }
 
 function pageWithUrl<T extends { id: number; knowledge_id: number }>(
@@ -1559,13 +1572,16 @@ export function buildToolHandlers(
         knowledge_id: before.knowledge_id,
         page_id: r.id,
       });
-      return {
-        id: r.id,
-        knowledge_id: before.knowledge_id,
-        version: r.version,
-        new_line_count: r.new_line_count,
-        url: urlFor(ctx, before.knowledge_id, r.id),
-      };
+      return withFeedback(
+        {
+          id: r.id,
+          knowledge_id: before.knowledge_id,
+          version: r.version,
+          new_line_count: r.new_line_count,
+          url: urlFor(ctx, before.knowledge_id, r.id),
+        },
+        r,
+      );
     },
 
     async delete_page(input) {
@@ -1755,13 +1771,16 @@ export function buildToolHandlers(
         knowledge_id: meta.knowledge_id,
         page_id: r.id,
       });
-      return {
-        id: r.id,
-        knowledge_id: meta.knowledge_id,
-        version: r.version,
-        new_line_count: r.new_line_count,
-        url: urlFor(ctx, meta.knowledge_id, r.id, parsed.line_start),
-      };
+      return withFeedback(
+        {
+          id: r.id,
+          knowledge_id: meta.knowledge_id,
+          version: r.version,
+          new_line_count: r.new_line_count,
+          url: urlFor(ctx, meta.knowledge_id, r.id, parsed.line_start),
+        },
+        r,
+      );
     },
 
     async edit_section(input) {
@@ -1789,14 +1808,17 @@ export function buildToolHandlers(
         knowledge_id: meta.knowledge_id,
         page_id: r.id,
       });
-      return {
-        id: r.id,
-        knowledge_id: meta.knowledge_id,
-        version: r.version,
-        new_line_count: r.new_line_count,
-        replaced_lines: r.replaced_lines,
-        url: urlFor(ctx, meta.knowledge_id, r.id),
-      };
+      return withFeedback(
+        {
+          id: r.id,
+          knowledge_id: meta.knowledge_id,
+          version: r.version,
+          new_line_count: r.new_line_count,
+          replaced_lines: r.replaced_lines,
+          url: urlFor(ctx, meta.knowledge_id, r.id),
+        },
+        r,
+      );
     },
 
     async replace_text(input) {
@@ -2109,14 +2131,17 @@ export function buildToolHandlers(
         knowledge_id: meta.knowledge_id,
         page_id: r.id,
       });
-      return {
-        id: r.id,
-        knowledge_id: meta.knowledge_id,
-        version: r.version,
-        new_line_count: r.new_line_count,
-        inserted_lines: r.inserted_lines,
-        url: urlFor(ctx, meta.knowledge_id, r.id, parsed.at),
-      };
+      return withFeedback(
+        {
+          id: r.id,
+          knowledge_id: meta.knowledge_id,
+          version: r.version,
+          new_line_count: r.new_line_count,
+          inserted_lines: r.inserted_lines,
+          url: urlFor(ctx, meta.knowledge_id, r.id, parsed.at),
+        },
+        r,
+      );
     },
 
     async add_lines(input) {
@@ -2142,14 +2167,17 @@ export function buildToolHandlers(
         knowledge_id: meta.knowledge_id,
         page_id: r.id,
       });
-      return {
-        id: r.id,
-        knowledge_id: meta.knowledge_id,
-        version: r.version,
-        new_line_count: r.new_line_count,
-        appended_lines: r.appended_lines,
-        url: urlFor(ctx, meta.knowledge_id, r.id),
-      };
+      return withFeedback(
+        {
+          id: r.id,
+          knowledge_id: meta.knowledge_id,
+          version: r.version,
+          new_line_count: r.new_line_count,
+          appended_lines: r.appended_lines,
+          url: urlFor(ctx, meta.knowledge_id, r.id),
+        },
+        r,
+      );
     },
 
     async set_block_caption(input) {

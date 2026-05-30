@@ -327,6 +327,52 @@ describe("MCP tool handlers", () => {
       ).rejects.toThrow(/hash mismatch/);
     });
 
+    it("edit_lines returns scoped feedback usable for a chained edit (Phase 2a)", async () => {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: "a\nb\nc",
+      });
+      const e = await h.edit_lines({
+        page_id: p.id,
+        line_start: 2,
+        line_end: 2,
+        new_text: "B1\nB2",
+      });
+      expect(e.status).toBe("changed");
+      expect(e.changed_range?.after).toEqual({ line_start: 2, line_end: 3 });
+      expect(e.page_hash).toBeTruthy();
+      // page_hash equals a fresh full read — no separate re-read needed.
+      const full = await h.read_page({ page_id: p.id, mode: "full" });
+      expect(full.hash).toBe(e.page_hash);
+      // changed_range_hash chains directly into the next edit with no re-read.
+      const chained = await h.edit_lines({
+        page_id: p.id,
+        line_start: e.changed_range!.after!.line_start,
+        line_end: e.changed_range!.after!.line_end,
+        new_text: "B",
+        expected_hash: e.changed_range_hash,
+      });
+      expect(chained.status).toBe("changed");
+      expect(pages.get(p.id)!.content).toBe("a\nB\nc");
+    });
+
+    it("edit_lines reports a no-op without bumping version (Phase 2a)", async () => {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a\nb\nc" });
+      const v0 = pages.getMetadata(p.id)!.version;
+      const e = await h.edit_lines({
+        page_id: p.id,
+        line_start: 2,
+        line_end: 2,
+        new_text: "b",
+      });
+      expect(e.status).toBe("noop");
+      expect(e.changed_range).toBeUndefined();
+      expect(pages.getMetadata(p.id)!.version).toBe(v0);
+    });
+
     it("edit_section replaces under heading", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({

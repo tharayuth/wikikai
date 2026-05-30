@@ -122,6 +122,69 @@ export function hashRange(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
 }
 
+/** A 1-based inclusive line range within a page. */
+export interface LineRange {
+  line_start: number;
+  line_end: number;
+}
+
+/**
+ * Scoped feedback returned by every fine-grained mutation (Phase 2a, see
+ * knowledge &50 #324). Lets an agent continue editing without an
+ * immediate full re-read:
+ *   • `status` — "noop" when the resulting content is byte-identical.
+ *   • `changed_range` — the line ranges replaced (`before`) and now
+ *     occupied (`after`); `before` is omitted for pure inserts/appends.
+ *   • `changed_range_hash` — hash of the `after` slice, chainable as the
+ *     next edit's `expected_hash` with no re-read.
+ *   • `page_hash` — full-page hash equal to `read_page` (mode "full").
+ */
+export interface EditFeedback {
+  status: "changed" | "noop";
+  changed_range?: { before?: LineRange; after?: LineRange };
+  changed_range_hash?: string;
+  page_hash: string;
+}
+
+/** Full-page hash matching `readLines(pageId)` with no range — hashes the
+ *  canonical line slice so a trailing newline never changes the result. */
+function fullPageHash(content: string): string {
+  const lines = content.split("\n");
+  const total = countLines(content);
+  return hashRange(lines.slice(0, total).join("\n"));
+}
+
+/** Build the {@link EditFeedback} shared by every fine-grained edit.
+ *  `before`/`after` are the replaced and resulting line ranges (pass
+ *  `null` for `before` on pure inserts/appends). */
+function editFeedback(
+  prev: string,
+  next: string,
+  before: LineRange | null,
+  after: LineRange | null,
+): EditFeedback {
+  const page_hash = fullPageHash(next);
+  if (next === prev) return { status: "noop", page_hash };
+  let changed_range_hash: string | undefined;
+  if (after) {
+    const lines = next.split("\n");
+    const end = Math.min(after.line_end, countLines(next));
+    changed_range_hash = hashRange(
+      lines.slice(after.line_start - 1, end).join("\n"),
+    );
+  }
+  const changed_range =
+    before || after
+      ? { ...(before ? { before } : {}), ...(after ? { after } : {}) }
+      : undefined;
+  return {
+    status: "changed",
+    ...(changed_range ? { changed_range } : {}),
+    ...(changed_range_hash ? { changed_range_hash } : {}),
+    page_hash,
+  };
+}
+
 /** Validate that every entry of `newRows` is a single raw pipe-table row
  *  (starts AND ends with `|`, contains no newlines). Shared by
  *  `updateTableRows` / `appendTableRows` / `insertTableRows` so we fail
@@ -1844,17 +1907,25 @@ export class PageStore {
     return { id: pageId, version: nextVersion, updated_at: now };
   }
 
-  append(pageId: number, text: string): { id: number; version: number; new_line_count: number } {
+  append(pageId: number, text: string): { id: number; version: number; new_line_count: number } & EditFeedback {
     const meta = this.getMetadata(pageId);
     if (!meta) throw new Error(`page #${pageId} not found`);
     const cur = this.readContent(meta.knowledge_id, pageId);
+    const total = countLines(cur);
     const sep = cur.length > 0 && !cur.endsWith("\n") ? "\n" : "";
     const next = this.writeContent(meta.knowledge_id, pageId, cur + sep + text);
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
     this.bumpKnowledge(meta.knowledge_id, pageId);
-    return { id: pageId, version: r.version, new_line_count: countLines(next) };
+    const newTotal = countLines(next);
+    const after: LineRange = { line_start: total + 1, line_end: newTotal };
+    return {
+      id: pageId,
+      version: r.version,
+      new_line_count: newTotal,
+      ...editFeedback(cur, next, null, after),
+    };
   }
 
   /**
@@ -2215,7 +2286,7 @@ export class PageStore {
     lineEnd: number,
     newText: string,
     expectedHash?: string,
-  ): { id: number; version: number; new_line_count: number } {
+  ): { id: number; version: number; new_line_count: number } & EditFeedback {
     const meta = this.getMetadata(pageId);
     if (!meta) throw new Error(`page #${pageId} not found`);
     const all = this.readContent(meta.knowledge_id, pageId);
@@ -2242,12 +2313,32 @@ export class PageStore {
       ...newLines,
       ...lines.slice(safeEnd),
     ].join("\n");
+    const before: LineRange = { line_start: lineStart, line_end: safeEnd };
+    const after: LineRange = {
+      line_start: lineStart,
+      line_end: lineStart - 1 + newLines.length,
+    };
+    // No-op short-circuit: identical content must not bump version or
+    // snapshot a revision (Phase 2a no-op policy, &50 #324).
+    if (draft === all) {
+      return {
+        id: pageId,
+        version: meta.version,
+        new_line_count: countLines(all),
+        ...editFeedback(all, draft, before, after),
+      };
+    }
     const next = this.writeContent(meta.knowledge_id, pageId, draft);
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
     this.bumpKnowledge(meta.knowledge_id, pageId);
-    return { id: pageId, version: r.version, new_line_count: countLines(next) };
+    return {
+      id: pageId,
+      version: r.version,
+      new_line_count: countLines(next),
+      ...editFeedback(all, next, before, after),
+    };
   }
 
   /**
@@ -2274,7 +2365,7 @@ export class PageStore {
     version: number;
     new_line_count: number;
     inserted_lines: number;
-  } {
+  } & EditFeedback {
     const meta = this.getMetadata(pageId);
     if (!meta) throw new Error(`page #${pageId} not found`);
     const all = this.readContent(meta.knowledge_id, pageId);
@@ -2326,6 +2417,10 @@ export class PageStore {
         ...lines.slice(at - 1),
       ].join("\n");
     }
+    const after: LineRange = {
+      line_start: at,
+      line_end: at - 1 + insertedLines.length,
+    };
     const next = this.writeContent(meta.knowledge_id, pageId, draft);
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
@@ -2344,6 +2439,7 @@ export class PageStore {
       version: r.version,
       new_line_count: countLines(next),
       inserted_lines: insertedLines.length,
+      ...editFeedback(all, next, null, after),
     };
   }
 
@@ -2365,7 +2461,7 @@ export class PageStore {
     version: number;
     new_line_count: number;
     appended_lines: number;
-  } {
+  } & EditFeedback {
     const meta = this.getMetadata(pageId);
     if (!meta) throw new Error(`page #${pageId} not found`);
     const all = this.readContent(meta.knowledge_id, pageId);
@@ -2395,11 +2491,13 @@ export class PageStore {
     );
     this.bumpKnowledge(meta.knowledge_id, pageId);
     const newTotal = countLines(next);
+    const after: LineRange = { line_start: total + 1, line_end: newTotal };
     return {
       id: pageId,
       version: r.version,
       new_line_count: newTotal,
       appended_lines: Math.max(0, newTotal - total),
+      ...editFeedback(all, next, null, after),
     };
   }
 
@@ -2407,7 +2505,7 @@ export class PageStore {
     pageId: number,
     heading: string,
     newContent: string,
-  ): { id: number; version: number; new_line_count: number; replaced_lines: number } {
+  ): { id: number; version: number; new_line_count: number; replaced_lines: number } & EditFeedback {
     const meta = this.getMetadata(pageId);
     if (!meta) throw new Error(`page #${pageId} not found`);
     const all = this.readContent(meta.knowledge_id, pageId);
@@ -2471,12 +2569,32 @@ export class PageStore {
       ...(endIdx < lines.length ? [""] : []),
       ...lines.slice(endIdx),
     ].join("\n");
+    const before: LineRange = { line_start: startIdx + 1, line_end: endIdx };
+    const after: LineRange = {
+      line_start: startIdx + 1,
+      line_end: startIdx + newSlice.length,
+    };
+    if (draft === all) {
+      return {
+        id: pageId,
+        version: meta.version,
+        new_line_count: countLines(all),
+        replaced_lines: replacedLines,
+        ...editFeedback(all, draft, before, after),
+      };
+    }
     const next = this.writeContent(meta.knowledge_id, pageId, draft);
     const r = this.bumpVersion(pageId);
     this.syncFts(pageId, meta.title, meta.keywords, next);
     this.saveRevision(pageId, r.version, meta.title, next, meta.summary, joinKeywords(meta.keywords), new Date().toISOString());
     this.bumpKnowledge(meta.knowledge_id, pageId);
-    return { id: pageId, version: r.version, new_line_count: countLines(next), replaced_lines: replacedLines };
+    return {
+      id: pageId,
+      version: r.version,
+      new_line_count: countLines(next),
+      replaced_lines: replacedLines,
+      ...editFeedback(all, next, before, after),
+    };
   }
 
   replaceText(

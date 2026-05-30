@@ -1900,4 +1900,78 @@ describe("PageStore", () => {
       expect(pages.list(kid)).toHaveLength(0);
     });
   });
+
+  // ───────── Phase 2a: scoped mutation feedback ─────────
+  // Every fine-grained mutation returns the new line range it occupies,
+  // a hash of that range (chainable as the next edit's expected_hash with
+  // no re-read), a full page_hash that equals read_page's hash, and a
+  // changed/noop status. See knowledge &50 (#324).
+  describe("mutation feedback (Phase 2a)", () => {
+    it("editLines returns changed_range, page_hash, and a chainable changed_range_hash", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "line1\nline2\nline3",
+      });
+      const r = pages.editLines(id, 2, 2, "LINE2a\nLINE2b");
+      expect(r.status).toBe("changed");
+      expect(r.changed_range?.before).toEqual({ line_start: 2, line_end: 2 });
+      expect(r.changed_range?.after).toEqual({ line_start: 2, line_end: 3 });
+
+      // page_hash must equal a full read so the agent can trust it directly.
+      expect(r.page_hash).toBe(pages.readLines(id).hash);
+
+      // changed_range_hash gates a chained edit on the after-range with no re-read.
+      expect(() =>
+        pages.editLines(
+          id,
+          r.changed_range!.after!.line_start,
+          r.changed_range!.after!.line_end,
+          "x",
+          r.changed_range_hash,
+        ),
+      ).not.toThrow();
+    });
+
+    it("editLines is a no-op when the new text equals the existing slice", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "a\nb\nc",
+      });
+      const version = pages.getMetadata(id)!.version;
+      const r = pages.editLines(id, 2, 2, "b");
+      expect(r.status).toBe("noop");
+      expect(r.version).toBe(version); // no version bump on a no-op
+      expect(pages.getMetadata(id)!.version).toBe(version);
+    });
+
+    it("editSection returns changed_range and a page_hash that matches read", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "# T\n\n## A\n\nold body\n\n## B\n\nkeep",
+      });
+      const r = pages.editSection(id, "## A", "new body");
+      expect(r.status).toBe("changed");
+      expect(r.changed_range?.after?.line_start).toBeGreaterThan(0);
+      expect(r.page_hash).toBe(pages.readLines(id).hash);
+    });
+
+    it("addLines reports the appended range and page_hash", () => {
+      const { id } = pages.add({ knowledge_id: kid, title: "P", content: "x\ny" });
+      const r = pages.addLines(id, "z");
+      expect(r.status).toBe("changed");
+      expect(r.changed_range?.after?.line_end).toBe(r.new_line_count);
+      expect(r.page_hash).toBe(pages.readLines(id).hash);
+    });
+
+    it("insertLines reports the inserted range and page_hash", () => {
+      const { id } = pages.add({ knowledge_id: kid, title: "P", content: "a\nc" });
+      const r = pages.insertLines(id, 2, "b");
+      expect(r.status).toBe("changed");
+      expect(r.changed_range?.after).toEqual({ line_start: 2, line_end: 2 });
+      expect(r.page_hash).toBe(pages.readLines(id).hash);
+    });
+  });
 });
