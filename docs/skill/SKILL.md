@@ -45,6 +45,14 @@ Skip WikiKai for: one-shot questions, code-only edits, chit-chat.
 - `edit_section({ page_id, heading, new_content, user_prompt? })` — **PREFER THIS** over line edits — heading-anchored replace, stable across other edits.
 - `replace_text({ knowledge_id, page_id?, find, replace, count?, user_prompt? })`
 
+#### Mutation feedback (no re-read needed)
+Every fine-grained edit (`edit_lines`, `edit_section`, `insert_lines`, `add_lines`, `append_page`) returns scoped feedback so you can keep editing without an immediate full re-read:
+- **`changed_range.after`** — `{ line_start, line_end }` the new content now occupies (`before` = what it replaced; omitted for pure inserts/appends).
+- **`changed_range_hash`** — hash of the `after` range. Pass it straight back as the next edit's `expected_hash` to chain edits on the same region with **no re-read**.
+- **`page_hash`** — full-page hash, identical to `read_page({ mode: "full" })`'s `hash`. Trust it directly instead of re-reading just to get a hash.
+- **`status`** — `"changed"` or `"noop"`. A `"noop"` (new content byte-identical to old) does **not** bump the version or snapshot a revision.
+- **`affected`** — `{ headings, blocks }` that intersect the changed range, including any block/table **ids the server just stamped** (so you learn new `@N` ids without a re-read). Tables carry `row_count`. Scoped to the edit, never the whole page.
+
 ### Search + helper
 - `search({ query, project?, knowledge_id?, limit? })` — SQLite FTS5 across content/title/keywords. Returns hits with `url`.
 - `get_example({ kind?, outline_only?, line_start?, line_end? })` — markdown reference. **Use `outline_only: true` first** (10× cheaper). `kind` = `full` / `minimal` / `mermaid` / `chart` / `stats` / `steps` / `er` / `html`.
@@ -194,6 +202,8 @@ To attach an image to a knowledge page:
 
 To **view** an image later, use `get_image({ hash })` or `get_image({ src })` — the response includes an MCP `image` content block so the assistant sees the picture inline, plus a JSON sidecar with metadata.
 
+**Token control — `get_image({ ..., mode })`:** pass `mode: "meta"` to get metadata only (mime, size, dimensions, alt) with **no inline bytes** — the cheapest way to decide *what* an image is before paying for base64. `mode: "full"` (or omitting `mode`) inlines the bytes as today (still capped by `max_bytes`, default ~6MB). The response carries a `mode` field reporting which applied. Reach for `meta` first when you only need to know an image exists / its size; use `full` when you actually need to see the picture.
+
 `read_page` automatically returns an `images_referenced` array covering **both** sources — every `{ src, alt?, caption?, block_id?, via }` where `via` is `"images"` or `"html-embed"`. Use it to pick which image to `get_image` without re-parsing the page yourself.
 
 Tutorial doc lives at `/&4` — `get_outline({ knowledge_id: 4 })` + `read_page` to learn by example.
@@ -240,7 +250,10 @@ The renderer attaches it as `data-block-id` on the `<table>`. `injectBlockIds` a
 | "What columns does @123 have? How many rows?" | `get_block({ id: 123, summary: true })` → `{ kind:"table", columns:[...], row_count, line_start, line_end, ... }` — no body, cheap. |
 | "Give me row N" (you know the index) | `get_table_row({ block_id: 123, index: N })`. `index` is 0-based; negative wraps from end (`-1` = last row). |
 | "Find rows where col=value" / "rows mentioning X" / "first N rows" | `find_table_rows({ block_id, q?, where?, columns?, limit? })`. `q` = substring search (case-insensitive), `where` = exact column match (AND across keys), `columns` = restrict `q` to these column names, `limit` default 50 / max 500. Returns `{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`. |
+| "Which rows have a checkbox? Toggle one of them" | `get_table_rows_with_checkbox({ block_id, checked? })`. Each match carries `checkboxes: [{ task_index, checked }]` — `task_index` is the **page-global** toggle index, pass it straight to `toggle_task({ page_id, index })`. It already accounts for any GFM tasks / html-embed checkboxes earlier on the page, so it is NOT the same as `row_index`. |
 | "Show me the whole table" / "I'm about to edit it" | `get_block({ id: 123 })` (full source + inner). Use sparingly for tables > ~100 rows. |
+
+**Editing table rows:** `update_table_rows` (replace a range), `insert_table_rows` (insert before a 0-based `at`; `at = row_count` appends), `append_table_rows` (add at the end). The plural names are canonical; the singular `insert_table_row` / `append_table_row` remain as compatibility aliases. All take a `new_rows: ["| a | b |", ...]` array and preserve the table's trailing `{@N}` id.
 
 Token-cost rule of thumb: for a 100-row × 5-col table (cells averaging ~20 chars), `get_block` costs ~3 k tokens; `summary` ~0.1 k; `get_table_row` ~0.1 k; `find_table_rows` ~0.1 k per match. Probe with `summary` first when you don't know the size.
 
