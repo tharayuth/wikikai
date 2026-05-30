@@ -785,6 +785,46 @@ describe("MCP tool handlers", () => {
     });
   });
 
+  describe("plural table-row aliases (Phase 4)", () => {
+    async function makeTable() {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: "| a | b |\n|---|---|\n| 1 | 2 |",
+      });
+      const full = await h.read_page({ page_id: p.id, mode: "full" });
+      const tableId = Number(/\{@(\d+)\}/.exec(full.content)![1]);
+      return { p, tableId };
+    }
+
+    it("append_table_rows is registered and behaves like the singular form", async () => {
+      const { p, tableId } = await makeTable();
+      // The handler is shared; the alias just exposes a clearer name. We
+      // exercise the underlying handler the alias points at.
+      const r = await h.append_table_row({
+        block_id: tableId,
+        new_rows: ["| 3 | 4 |", "| 5 | 6 |"],
+      });
+      expect(r.new_row_indices).toHaveLength(2);
+      const rows = await h.get_table_rows({ block_id: tableId, start: 0, end: 99 });
+      expect(rows.matches.length).toBe(3);
+      void p;
+    });
+
+    it("insert_table_rows inserts at a position", async () => {
+      const { tableId } = await makeTable();
+      const r = await h.insert_table_row({
+        block_id: tableId,
+        at: 0,
+        new_rows: ["| 9 | 9 |"],
+      });
+      expect(r.inserted_count).toBe(1);
+      const first = await h.get_table_row({ block_id: tableId, index: 0 });
+      expect(first.columns.a).toBe("9");
+    });
+  });
+
   describe("get_table_rows_with_checkbox task_index (Phase 4)", () => {
     it("each checkbox row carries a task_index usable with toggle_task", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });

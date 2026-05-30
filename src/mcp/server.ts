@@ -1000,6 +1000,32 @@ export function createMcpServer(
     async (input) => jsonContent(await handlers.insert_table_row(input)),
   );
 
+  // Plural aliases (Phase 4 / &50 #323) — the singular handlers already
+  // accept a `new_rows` array, so these are the clearer canonical names
+  // for the same behavior. The singular tools stay registered as
+  // compatibility aliases; prefer the plural names in new agent code.
+  server.registerTool(
+    "append_table_rows",
+    {
+      title: "Append rows to a markdown table (canonical plural name)",
+      description:
+        "Canonical alias of `append_table_row`. Append `new_rows` (one or more raw `| a | b |` lines) to the end of a markdown-table block identified by `@block_id`. Returns the new row indices + page version.",
+      inputSchema: appendTableRowShape,
+    },
+    async (input) => jsonContent(await handlers.append_table_row(input)),
+  );
+
+  server.registerTool(
+    "insert_table_rows",
+    {
+      title: "Insert rows into a markdown table (canonical plural name)",
+      description:
+        "Canonical alias of `insert_table_row`. Insert `new_rows` BEFORE 0-based row `at` in a markdown-table block. `at = 0` prepends; `at = row_count` appends. Returns inserted indices + page version.",
+      inputSchema: insertTableRowShape,
+    },
+    async (input) => jsonContent(await handlers.insert_table_row(input)),
+  );
+
   server.registerTool(
     "set_block_caption",
     {
