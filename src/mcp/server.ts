@@ -950,7 +950,8 @@ export function createMcpServer(
         "  • `false` → keep rows where EVERY checkbox is `[ ]` (nothing done)\\n" +
         "  • omit    → keep any row containing at least one checkbox (mixed-state rows included)\\n" +
         "Mixed rows (some `[x]`, some `[ ]`) are EXCLUDED when `checked` is specified. " +
-        "`limit` defaults to 100, max 500; `truncated: true` when the unrestricted match count exceeded the cap. Throws when the block isn't a table.",
+        "`limit` defaults to 100, max 500; `truncated: true` when the unrestricted match count exceeded the cap. Throws when the block isn't a table. " +
+        "Each match carries `row_index`, `columns`, `source_line`, and `checkboxes` — an array of `{ task_index, checked }` for that row (a row may hold more than one). `task_index` is the page-global toggle index: pass it straight to `toggle_task({ index })`. It already accounts for any GFM tasks / html-embed checkboxes earlier on the page, so it is NOT the same as `row_index`.",
       inputSchema: getTableRowsWithCheckboxShape,
     },
     async (input) => jsonContent(await handlers.get_table_rows_with_checkbox(input)),
