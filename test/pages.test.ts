@@ -2006,6 +2006,48 @@ describe("PageStore", () => {
       expect(r.affected!.headings.map((h) => h.text)).not.toContain("B");
     });
 
+    it("checkbox rows carry a global task_index that maps to toggleTaskAtIndex", () => {
+      // A GFM task BEFORE the table must shift the table cells' global
+      // index — this is the bug the plan flags (row_index != toggle index).
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: [
+          "- [ ] gfm task zero", // task_index 0
+          "",
+          "| item | done |",
+          "|------|------|",
+          "| a | [ ] |", // task_index 1
+          "| b | [ ] |", // task_index 2
+        ].join("\n"),
+      });
+      // Resolve the table's @N by reading the stamped source.
+      const raw = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      const tableId = Number(/\{@(\d+)\}/.exec(raw)![1]);
+      const res = pages.getTableRowsWithCheckbox(tableId, {});
+      expect(res.matches).toHaveLength(2);
+      // First data row "a" is task_index 1 (gfm task was 0), not 0.
+      const rowA = res.matches.find((m) => m.columns.item === "a")!;
+      expect(rowA.checkboxes).toHaveLength(1);
+      expect(rowA.checkboxes[0].task_index).toBe(1);
+      // Toggling that index must flip row a's cell, leaving the gfm task alone.
+      const t = pages.toggleTaskAtIndex(id, rowA.checkboxes[0].task_index);
+      expect(t.done).toBe(true);
+      const after = pages.getTableRowsWithCheckbox(tableId, {});
+      expect(
+        after.matches.find((m) => m.columns.item === "a")!.checkboxes[0].checked,
+      ).toBe(true);
+      // The gfm task (#0) must remain unchecked.
+      const raw2 = fs.readFileSync(
+        path.join(tmpDir, String(kid), `${id}.md`),
+        "utf8",
+      );
+      expect(raw2).toContain("- [ ] gfm task zero");
+    });
+
     it("affected blocks carry row_count for tables", () => {
       const { id } = pages.add({
         knowledge_id: kid,

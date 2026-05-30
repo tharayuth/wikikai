@@ -952,6 +952,10 @@ export class PageStore {
       row_index: number;
       columns: Record<string, string>;
       source_line: number;
+      /** Page-global toggle indices for this row's checkboxes, in source
+       *  order. Pass `task_index` to `toggle_task({ index })`. A row may
+       *  hold more than one. */
+      checkboxes: Array<{ task_index: number; checked: boolean }>;
     }>;
     truncated: boolean;
   } {
@@ -963,12 +967,23 @@ export class PageStore {
     const limit = Math.min(Math.max(Math.floor(opts.limit ?? 100), 1), 500);
     const headers = parseTableRow(b.source.split("\n")[0]);
     const dataRows = b.inner.split("\n").filter((l) => /\S/.test(l));
+    // Page-global task enumeration → cell checkboxes grouped by source line,
+    // so each row's checkboxes carry a task_index that maps to toggle_task.
+    const pageContent = this.readContent(b.knowledge_id, b.page_id);
+    const cellTasksByLine = new Map<number, PageTask[]>();
+    for (const t of enumeratePageTasks(pageContent)) {
+      if (t.kind !== "cell") continue;
+      const arr = cellTasksByLine.get(t.line) ?? [];
+      arr.push(t);
+      cellTasksByLine.set(t.line, arr);
+    }
     // Same regex toggleTaskAtIndex uses to enumerate table-cell checkboxes.
     const cellTaskRe = /\[([ xX])\](?=\s|\|)/g;
     const matches: Array<{
       row_index: number;
       columns: Record<string, string>;
       source_line: number;
+      checkboxes: Array<{ task_index: number; checked: boolean }>;
     }> = [];
     let fullCount = 0;
     for (let i = 0; i < dataRows.length; i++) {
@@ -988,10 +1003,16 @@ export class PageStore {
       for (let j = 0; j < headers.length; j++) {
         cols[headers[j]] = cells[j] ?? "";
       }
+      const source_line = b.line_start + 2 + i;
+      const checkboxes = (cellTasksByLine.get(source_line) ?? []).map((t) => ({
+        task_index: t.task_index,
+        checked: t.checked,
+      }));
       matches.push({
         row_index: i,
         columns: cols,
-        source_line: b.line_start + 2 + i,
+        source_line,
+        checkboxes,
       });
     }
     return {
@@ -3246,6 +3267,91 @@ function extractBlocks(content: string): Array<{
   // order, but Path B can introduce earlier line_start values when the
   // annotation line follows the table — be explicit).
   out.sort((a, b) => a.line_start - b.line_start);
+  return out;
+}
+
+/** One interactive checkbox on a page, with its page-global toggle index. */
+export interface PageTask {
+  /** 0-based index in document order — pass to `toggle_task({ index })`. */
+  task_index: number;
+  kind: "gfm" | "cell" | "html";
+  /** 1-based source line. */
+  line: number;
+  checked: boolean;
+}
+
+/**
+ * Enumerate every interactive checkbox on a page in the EXACT order
+ * `toggleTaskAtIndex` counts them: GFM task items, then `[ ]`/`[x]` cells
+ * inside markdown tables, then `<input type="checkbox">` in html-embed
+ * fences — all in source order, skipping other fences. This is the single
+ * source of truth for the page-global `task_index` so table-row helpers
+ * can return a value that maps back to `toggle_task` (&50 #323 / Phase 4).
+ */
+export function enumeratePageTasks(content: string): PageTask[] {
+  const lines = content.split("\n");
+  const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
+  const tableRowRe = /^\s*\|.*\|\s*$/;
+  const cellTaskRe = /\[([ xX])\](?=\s|\|)/g;
+  const htmlCheckboxRe = /<input\b([^>]*)>/gi;
+  const out: PageTask[] = [];
+  let inFence = false;
+  let fenceLang = "";
+  let fenceMarker = "";
+  for (let i = 0; i < lines.length; i++) {
+    if (!inFence) {
+      const open = /^(\s*)(```+)\s*([A-Za-z0-9_-]+)?/.exec(lines[i]);
+      if (open) {
+        inFence = true;
+        fenceMarker = open[2];
+        fenceLang = (open[3] ?? "").toLowerCase();
+        continue;
+      }
+      const m = taskRe.exec(lines[i]);
+      if (m) {
+        out.push({
+          task_index: out.length,
+          kind: "gfm",
+          line: i + 1,
+          checked: m[2].toLowerCase() === "x",
+        });
+        continue;
+      }
+      if (tableRowRe.test(lines[i])) {
+        cellTaskRe.lastIndex = 0;
+        let cm: RegExpExecArray | null;
+        while ((cm = cellTaskRe.exec(lines[i])) !== null) {
+          out.push({
+            task_index: out.length,
+            kind: "cell",
+            line: i + 1,
+            checked: cm[1].toLowerCase() === "x",
+          });
+        }
+      }
+    } else {
+      const closeRe = new RegExp(`^\\s*${fenceMarker}+\\s*$`);
+      if (closeRe.test(lines[i])) {
+        inFence = false;
+        fenceLang = "";
+        fenceMarker = "";
+        continue;
+      }
+      if (fenceLang !== "html-embed") continue;
+      htmlCheckboxRe.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = htmlCheckboxRe.exec(lines[i])) !== null) {
+        const attrs = m[1] ?? "";
+        if (!/\btype\s*=\s*['"]checkbox['"]/i.test(attrs)) continue;
+        out.push({
+          task_index: out.length,
+          kind: "html",
+          line: i + 1,
+          checked: /\bchecked\b/i.test(attrs),
+        });
+      }
+    }
+  }
   return out;
 }
 

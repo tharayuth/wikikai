@@ -784,4 +784,35 @@ describe("MCP tool handlers", () => {
       expect(r.data_base64).toBeTruthy();
     });
   });
+
+  describe("get_table_rows_with_checkbox task_index (Phase 4)", () => {
+    it("each checkbox row carries a task_index usable with toggle_task", async () => {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: [
+          "- [ ] preamble task", // global task_index 0
+          "",
+          "| item | done |",
+          "|------|------|",
+          "| a | [ ] |", // global task_index 1
+          "| b | [x] |", // global task_index 2
+        ].join("\n"),
+      });
+      // Resolve the stamped table @N.
+      const full = await h.read_page({ page_id: p.id, mode: "full" });
+      const tableId = Number(/\{@(\d+)\}/.exec(full.content)![1]);
+      const res = await h.get_table_rows_with_checkbox({ block_id: tableId });
+      const rowA = res.matches.find((m) => m.columns.item === "a")!;
+      expect(rowA.checkboxes[0].task_index).toBe(1); // not row_index 0
+      // toggle_task with that index flips the right cell.
+      const t = await h.toggle_task({ page_id: p.id, index: rowA.checkboxes[0].task_index });
+      expect(t.done).toBe(true);
+      const res2 = await h.get_table_rows_with_checkbox({ block_id: tableId });
+      expect(
+        res2.matches.find((m) => m.columns.item === "a")!.checkboxes[0].checked,
+      ).toBe(true);
+    });
+  });
 });
