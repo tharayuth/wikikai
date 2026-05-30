@@ -754,4 +754,34 @@ describe("MCP tool handlers", () => {
       expect(images.get(img.hash)).toBeNull();
     });
   });
+
+  describe("get_image modes (Phase 3a)", () => {
+    // 1x1 transparent PNG.
+    const PNG_B64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    it("mode:'meta' returns metadata only — never inline bytes", async () => {
+      const up = await h.add_image({ data_base64: PNG_B64, mime_type: "image/png" });
+      const r = await h.get_image({ src: up.src, mode: "meta" });
+      expect(r.mode).toBe("meta");
+      expect(r.embedded).toBe(false);
+      expect(r.data_base64).toBeUndefined();
+      expect(r.size_bytes).toBeGreaterThan(0); // metadata still present
+    });
+
+    it("mode:'full' inlines the bytes", async () => {
+      const up = await h.add_image({ data_base64: PNG_B64, mime_type: "image/png" });
+      const r = await h.get_image({ src: up.src, mode: "full" });
+      expect(r.mode).toBe("full");
+      expect(r.embedded).toBe(true);
+      expect(r.data_base64).toBeTruthy();
+    });
+
+    it("omitting mode keeps legacy inline behavior (backward compatible)", async () => {
+      const up = await h.add_image({ data_base64: PNG_B64, mime_type: "image/png" });
+      const r = await h.get_image({ src: up.src });
+      expect(r.embedded).toBe(true);
+      expect(r.data_base64).toBeTruthy();
+    });
+  });
 });

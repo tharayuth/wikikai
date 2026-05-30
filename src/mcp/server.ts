@@ -282,6 +282,12 @@ const getImageShape = {
     .describe(
       "Skip inline embedding (return metadata only) when the image exceeds this byte budget. Default ~6MB.",
     ),
+  mode: z
+    .enum(["meta", "full"])
+    .optional()
+    .describe(
+      "`meta` = metadata only, NEVER inline bytes — cheapest, prefer it to decide what an image is. `full` = inline base64 (still capped by max_bytes). Omit for legacy behavior (inline when under the cap); the default flips to `meta` in a future major version.",
+    ),
 };
 
 const getBlockShape = {
@@ -1033,7 +1039,8 @@ export function createMcpServer(
       description:
         "Resolve an image by hash or by its `/img/<hash>.<ext>` path and return it as an MCP image content block — the assistant sees the picture rendered alongside the JSON metadata. " +
         "Use this when a page contains an ```images fence and you need to describe / edit / validate what the user is referring to. " +
-        "If the image is larger than `max_bytes` (default ~6MB), the call still returns metadata but skips the inline bytes (`embedded: false`).",
+        "Pass `mode: \"meta\"` for metadata only (no bytes — cheapest, use it to decide what an image is before paying for pixels); `mode: \"full\"` (or omitting mode) inlines the bytes. " +
+        "If the image is larger than `max_bytes` (default ~6MB), the call still returns metadata but skips the inline bytes (`embedded: false`). The response `mode` field reports which applied.",
       inputSchema: getImageShape,
     },
     async (input) => imageContent(await handlers.get_image(input)),

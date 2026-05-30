@@ -374,6 +374,12 @@ export const GetImageSchema = z
       .describe(
         "If set and the image exceeds this size, the call still returns metadata but omits the inline base64 (`embedded: false`).",
       ),
+    mode: z
+      .enum(["meta", "full"])
+      .optional()
+      .describe(
+        "`meta` = metadata only, NEVER inline bytes (cheapest — prefer this to decide what an image is). `full` = inline base64 (still capped by max_bytes). Omit for legacy behavior (inline when under the size cap). Default will switch to `meta` in a future major version.",
+      ),
   })
   .refine((v) => !!v.hash || !!v.src, {
     message: "must supply either hash or src",
@@ -1066,6 +1072,8 @@ export interface ToolHandlers {
     src: string;
     url: string;
     embedded: boolean;
+    /** Which return mode applied: "meta" (no bytes) or "full" (bytes when under cap). */
+    mode: "meta" | "full";
     /** Present iff `embedded` is true — raw bytes for MCP image content. */
     data_base64?: string;
   }>;
@@ -2236,15 +2244,24 @@ export function buildToolHandlers(
       if (!meta) throw new Error(`image not found`);
       const base = ctx.publicBaseUrl.replace(/\/$/, "");
       const url = `${base}${meta.src}`;
+      // `mode: "meta"` never reads bytes — cheapest path, lets an agent
+      // decide what an image is without dragging base64 into context.
+      // Omitted mode keeps the legacy "inline when under cap" behavior so
+      // existing callers don't break (default flips to "meta" in a future
+      // major — &50 #325).
+      if (parsed.mode === "meta") {
+        return { ...meta, url, embedded: false, mode: "meta" as const };
+      }
       const cap = parsed.max_bytes ?? 6 * 1024 * 1024;
       if (meta.size_bytes > cap) {
-        return { ...meta, url, embedded: false };
+        return { ...meta, url, embedded: false, mode: "full" as const };
       }
       const bytes = images.readBytes(meta.hash, meta.ext);
       return {
         ...meta,
         url,
         embedded: true,
+        mode: "full" as const,
         data_base64: bytes.toString("base64"),
       };
     },
