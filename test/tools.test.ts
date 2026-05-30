@@ -373,6 +373,26 @@ describe("MCP tool handlers", () => {
       expect(pages.getMetadata(p.id)!.version).toBe(v0);
     });
 
+    it("edit_section returns affected headings/blocks scoped to the edit (Phase 2b)", async () => {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: "# T\n\n## A\n\nold\n\n## B\n\nkeep",
+      });
+      const e = await h.edit_section({
+        page_id: p.id,
+        heading: "## A",
+        new_content: '```stats\n[{"num":"1","label":"x"}]\n```',
+      });
+      expect(e.affected).toBeDefined();
+      expect(e.affected!.headings.map((x) => x.text)).toContain("A");
+      expect(e.affected!.headings.map((x) => x.text)).not.toContain("B");
+      // Server-stamped stats block id is visible without a re-read.
+      const stats = e.affected!.blocks.find((b) => b.kind === "stats");
+      expect(stats?.id).toBeGreaterThan(0);
+    });
+
     it("edit_section replaces under heading", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({

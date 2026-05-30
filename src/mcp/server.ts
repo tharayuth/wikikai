@@ -800,7 +800,7 @@ export function createMcpServer(
       title: "Edit a line range",
       description:
         "Replace lines [line_start..line_end] with new_text. ⚠️ Line numbers shift after every edit; prefer `edit_section` or `replace_text` when possible, or pass `expected_hash` from a recent read_page to detect drift. " +
-        "Returns scoped feedback: `changed_range.after` (the line range the new text now occupies), `changed_range_hash` (pass it as the next edit's `expected_hash` to chain edits with NO re-read), `page_hash` (equals read_page mode:\"full\"), and `status` (\"noop\" when the content was byte-identical — no version bump).",
+        "Returns scoped feedback: `changed_range.after` (the line range the new text now occupies), `changed_range_hash` (pass it as the next edit's `expected_hash` to chain edits with NO re-read), `page_hash` (equals read_page mode:\"full\"), `status` (\"noop\" when the content was byte-identical — no version bump), and `affected` (headings + blocks/tables intersecting the edit, incl. ids the server just stamped — so you see new block/table ids without a re-read).",
       inputSchema: editLinesShape,
     },
     async (input) => jsonContent(await handlers.edit_lines(input)),
@@ -812,7 +812,7 @@ export function createMcpServer(
       title: "Replace a section (heading-based, stable)",
       description:
         "Find exact heading line and replace everything under it until the next equal-or-higher heading. Stable across other edits — preferred over edit_lines. " +
-        "Returns scoped feedback like `edit_lines`: `changed_range`, `changed_range_hash`, `page_hash` (equals read_page mode:\"full\"), and `status` (\"noop\" when byte-identical — no version bump).",
+        "Returns scoped feedback like `edit_lines`: `changed_range`, `changed_range_hash`, `page_hash` (equals read_page mode:\"full\"), `status` (\"noop\" when byte-identical — no version bump), and `affected` (headings + blocks/tables intersecting the new section, incl. server-stamped ids).",
       inputSchema: editSectionShape,
     },
     async (input) => jsonContent(await handlers.edit_section(input)),

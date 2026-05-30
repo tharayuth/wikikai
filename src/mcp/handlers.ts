@@ -66,6 +66,7 @@ function withFeedback<B extends object>(base: B, r: EditFeedback): B & EditFeedb
     ...(r.changed_range ? { changed_range: r.changed_range } : {}),
     ...(r.changed_range_hash ? { changed_range_hash: r.changed_range_hash } : {}),
     page_hash: r.page_hash,
+    ...(r.affected ? { affected: r.affected } : {}),
   };
 }
 

@@ -1973,5 +1973,54 @@ describe("PageStore", () => {
       expect(r.changed_range?.after).toEqual({ line_start: 2, line_end: 2 });
       expect(r.page_hash).toBe(pages.readLines(id).hash);
     });
+
+    // Phase 2b: affected structure scoped to the changed range.
+    it("editLines surfaces a server-stamped block id intersecting the edit", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "intro\n\noutro",
+      });
+      // Insert a stats fence (no {@N} — the server stamps one on save).
+      const r = pages.editLines(
+        id,
+        2,
+        2,
+        '```stats\n[{"num":"1","label":"x"}]\n```',
+      );
+      expect(r.affected).toBeDefined();
+      expect(r.affected!.blocks).toHaveLength(1);
+      expect(r.affected!.blocks[0].kind).toBe("stats");
+      expect(r.affected!.blocks[0].id).toBeGreaterThan(0); // stamped id is visible
+    });
+
+    it("editSection surfaces the affected heading and keeps affected scoped", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "# T\n\n## A\n\nold\n\n## B\n\nkeep",
+      });
+      const r = pages.editSection(id, "## A", "new body");
+      expect(r.affected!.headings.map((h) => h.text)).toContain("A");
+      // Scoped: the untouched "## B" heading must NOT appear.
+      expect(r.affected!.headings.map((h) => h.text)).not.toContain("B");
+    });
+
+    it("affected blocks carry row_count for tables", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "intro\n\nend",
+      });
+      const r = pages.editLines(
+        id,
+        2,
+        2,
+        "| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |",
+      );
+      const table = r.affected!.blocks.find((b) => b.kind === "table");
+      expect(table).toBeDefined();
+      expect(table!.row_count).toBe(2);
+    });
   });
 });

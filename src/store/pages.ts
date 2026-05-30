@@ -128,9 +128,40 @@ export interface LineRange {
   line_end: number;
 }
 
+/** A heading descriptor (subset of {@link extractHeadings}'s output). */
+export interface AffectedHeading {
+  level: number;
+  text: string;
+  line: number;
+  id: string;
+}
+
+/** A rich-block / table descriptor (subset of {@link extractBlocks}). */
+export interface AffectedBlock {
+  id: number;
+  kind: string;
+  caption: string | null;
+  line_start: number;
+  line_end: number;
+  row_count?: number;
+}
+
 /**
- * Scoped feedback returned by every fine-grained mutation (Phase 2a, see
- * knowledge &50 #324). Lets an agent continue editing without an
+ * Structure intersecting an edit's resulting line range (Phase 2b, &50
+ * #324). Surfaces server-stamped block/table ids and their new line
+ * ranges so the agent sees what the save produced without a re-read.
+ * Scoped to the changed range — NOT the whole page. (Image- and task-
+ * level scoping is a deliberate follow-up: it needs a line-aware image
+ * extractor and a task enumerator that don't exist yet.)
+ */
+export interface AffectedStructure {
+  headings: AffectedHeading[];
+  blocks: AffectedBlock[];
+}
+
+/**
+ * Scoped feedback returned by every fine-grained mutation (Phase 2a/2b,
+ * see knowledge &50 #324). Lets an agent continue editing without an
  * immediate full re-read:
  *   • `status` — "noop" when the resulting content is byte-identical.
  *   • `changed_range` — the line ranges replaced (`before`) and now
@@ -138,12 +169,14 @@ export interface LineRange {
  *   • `changed_range_hash` — hash of the `after` slice, chainable as the
  *     next edit's `expected_hash` with no re-read.
  *   • `page_hash` — full-page hash equal to `read_page` (mode "full").
+ *   • `affected` — headings/blocks intersecting the `after` range.
  */
 export interface EditFeedback {
   status: "changed" | "noop";
   changed_range?: { before?: LineRange; after?: LineRange };
   changed_range_hash?: string;
   page_hash: string;
+  affected?: AffectedStructure;
 }
 
 /** Full-page hash matching `readLines(pageId)` with no range — hashes the
@@ -177,12 +210,37 @@ function editFeedback(
     before || after
       ? { ...(before ? { before } : {}), ...(after ? { after } : {}) }
       : undefined;
+  const affected = after ? affectedInRange(next, after) : undefined;
   return {
     status: "changed",
     ...(changed_range ? { changed_range } : {}),
     ...(changed_range_hash ? { changed_range_hash } : {}),
     page_hash,
+    ...(affected ? { affected } : {}),
   };
+}
+
+/** Two 1-based inclusive ranges overlap. */
+function rangesIntersect(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number,
+): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/** Headings + blocks (incl. tables) that intersect `range` in `content`.
+ *  Reuses the same {@link extractBlocks} / {@link extractHeadings} the
+ *  read path uses, so ids/line ranges match `get_outline` exactly. */
+function affectedInRange(content: string, range: LineRange): AffectedStructure {
+  const blocks = extractBlocks(content).filter((b) =>
+    rangesIntersect(b.line_start, b.line_end, range.line_start, range.line_end),
+  );
+  const headings = extractHeadings(content).filter(
+    (h) => h.line >= range.line_start && h.line <= range.line_end,
+  );
+  return { headings, blocks };
 }
 
 /** Validate that every entry of `newRows` is a single raw pipe-table row
