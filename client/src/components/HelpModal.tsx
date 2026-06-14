@@ -128,7 +128,7 @@ function UserGuideEn() {
           <tr><td>Star important topics</td><td>Click the star button on a sidebar topic, or the star button just before <Kbd>i</Kbd> in the header. Use the star button beside the sidebar filter input to show starred topics only. Stars are saved in this browser localStorage, not shared metadata</td></tr>
           <tr><td>Move knowledge to a different project</td><td>Open the info popover (<Kbd>i</Kbd>), click the <strong>project</strong> row → inline editor with autocomplete. Type a known project or any new name; Enter saves, Esc cancels. Empty value detaches the knowledge from any project</td></tr>
           <tr><td>Show info (session, tokens, prompt)</td><td>Click the <Kbd>i</Kbd> button left of the title</td></tr>
-          <tr><td>Copy id</td><td>Click the <code>#N</code> badge in header or sidebar</td></tr>
+          <tr><td>Knowledge actions (copy / edit / delete)</td><td>Click the <code>&amp;N</code> badge — in the topbar <strong>or</strong> on a sidebar topic row — to open the same menu: copy id, copy content, rename, delete</td></tr>
           <tr><td>Search within content</td><td>Type ≥ 3 chars in the search box → click result → jumps to that line (Thai, English, mixed — substring match)</td></tr>
           <tr><td>Toggle light/dark</td><td>Click <Kbd>☾</Kbd> / <Kbd>☀</Kbd></td></tr>
           <tr><td>Refresh</td><td>Click <Kbd>↻</Kbd></td></tr>
@@ -240,7 +240,7 @@ function UserGuideTh() {
           <tr><td>Star topic สำคัญ</td><td>คลิกปุ่มดาวบนรายการใน sidebar หรือปุ่มดาวก่อน <Kbd>i</Kbd> ใน header. ปุ่มดาวข้างช่อง filter ใน sidebar ใช้กรองให้เห็นเฉพาะ topic ที่ star ไว้. ค่า star เก็บใน localStorage ของ browser นี้ ไม่ใช่ metadata ที่แชร์กับคนอื่น</td></tr>
           <tr><td>ย้าย knowledge ไปอีก project</td><td>เปิด info popover (<Kbd>i</Kbd>) → คลิกแถว <strong>project</strong> → ช่อง input พร้อม autocomplete project ที่มี. พิมพ์ชื่อ project เดิม หรือชื่อใหม่ก็ได้, Enter = บันทึก, Esc = ยกเลิก. เว้นว่าง = ถอด project ออก</td></tr>
           <tr><td>ดูข้อมูล (session, tokens, prompt)</td><td>คลิกปุ่ม <Kbd>i</Kbd> ด้านซ้ายของ title</td></tr>
-          <tr><td>Copy id</td><td>คลิก badge <code>#N</code> ใน header หรือ sidebar</td></tr>
+          <tr><td>เมนู knowledge (คัดลอก / แก้ชื่อ / ลบ)</td><td>คลิก badge <code>&amp;N</code> — ที่ topbar <strong>หรือ</strong> ที่แถว topic ใน sidebar — เปิดเมนูเดียวกัน: คัดลอก id, คัดลอกเนื้อหา, แก้ชื่อ, ลบ</td></tr>
           <tr><td>ค้นในเนื้อหา</td><td>พิมพ์ในกล่อง search ≥ 3 ตัวอักษร → คลิกผลลัพธ์ → เด้งไปบรรทัดนั้น (ไทย/อังกฤษ/ผสม — substring match)</td></tr>
           <tr><td>สลับ light/dark</td><td>คลิก <Kbd>☾</Kbd> / <Kbd>☀</Kbd></td></tr>
           <tr><td>Refresh</td><td>คลิก <Kbd>↻</Kbd></td></tr>

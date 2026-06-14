@@ -7,7 +7,7 @@ import {
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
-import { openBadgeMenu } from "../lib/badgeMenu";
+import { openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import { navigateTo } from "../hooks/useHash";
 import {
   isKnowledgeStarred,
@@ -136,83 +136,19 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
         <button
           className="ki-id-badge"
           onClick={(e) => {
-            const btn = e.currentTarget;
-            openBadgeMenu({
-              kind: "knowledge",
+            // The `i` button next to the badge still opens InfoPopover for
+            // viewing all metadata; this menu's Edit item is the dedicated
+            // rename path so the sidebar entry updates immediately.
+            openKnowledgeBadgeMenu({
+              badge: e.currentTarget,
               id: meta.id,
-              badge: btn,
-              copyText: `&${meta.id}`,
-              contentUrl: `/api/knowledge/${meta.id}/content`,
-              editLabel: "Edit knowledge name",
-              onEdit: () => {
-                // Knowledge title rename. The `i` button next to the
-                // badge still opens InfoPopover for viewing all
-                // metadata; this menu item is the dedicated rename
-                // path so the sidebar entry updates immediately.
-                const current = meta.title;
-                const next = window.prompt("Knowledge name:", current);
-                if (next == null) return; // cancelled
-                const trimmed = next.trim();
-                if (!trimmed || trimmed === current) return;
-                updateKnowledge({ id: meta.id, title: trimmed })
-                  .unwrap()
-                  .then(() => {
-                    dispatch(
-                      showToast({
-                        message: `Renamed to "${trimmed}"`,
-                        kind: "success",
-                      }),
-                    );
-                  })
-                  .catch((err: unknown) => {
-                    const e2 = err as {
-                      status?: number;
-                      data?: { error?: string };
-                    };
-                    dispatch(
-                      showToast({
-                        message: `Rename failed: ${e2.data?.error ?? e2.status ?? "error"}`,
-                        kind: "error",
-                      }),
-                    );
-                  });
-              },
-              deleteLabel: "Delete this knowledge",
-              confirmDelete: () =>
-                window.confirm(
-                  `⚠️ Delete knowledge "${meta.title}" (&${meta.id})?\n\nEvery page, revision, and any image used only by this knowledge will be removed permanently. This cannot be undone.`,
-                ),
-              onDelete: async () => {
-                await deleteKnowledge(meta.id).unwrap();
-              },
-              onDeleteSuccess: () => {
-                dispatch(
-                  showToast({
-                    message: `Deleted "${meta.title}"`,
-                    kind: "success",
-                  }),
-                );
-                navigateTo({ kid: null });
-              },
-              onDeleteError: (err) => {
-                const e2 = err as { status?: number; data?: { error?: string } };
-                dispatch(
-                  showToast({
-                    message: `Delete failed: ${e2.data?.error ?? e2.status ?? "error"}`,
-                    kind: "error",
-                  }),
-                );
-              },
-              onCopied: (what) =>
-                dispatch(
-                  showToast(
-                    what === "id"
-                      ? `copied &${meta.id}`
-                      : `copied &${meta.id} content`,
-                  ),
-                ),
-              onCopyError: () =>
-                dispatch(showToast({ message: "Copy failed", kind: "error" })),
+              title: meta.title,
+              renameKnowledge: (id, title) =>
+                updateKnowledge({ id, title }).unwrap(),
+              deleteKnowledge: (id) => deleteKnowledge(id).unwrap(),
+              notify: (message, kind) =>
+                dispatch(showToast(kind ? { message, kind } : message)),
+              onDeleted: () => navigateTo({ kid: null }),
             });
           }}
           title="knowledge actions: copy / edit / delete"

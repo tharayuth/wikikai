@@ -2,18 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useAddKnowledgeMutation,
   useAddPageMutation,
+  useDeleteKnowledgeMutation,
   useGetKnowledgeQuery,
   useListKnowledgeQuery,
   useListPageTitlesQuery,
   useListProjectsQuery,
   useRenameProjectMutation,
   useReorderPagesMutation,
+  useUpdateKnowledgeMutation,
   type KnowledgeMeta,
   type PageMeta,
 } from "../store/api";
 import { useAppDispatch, useAppSelector } from "../store";
 import { navigateTo, useHash } from "../hooks/useHash";
-import { openActionMenu } from "../lib/badgeMenu";
+import { openActionMenu, openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import { showToast } from "../store/uiSlice";
 import {
   readStarredKnowledgeIds,
@@ -158,6 +160,29 @@ function KnowledgeRow({
   const dispatch = useAppDispatch();
   const [reorderPages] = useReorderPagesMutation();
   const [addPage, { isLoading: addingPage }] = useAddPageMutation();
+  const [deleteKnowledge] = useDeleteKnowledgeMutation();
+  const [updateKnowledge] = useUpdateKnowledgeMutation();
+
+  const onIdBadgeClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // The badge sits inside the row's <a>; stop the click from also
+    // navigating / toggling the row.
+    e.preventDefault();
+    e.stopPropagation();
+    openKnowledgeBadgeMenu({
+      badge: e.currentTarget,
+      id: item.id,
+      title: item.title,
+      renameKnowledge: (id, title) => updateKnowledge({ id, title }).unwrap(),
+      deleteKnowledge: (id) => deleteKnowledge(id).unwrap(),
+      notify: (message, kind) =>
+        dispatch(showToast(kind ? { message, kind } : message)),
+      // Only navigate away when the row that was deleted is the one
+      // currently open — deleting some other topic shouldn't yank you out.
+      onDeleted: () => {
+        if (isActive) navigateTo({ kid: null });
+      },
+    });
+  };
 
   const onAddPage = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -261,9 +286,15 @@ function KnowledgeRow({
         <div className="ki-body">
           <div className="title">{item.title}</div>
           <div className="meta">
-            <span className="id-badge" title={`knowledge id ${item.id}`}>
+            <button
+              type="button"
+              className="id-badge"
+              onClick={onIdBadgeClick}
+              title={`&${item.id} actions: copy / edit / delete`}
+              aria-label={`Knowledge ${item.id} actions`}
+            >
               &amp;{item.id}
-            </span>
+            </button>
             <span>{relTime(item.updated_at)}</span>
             {item.version > 1 && <span>v{item.version}</span>}
           </div>

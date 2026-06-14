@@ -202,6 +202,70 @@ export function openBadgeMenu(opts: BadgeMenuOpts): void {
   }, 0);
 }
 
+/** Best-effort message extraction from an RTK Query error. */
+function rtkErrText(err: unknown): string {
+  const e = err as { status?: number; data?: { error?: string } };
+  return e?.data?.error ?? (e?.status != null ? String(e.status) : "error");
+}
+
+/**
+ * Open the shared knowledge `&N` badge menu (Copy id / Copy content /
+ * Edit name / Delete). Used by BOTH the topbar (`KnowledgeInfo`) and the
+ * sidebar knowledge row so the two stay byte-for-byte identical — the
+ * caller only supplies the id, title, RTK mutation triggers, a toast
+ * sink, and an optional post-delete hook.
+ */
+export function openKnowledgeBadgeMenu(deps: {
+  badge: HTMLElement;
+  id: number;
+  title: string;
+  /** e.g. `(id, title) => updateKnowledge({ id, title }).unwrap()` */
+  renameKnowledge: (id: number, title: string) => Promise<unknown>;
+  /** e.g. `(id) => deleteKnowledge(id).unwrap()` */
+  deleteKnowledge: (id: number) => Promise<unknown>;
+  /** Show a toast — `kind` omitted for plain info (copy) toasts. */
+  notify: (message: string, kind?: "success" | "error") => void;
+  /** Fired after a successful delete (e.g. navigate away). */
+  onDeleted?: () => void;
+}): void {
+  openBadgeMenu({
+    kind: "knowledge",
+    id: deps.id,
+    badge: deps.badge,
+    copyText: `&${deps.id}`,
+    contentUrl: `/api/knowledge/${deps.id}/content`,
+    editLabel: "Edit knowledge name",
+    onEdit: () => {
+      const next = window.prompt("Knowledge name:", deps.title);
+      if (next == null) return; // cancelled
+      const trimmed = next.trim();
+      if (!trimmed || trimmed === deps.title) return;
+      deps.renameKnowledge(deps.id, trimmed).then(
+        () => deps.notify(`Renamed to "${trimmed}"`, "success"),
+        (err) => deps.notify(`Rename failed: ${rtkErrText(err)}`, "error"),
+      );
+    },
+    deleteLabel: "Delete this knowledge",
+    confirmDelete: () =>
+      window.confirm(
+        `⚠️ Delete knowledge "${deps.title}" (&${deps.id})?\n\nEvery page, revision, and any image used only by this knowledge will be removed permanently. This cannot be undone.`,
+      ),
+    onDelete: async () => {
+      await deps.deleteKnowledge(deps.id);
+    },
+    onDeleteSuccess: () => {
+      deps.notify(`Deleted "${deps.title}"`, "success");
+      deps.onDeleted?.();
+    },
+    onDeleteError: (err) => deps.notify(`Delete failed: ${rtkErrText(err)}`, "error"),
+    onCopied: (what) =>
+      deps.notify(
+        what === "id" ? `copied &${deps.id}` : `copied &${deps.id} content`,
+      ),
+    onCopyError: () => deps.notify("Copy failed", "error"),
+  });
+}
+
 export interface ActionMenuItem {
   label: string;
   /** Renders in the danger (red) style — for destructive actions. */

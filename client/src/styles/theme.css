@@ -821,6 +821,15 @@ a:hover { text-decoration: underline; }
   color: var(--accent-strong);
   padding: 1px 6px; border-radius: 4px;
   font-family: var(--mono); font-size: 10px; font-weight: 600;
+  border: none;
+  cursor: pointer;
+  line-height: inherit;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.sidebar-item .id-badge:hover {
+  background: var(--accent);
+  color: #fff;
 }
 
 /* ───── Content viewer ───── */
