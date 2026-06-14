@@ -443,10 +443,10 @@ export function PageContent({ pageId, line, block }: Props) {
             <button
               className="page-edit-btn"
               onClick={onStartEdit}
-              title={`Edit page #${pageId} in place`}
+              title={`Edit the raw markdown of page #${pageId} in place`}
               disabled={viewVersion != null && viewVersion !== currentVersion}
             >
-              ✎ Edit page
+              ✎ Edit raw
             </button>
             {viewVersion != null && viewVersion !== currentVersion && (
               <button
