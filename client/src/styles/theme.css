@@ -20,7 +20,7 @@
   --accent-strong: #4f46e5;
 
   --blue: #2563eb;          --blue-light: #eff5ff;
-  --green: #10b981;         --green-light: #ecfdf5;
+  --green: #10b981;         --green-light: #ecfdf5;   --green-strong: #059669;
   --amber: #d97706;         --amber-light: #fffbeb;
   --red: #dc2626;           --red-light: #fef2f2;
   --cyan: #0891b2;          --cyan-light: #ecfeff;
@@ -55,7 +55,7 @@
   --accent-strong: #a5b4fc;
 
   --blue-light: #1e293b;
-  --green-light: #14322a;
+  --green-light: #14322a;   --green-strong: #34d399;
   --amber-light: #3a2a14;
   --red-light: #3a1f1f;
   --cyan-light: #173039;
@@ -1115,20 +1115,35 @@ button.ki-id-badge::after {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
+/* #N page chip — green pill (vs the purple &N knowledge chip) so the two
+   entities read apart at a glance. ▾ caret signals it opens a menu. */
 .page-id-badge {
   font-family: var(--mono);
-  font-size: 12px; font-weight: 600;
-  color: var(--accent-strong);
-  background: var(--accent-light);
-  padding: 2px 8px; border-radius: 4px;
+  font-size: 12px; font-weight: 700;
+  color: #fff;
+  background: var(--green);
+  padding: 2px 7px; border-radius: 5px;
   border: none;
   cursor: pointer;
   line-height: 1.4;
+  display: inline-flex; align-items: center; gap: 4px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--green) 45%, transparent);
+  transition: background .12s, box-shadow .12s, transform .06s;
 }
-.page-id-badge:hover { background: var(--accent); color: white; }
+.page-id-badge::after {
+  content: "▾";
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.page-id-badge:hover {
+  background: var(--green-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--green) 50%, transparent);
+}
+.page-id-badge:active { transform: translateY(1px); }
 .page-edit-btn {
-  background: var(--accent);
-  border: 1px solid var(--accent);
+  background: var(--green);
+  border: 1px solid var(--green);
   color: white;
   font: inherit;
   font-size: 11px;
@@ -1140,8 +1155,8 @@ button.ki-id-badge::after {
   transition: background .12s, border-color .12s;
 }
 .page-edit-btn:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--green-strong);
+  border-color: var(--green-strong);
 }
 .page-edit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-edit-actions {
@@ -1167,14 +1182,14 @@ button.ki-id-badge::after {
   border-color: var(--border-strong);
 }
 .page-edit-actions button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--green);
+  border-color: var(--green);
   color: white;
   font-weight: 600;
 }
 .page-edit-actions button.primary:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--green-strong);
+  border-color: var(--green-strong);
 }
 .page-edit-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-edit-sep {
@@ -1247,9 +1262,9 @@ button.ki-id-badge::after {
 }
 .page-version.is-current { border-style: solid; }
 .page-version.active {
-  background: var(--accent-light);
-  color: var(--accent-strong);
-  border-color: var(--accent);
+  background: var(--green-light);
+  color: var(--green-strong);
+  border-color: var(--green);
 }
 .page-version-latest {
   background: var(--amber-light);
@@ -1475,8 +1490,8 @@ button.ki-id-badge::after {
   align-items: center;
   gap: 5px;
   background: var(--surface);
-  border: 1px solid var(--accent);
-  color: var(--accent-strong);
+  border: 1px solid var(--green);
+  color: var(--green-strong);
   font: inherit;
   font-size: 11px;
   font-weight: 600;
@@ -1489,9 +1504,9 @@ button.ki-id-badge::after {
 }
 .add-images-btn:hover:not(:disabled),
 .page-actions button.add-images-btn:hover {
-  background: var(--accent-light);
-  color: var(--accent-strong);
-  border-color: var(--accent);
+  background: var(--green-light);
+  color: var(--green-strong);
+  border-color: var(--green);
 }
 .add-images-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-actions .edit-action-gap {
