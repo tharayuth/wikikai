@@ -49,6 +49,11 @@ export interface BadgeMenuOpts {
   onCopied?: (what: "id" | "content") => void;
   /** Toast for a failed copy. */
   onCopyError?: (err: unknown) => void;
+  /**
+   * Optional caller-supplied items (e.g. "Add page") rendered between the
+   * copy actions and Edit/Delete. Each closes the menu before firing.
+   */
+  extraItems?: ActionMenuItem[];
 }
 
 /**
@@ -111,6 +116,13 @@ export function openBadgeMenu(opts: BadgeMenuOpts): void {
 
   const copyBtn = mkBtn("copy", `Copy ${opts.copyText}`);
   const copyContentBtn = opts.contentUrl ? mkBtn("copy-content", "Copy content") : null;
+  // Extra items (e.g. "Add page") sit between the copy actions and
+  // Edit/Delete. Click handlers attached below, once `close` exists.
+  const extraBtns = (opts.extraItems ?? []).map((item) => {
+    const b = mkBtn("extra", item.label);
+    if (item.danger) b.classList.add("danger");
+    return { b, item };
+  });
   const editBtn = mkBtn("edit", opts.editLabel);
   const deleteBtn = mkBtn("delete", opts.deleteLabel);
   deleteBtn.classList.add("danger");
@@ -150,6 +162,13 @@ export function openBadgeMenu(opts: BadgeMenuOpts): void {
     );
     close();
   });
+
+  for (const { b, item } of extraBtns) {
+    b.addEventListener("click", () => {
+      close();
+      void item.onSelect();
+    });
+  }
 
   if (copyContentBtn) {
     copyContentBtn.addEventListener("click", () => {
@@ -227,8 +246,36 @@ export function openKnowledgeBadgeMenu(deps: {
   notify: (message: string, kind?: "success" | "error") => void;
   /** Fired after a successful delete (e.g. navigate away). */
   onDeleted?: () => void;
+  /**
+   * When provided, the menu gains an "Add page" item. Should create an
+   * empty page and resolve with its new id — e.g.
+   * `(id, title) => addPage({ knowledge_id: id, title, content: "" }).unwrap()`
+   */
+  addPage?: (id: number, title: string) => Promise<{ id: number }>;
+  /** Fired with the new page id after a successful "Add page". */
+  onPageAdded?: (pageId: number) => void;
 }): void {
+  const extraItems: ActionMenuItem[] = [];
+  if (deps.addPage) {
+    const addPage = deps.addPage;
+    extraItems.push({
+      label: "Add page",
+      onSelect: () => {
+        const title = window.prompt(`New page in "${deps.title}" — title?`, "");
+        if (!title || !title.trim()) return;
+        const t = title.trim();
+        addPage(deps.id, t).then(
+          (created) => {
+            deps.notify(`Added page "${t}"`, "success");
+            deps.onPageAdded?.(created.id);
+          },
+          (err) => deps.notify(`Add page failed: ${rtkErrText(err)}`, "error"),
+        );
+      },
+    });
+  }
   openBadgeMenu({
+    extraItems,
     kind: "knowledge",
     id: deps.id,
     badge: deps.badge,

@@ -159,7 +159,7 @@ function KnowledgeRow({
   const [open, setOpen] = useState(isActive);
   const dispatch = useAppDispatch();
   const [reorderPages] = useReorderPagesMutation();
-  const [addPage, { isLoading: addingPage }] = useAddPageMutation();
+  const [addPage] = useAddPageMutation();
   const [deleteKnowledge] = useDeleteKnowledgeMutation();
   const [updateKnowledge] = useUpdateKnowledgeMutation();
 
@@ -174,34 +174,21 @@ function KnowledgeRow({
       title: item.title,
       renameKnowledge: (id, title) => updateKnowledge({ id, title }).unwrap(),
       deleteKnowledge: (id) => deleteKnowledge(id).unwrap(),
+      addPage: (id, title) =>
+        addPage({ knowledge_id: id, title, content: "" }).unwrap(),
       notify: (message, kind) =>
         dispatch(showToast(kind ? { message, kind } : message)),
+      // Expand the row + jump to the freshly-created page.
+      onPageAdded: (pid) => {
+        setOpen(true);
+        navigateTo({ kid: item.id, pid });
+      },
       // Only navigate away when the row that was deleted is the one
       // currently open — deleting some other topic shouldn't yank you out.
       onDeleted: () => {
         if (isActive) navigateTo({ kid: null });
       },
     });
-  };
-
-  const onAddPage = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const title = window.prompt(`New page in "${item.title}" — title?`, "");
-    if (!title || !title.trim()) return;
-    try {
-      const created = await addPage({
-        knowledge_id: item.id,
-        title: title.trim(),
-        content: "",
-      }).unwrap();
-      setOpen(true);
-      navigateTo({ kid: item.id, pid: created.id });
-      dispatch(showToast(`Added page "${title.trim()}"`));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to add page";
-      dispatch(showToast(`Add page failed: ${msg}`));
-    }
   };
 
   // Auto-expand when this knowledge becomes the active one.
@@ -300,29 +287,6 @@ function KnowledgeRow({
           </div>
         </div>
       </a>
-      <button
-        type="button"
-        className="sidebar-page-add-btn"
-        onClick={onAddPage}
-        disabled={addingPage}
-        title={`Add page to ${item.title}`}
-        aria-label={`Add page to ${item.title}`}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="13"
-          height="13"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
       <button
         type="button"
         className={`sidebar-star-btn${starred ? " active" : ""}`}

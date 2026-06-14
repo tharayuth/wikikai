@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  useAddPageMutation,
   useDeleteKnowledgeMutation,
   useGetKnowledgeQuery,
   useUpdateKnowledgeMutation,
@@ -28,6 +29,7 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: kid === null });
   const [deleteKnowledge] = useDeleteKnowledgeMutation();
   const [updateKnowledge] = useUpdateKnowledgeMutation();
+  const [addPage] = useAddPageMutation();
   const [infoOpen, setInfoOpen] = useState(false);
   const [starred, setStarred] = useState(false);
 
@@ -146,8 +148,11 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
               renameKnowledge: (id, title) =>
                 updateKnowledge({ id, title }).unwrap(),
               deleteKnowledge: (id) => deleteKnowledge(id).unwrap(),
+              addPage: (id, title) =>
+                addPage({ knowledge_id: id, title, content: "" }).unwrap(),
               notify: (message, kind) =>
                 dispatch(showToast(kind ? { message, kind } : message)),
+              onPageAdded: (pid) => navigateTo({ kid: meta.id, pid }),
               onDeleted: () => navigateTo({ kid: null }),
             });
           }}
