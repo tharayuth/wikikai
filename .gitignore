@@ -29,3 +29,6 @@ data/
 # Codex's auto-generated project context file — equivalent to CLAUDE.md
 # but mirrored per-tool; kept on disk for Codex sessions, not tracked.
 AGENTS.md
+
+# Local DB backups (do not commit)
+backups/

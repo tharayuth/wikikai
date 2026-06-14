@@ -708,6 +708,35 @@ describe("HTTP routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("POST /api/knowledge/:id/pages adds an empty page", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const res = await request(app)
+      .post(`/api/knowledge/${k.id}/pages`)
+      .send({ title: "New page" });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ knowledge_id: k.id, position: 1 });
+    expect(res.body).toHaveProperty("url");
+    // The page now shows up in the knowledge's page list.
+    const list = await request(app).get(`/api/knowledge/${k.id}`);
+    expect(list.body.pages).toHaveLength(1);
+    expect(list.body.pages[0].title).toBe("New page");
+  });
+
+  it("POST /api/knowledge/:id/pages requires a title", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const res = await request(app)
+      .post(`/api/knowledge/${k.id}/pages`)
+      .send({ title: "   " });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /api/knowledge/:id/pages returns 404 for missing knowledge", async () => {
+    const res = await request(app)
+      .post(`/api/knowledge/9999/pages`)
+      .send({ title: "X" });
+    expect(res.status).toBe(404);
+  });
+
   it("GET /api/knowledge/:id/outline returns heading tree", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "# T\n\n## A\n\n## B" });

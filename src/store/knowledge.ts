@@ -120,9 +120,50 @@ export class KnowledgeStore {
     return { name: name.trim(), removed: r.changes > 0 };
   }
 
+  /** Rename a project, keeping its id. Updates the registry row (the
+   *  `project_permissions` FK cascades on update) and re-points every
+   *  knowledge row that referenced the old name. Atomic. */
+  renameProject(oldName: string, newName: string): { name: string } {
+    const from = oldName.trim();
+    const to = newName.trim();
+    if (!to) throw new Error("project name is required");
+    if (to.length > 100) throw new Error("project name must be ≤ 100 chars");
+    if (from === to) return { name: to };
+    // Reject a collision with any existing project (registered or derived).
+    const clashRegistered = this.db
+      .prepare(`SELECT 1 FROM projects WHERE name = ?`)
+      .get(to);
+    const clashKnowledge = this.db
+      .prepare(`SELECT 1 FROM knowledge WHERE project = ? LIMIT 1`)
+      .get(to);
+    if (clashRegistered || clashKnowledge) {
+      throw new Error(`project "${to}" already exists`);
+    }
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      // Make sure a registry row exists so the rename (and its id) survives
+      // even for a project that only existed implicitly via knowledge.
+      this.ensureProjectRegistered(from, now);
+      this.db
+        .prepare(`UPDATE projects SET name = ? WHERE name = ?`)
+        .run(to, from); // FK ON UPDATE CASCADE fixes project_permissions
+      this.db
+        .prepare(`UPDATE knowledge SET project = ? WHERE project = ?`)
+        .run(to, from);
+    });
+    tx();
+    emitEvent({ type: "knowledge-changed" });
+    return { name: to };
+  }
+
   /** List every project in the system — both registered (possibly empty)
    *  and derived from existing knowledge rows. Returns per-project count. */
-  listProjects(): { name: string; count: number; registered: boolean }[] {
+  listProjects(): {
+    id: number | null;
+    name: string;
+    count: number;
+    registered: boolean;
+  }[] {
     const fromKnowledge = this.db
       .prepare(
         `SELECT project AS name, COUNT(*) AS count
@@ -132,19 +173,31 @@ export class KnowledgeStore {
       )
       .all() as { name: string; count: number }[];
     const registered = this.db
-      .prepare(`SELECT name FROM projects`)
-      .all() as { name: string }[];
-    const merged = new Map<string, { count: number; registered: boolean }>();
+      .prepare(`SELECT id, name FROM projects`)
+      .all() as { id: number; name: string }[];
+    const merged = new Map<
+      string,
+      { id: number | null; count: number; registered: boolean }
+    >();
     for (const r of fromKnowledge) {
-      merged.set(r.name, { count: r.count, registered: false });
+      merged.set(r.name, { id: null, count: r.count, registered: false });
     }
     for (const r of registered) {
       const prev = merged.get(r.name);
-      if (prev) prev.registered = true;
-      else merged.set(r.name, { count: 0, registered: true });
+      if (prev) {
+        prev.registered = true;
+        prev.id = r.id;
+      } else {
+        merged.set(r.name, { id: r.id, count: 0, registered: true });
+      }
     }
     return Array.from(merged.entries())
-      .map(([name, v]) => ({ name, count: v.count, registered: v.registered }))
+      .map(([name, v]) => ({
+        id: v.id,
+        name,
+        count: v.count,
+        registered: v.registered,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   }
 
@@ -170,9 +223,22 @@ export class KnowledgeStore {
       author: input.author ?? null,
       now,
     });
+    // Ensure the project owns a registry row (and therefore a stable id)
+    // the moment any knowledge references it.
+    this.ensureProjectRegistered(input.project.trim(), now);
     const id = Number(result.lastInsertRowid);
     emitEvent({ type: "knowledge-changed" });
     return { id, created_at: now };
+  }
+
+  /** Insert a registry row for `name` if absent (no-op otherwise), so the
+   *  project gets an auto-increment id as soon as it is referenced. */
+  private ensureProjectRegistered(name: string, now: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.db
+      .prepare(`INSERT OR IGNORE INTO projects (name, created_at) VALUES (?, ?)`)
+      .run(trimmed, now);
   }
 
   get(id: number): KnowledgeMetadata | null {
@@ -225,6 +291,11 @@ export class KnowledgeStore {
         version: nextVersion,
       });
 
+    // Moving a knowledge into a new project should give that project an id
+    // immediately too.
+    if (patch.project !== undefined) {
+      this.ensureProjectRegistered(patch.project.trim(), now);
+    }
     emitEvent({ type: "knowledge-changed", knowledge_id: id });
     return { id, version: nextVersion, updated_at: now };
   }

@@ -37,7 +37,68 @@ export function openDb(dbPath: string): Db {
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mcp_token ON users(mcp_token) WHERE mcp_token IS NOT NULL`,
     );
   }
+  if (!hasColumn(db, "projects", "id")) {
+    migrateProjectsAddId(db);
+  }
   return db;
+}
+
+/**
+ * Give `projects` a stable auto-increment `id`.
+ *
+ * The legacy table had `name TEXT PRIMARY KEY` and no id. SQLite can't
+ * `ALTER TABLE ADD COLUMN` an `INTEGER PRIMARY KEY AUTOINCREMENT`, so we
+ * rebuild the table. `name` stays UNIQUE, so the `project_permissions`
+ * FK (which references `projects(name)`) survives untouched — we still
+ * disable FK enforcement during the swap and verify afterwards.
+ *
+ * Before rebuilding we backfill the registry from every distinct
+ * `knowledge.project`, so projects that only existed implicitly (via a
+ * knowledge row) also get an id and become filterable by `?projects=`.
+ */
+function migrateProjectsAddId(db: Database.Database): void {
+  const fkWasOn = (db.pragma("foreign_keys", { simple: true }) as number) === 1;
+  if (fkWasOn) db.pragma("foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    // 1) Backfill: every project name referenced by knowledge gets a row.
+    db.exec(`
+      INSERT OR IGNORE INTO projects (name, created_at)
+      SELECT DISTINCT project, COALESCE(MIN(created_at), datetime('now'))
+      FROM knowledge
+      WHERE project IS NOT NULL AND project <> ''
+      GROUP BY project
+    `);
+    // 2) Rebuild with an auto-increment id, preserving creation order so
+    //    ids read chronologically.
+    db.exec(`
+      CREATE TABLE projects_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE,
+        created_at  TEXT NOT NULL
+      )
+    `);
+    db.exec(`
+      INSERT INTO projects_new (name, created_at)
+      SELECT name, created_at FROM projects ORDER BY created_at, name
+    `);
+    db.exec("DROP TABLE projects");
+    db.exec("ALTER TABLE projects_new RENAME TO projects");
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    if (fkWasOn) db.pragma("foreign_keys = ON");
+    throw e;
+  }
+  if (fkWasOn) db.pragma("foreign_keys = ON");
+  // FK integrity must still hold: every project_permissions.project_name
+  // should match a surviving projects.name.
+  const violations = db.pragma("foreign_key_check") as unknown[];
+  if (violations.length > 0) {
+    throw new Error(
+      `projects id migration broke foreign keys: ${JSON.stringify(violations)}`,
+    );
+  }
 }
 
 function hasColumn(db: Database.Database, table: string, column: string): boolean {

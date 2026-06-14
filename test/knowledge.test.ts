@@ -135,4 +135,35 @@ describe("KnowledgeStore (metadata only)", () => {
       expect(store.get(id)).toBeNull();
     });
   });
+
+  describe("renameProject", () => {
+    it("re-points knowledge and keeps the project id", () => {
+      const { id } = store.add({ title: "T", project: "old-name" });
+      const before = store.listProjects().find((p) => p.name === "old-name")!;
+      store.renameProject("old-name", "new-name");
+      expect(store.get(id)!.project).toBe("new-name");
+      const after = store.listProjects().find((p) => p.name === "new-name")!;
+      expect(after.id).toBe(before.id); // same id survives the rename
+      expect(store.listProjects().some((p) => p.name === "old-name")).toBe(false);
+    });
+
+    it("rejects renaming onto an existing project name", () => {
+      store.add({ title: "A", project: "alpha" });
+      store.add({ title: "B", project: "beta" });
+      expect(() => store.renameProject("alpha", "beta")).toThrow(/already exists/);
+      // alpha untouched
+      expect(store.listProjects().some((p) => p.name === "alpha")).toBe(true);
+    });
+
+    it("rejects an empty new name", () => {
+      store.add({ title: "A", project: "alpha" });
+      expect(() => store.renameProject("alpha", "  ")).toThrow(/required/);
+    });
+
+    it("is a no-op when the name is unchanged", () => {
+      const { id } = store.add({ title: "A", project: "alpha" });
+      expect(() => store.renameProject("alpha", "alpha")).not.toThrow();
+      expect(store.get(id)!.project).toBe("alpha");
+    });
+  });
 });

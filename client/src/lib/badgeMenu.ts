@@ -201,3 +201,64 @@ export function openBadgeMenu(opts: BadgeMenuOpts): void {
     document.addEventListener("keydown", onEsc);
   }, 0);
 }
+
+export interface ActionMenuItem {
+  label: string;
+  /** Renders in the danger (red) style — for destructive actions. */
+  danger?: boolean;
+  /** Fired on click. The menu closes first. */
+  onSelect: () => void | Promise<void>;
+}
+
+/**
+ * A lightweight `.block-menu` popup with caller-supplied items — for badges
+ * whose actions don't fit the fixed Copy/Edit/Delete shape (e.g. the
+ * project-id badge: "Open only this project" / "Edit project name").
+ * Shares the look + outside-click/Escape lifecycle with {@link openBadgeMenu}.
+ */
+export function openActionMenu(opts: {
+  kind: string;
+  badge: HTMLElement;
+  items: ActionMenuItem[];
+}): void {
+  document.querySelectorAll(".block-menu").forEach((m) => m.remove());
+
+  const menu = document.createElement("div");
+  menu.className = "block-menu";
+  menu.dataset.badgeKind = opts.kind;
+
+  const rect = opts.badge.getBoundingClientRect();
+  menu.style.position = "fixed";
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.left = `${rect.left}px`;
+
+  const close = (): void => {
+    menu.remove();
+    document.removeEventListener("mousedown", onOutside);
+    document.removeEventListener("keydown", onEsc);
+  };
+  const onOutside = (e: MouseEvent): void => {
+    if (!menu.contains(e.target as Node)) close();
+  };
+  const onEsc = (e: KeyboardEvent): void => {
+    if (e.key === "Escape") close();
+  };
+
+  for (const item of opts.items) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = item.label;
+    if (item.danger) b.classList.add("danger");
+    b.addEventListener("click", () => {
+      close();
+      void item.onSelect();
+    });
+    menu.appendChild(b);
+  }
+
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("keydown", onEsc);
+  }, 0);
+}

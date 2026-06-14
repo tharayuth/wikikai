@@ -537,6 +537,36 @@ a:hover { text-decoration: underline; }
   cursor: wait;
   opacity: .6 !important;
 }
+/* Project id pill — same reveal-on-hover behaviour as the "+" button.
+   Click copies the id (used in the `?projects=…` menu-filter URL). */
+.sidebar-group-id-badge {
+  flex: 0 0 auto;
+  align-self: center;
+  margin: auto 8px auto 0;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--text-3);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .15s, visibility .15s, background .12s, border-color .12s, color .12s;
+}
+.sidebar-group-header:hover .sidebar-group-id-badge,
+.sidebar-group-id-badge:focus-visible {
+  opacity: 1;
+  visibility: visible;
+}
+.sidebar-group-id-badge:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 .sidebar-group-title .group-name {
   text-decoration: underline;
   text-decoration-color: var(--accent);
@@ -583,7 +613,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 38px 6px 4px;
+  padding: 6px 64px 6px 4px;
   margin: 0;
   border-radius: 0;
   cursor: pointer;
@@ -625,6 +655,41 @@ a:hover { text-decoration: underline; }
   flex: 1;
   min-width: 0;
 }
+/* "+" Add-page button — hidden until the topic row is hovered. Sits to
+   the left of the always-visible star button. */
+.sidebar-page-add-btn {
+  position: absolute;
+  top: 7px;
+  right: 34px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: background .12s, border-color .12s, color .12s, opacity .15s, visibility .15s;
+}
+.sidebar-row:hover .sidebar-page-add-btn,
+.sidebar-page-add-btn:focus-visible {
+  opacity: 1;
+  visibility: visible;
+}
+.sidebar-page-add-btn:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--accent);
+}
+.sidebar-page-add-btn:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
 .sidebar-star-btn {
   position: absolute;
   top: 7px;

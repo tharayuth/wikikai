@@ -160,7 +160,14 @@ export const portalApi = createApi({
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
-      { projects: { name: string; count: number; registered: boolean }[] },
+      {
+        projects: {
+          id: number | null;
+          name: string;
+          count: number;
+          registered: boolean;
+        }[];
+      },
       void
     >({
       query: () => "projects",
@@ -183,6 +190,22 @@ export const portalApi = createApi({
       }),
       invalidatesTags: [{ type: "Projects", id: "LIST" }],
     }),
+    renameProject: builder.mutation<
+      { name: string },
+      { oldName: string; name: string }
+    >({
+      query: ({ oldName, name }) => ({
+        url: `projects/${encodeURIComponent(oldName)}`,
+        method: "PATCH",
+        body: { name },
+      }),
+      // Both the project list (badge id map) and every knowledge row's
+      // project label change, so refresh both.
+      invalidatesTags: [
+        { type: "Projects", id: "LIST" },
+        { type: "KnowledgeList", id: "LIST" },
+      ],
+    }),
     addKnowledge: builder.mutation<
       KnowledgeMeta,
       { title: string; project: string; tags?: string[]; author?: string }
@@ -191,6 +214,35 @@ export const portalApi = createApi({
       invalidatesTags: [
         { type: "KnowledgeList", id: "LIST" },
         { type: "Projects", id: "LIST" },
+      ],
+    }),
+
+    addPage: builder.mutation<
+      {
+        id: number;
+        knowledge_id: number;
+        position: number;
+        url: string;
+        created_at: string;
+      },
+      {
+        knowledge_id: number;
+        title: string;
+        content?: string;
+        position?: number;
+        summary?: string;
+        keywords?: string[];
+      }
+    >({
+      query: ({ knowledge_id, ...body }) => ({
+        url: `knowledge/${knowledge_id}/pages`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Knowledge", id: arg.knowledge_id },
+        { type: "KnowledgeList", id: "LIST" },
+        { type: "Page", id: "TITLES" },
       ],
     }),
 
@@ -601,7 +653,9 @@ export const {
   useListProjectsQuery,
   useAddProjectMutation,
   useRemoveProjectMutation,
+  useRenameProjectMutation,
   useAddKnowledgeMutation,
+  useAddPageMutation,
   useGetPromptLogQuery,
   useGetActivityLogQuery,
   useGetAuthMeQuery,

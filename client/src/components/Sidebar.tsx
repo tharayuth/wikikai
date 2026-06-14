@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useAddKnowledgeMutation,
+  useAddPageMutation,
   useGetKnowledgeQuery,
   useListKnowledgeQuery,
   useListPageTitlesQuery,
+  useListProjectsQuery,
+  useRenameProjectMutation,
   useReorderPagesMutation,
   type KnowledgeMeta,
   type PageMeta,
 } from "../store/api";
 import { useAppDispatch, useAppSelector } from "../store";
-import { navigateTo } from "../hooks/useHash";
+import { navigateTo, useHash } from "../hooks/useHash";
+import { openActionMenu } from "../lib/badgeMenu";
 import { showToast } from "../store/uiSlice";
 import {
   readStarredKnowledgeIds,
@@ -153,6 +157,27 @@ function KnowledgeRow({
   const [open, setOpen] = useState(isActive);
   const dispatch = useAppDispatch();
   const [reorderPages] = useReorderPagesMutation();
+  const [addPage, { isLoading: addingPage }] = useAddPageMutation();
+
+  const onAddPage = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const title = window.prompt(`New page in "${item.title}" — title?`, "");
+    if (!title || !title.trim()) return;
+    try {
+      const created = await addPage({
+        knowledge_id: item.id,
+        title: title.trim(),
+        content: "",
+      }).unwrap();
+      setOpen(true);
+      navigateTo({ kid: item.id, pid: created.id });
+      dispatch(showToast(`Added page "${title.trim()}"`));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to add page";
+      dispatch(showToast(`Add page failed: ${msg}`));
+    }
+  };
 
   // Auto-expand when this knowledge becomes the active one.
   useEffect(() => {
@@ -246,6 +271,29 @@ function KnowledgeRow({
       </a>
       <button
         type="button"
+        className="sidebar-page-add-btn"
+        onClick={onAddPage}
+        disabled={addingPage}
+        title={`Add page to ${item.title}`}
+        aria-label={`Add page to ${item.title}`}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+      <button
+        type="button"
         className={`sidebar-star-btn${starred ? " active" : ""}`}
         onClick={(e) => {
           e.preventDefault();
@@ -302,8 +350,25 @@ function KnowledgeRow({
 export function Sidebar({ activeKid, activePid, onPick }: Props) {
   const { data: items = [], isLoading } = useListKnowledgeQuery();
   const { data: pageTitles = [] } = useListPageTitlesQuery();
+  const { data: projectList } = useListProjectsQuery();
+  const { location } = useHash();
+  const urlProjectIds = location.projectIds;
   const selectedProjects = useAppSelector((s) => s.ui.selectedProjects);
   const [filterText, setFilterText] = useState("");
+
+  // name <-> id maps from the project registry (ids power the sidebar badge
+  // and the `?projects=` menu filter).
+  const { nameToId, idToName } = useMemo(() => {
+    const nameToId = new Map<string, number>();
+    const idToName = new Map<number, string>();
+    for (const p of projectList?.projects ?? []) {
+      if (p.id != null) {
+        nameToId.set(p.name, p.id);
+        idToName.set(p.id, p.name);
+      }
+    }
+    return { nameToId, idToName };
+  }, [projectList]);
   const [starredOnly, setStarredOnly] = useState(false);
   const [starredIds, setStarredIds] = useState<Set<number>>(() =>
     readStarredKnowledgeIds(),
@@ -321,6 +386,17 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
 
   const filtered = useMemo(() => {
     const projectFiltered = (() => {
+      // `?projects=1,2` in the URL wins over the modal filter — it locks the
+      // menu to those project ids. We wait until the registry has loaded
+      // (idToName populated) before applying it, to avoid an empty flash.
+      if (urlProjectIds != null && idToName.size > 0) {
+        const allowed = new Set(
+          urlProjectIds
+            .map((id) => idToName.get(id))
+            .filter((n): n is string => n != null),
+        );
+        return items.filter((it) => allowed.has(it.project || "(no project)"));
+      }
       if (selectedProjects == null) return items;
       if (selectedProjects.length === 0) return [];
       const set = new Set(selectedProjects);
@@ -330,7 +406,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     })();
     if (!starredOnly) return projectFiltered;
     return projectFiltered.filter((it) => starredIds.has(it.id));
-  }, [items, selectedProjects, starredOnly, starredIds]);
+  }, [items, selectedProjects, urlProjectIds, idToName, starredOnly, starredIds]);
 
   const q = filterText.trim().toLowerCase();
 
@@ -437,16 +513,31 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     );
   }
 
+  // When `?projects=` is active, order the groups to match the id sequence
+  // in the URL (e.g. `?projects=7,9,8` → 7, then 9, then 8). Otherwise keep
+  // the natural order in which knowledge appears.
+  const projectGroups = (() => {
+    const groups = groupByProject(matched);
+    if (urlProjectIds == null) return groups;
+    const rank = (name: string) => {
+      const id = nameToId.get(name);
+      const i = id != null ? urlProjectIds.indexOf(id) : -1;
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...groups].sort((a, b) => rank(a[0]) - rank(b[0]));
+  })();
+
   return (
     <aside className="sidebar" id="sidebar">
       {searchBox}
-      {groupByProject(matched).map(([project, list]) => {
+      {projectGroups.map(([project, list]) => {
         const containsActive =
           activeKid != null && list.some((it) => it.id === activeKid);
         return (
         <ProjectGroup
           key={project}
           project={project}
+          projectId={nameToId.get(project) ?? null}
           containsActive={containsActive}
         >
           {list.map((it) => {
@@ -502,10 +593,13 @@ function writeStoredOpen(project: string, open: boolean): void {
 
 function ProjectGroup({
   project,
+  projectId,
   containsActive,
   children,
 }: {
   project: string;
+  /** Registry id, or null for unregistered names like "(no project)". */
+  projectId: number | null;
   /** True when the currently-active knowledge belongs to this project.
    *  Used as the default initial state and to auto-open when the user
    *  navigates into the group — but NEVER as a hard force-open, so the
@@ -542,6 +636,55 @@ function ProjectGroup({
 
   const dispatch = useAppDispatch();
   const [addKnowledge, { isLoading: adding }] = useAddKnowledgeMutation();
+  const [renameProject] = useRenameProjectMutation();
+
+  const copyId = async () => {
+    if (projectId == null) return;
+    try {
+      await navigator.clipboard.writeText(String(projectId));
+      dispatch(showToast(`Copied project id ${projectId}`));
+    } catch {
+      dispatch(showToast(`Project id ${projectId}`));
+    }
+  };
+
+  const openOnlyThisProject = () => {
+    if (projectId == null) return;
+    // Fresh tab showing just this project (the `?projects=` menu filter).
+    window.open(`${window.location.origin}/?projects=${projectId}`, "_blank", "noopener");
+  };
+
+  const onRenameProject = async () => {
+    const next = window.prompt("Project name:", project);
+    if (next == null) return; // cancelled
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === project) return;
+    try {
+      await renameProject({ oldName: project, name: trimmed }).unwrap();
+      dispatch(showToast({ message: `Renamed to "${trimmed}"`, kind: "success" }));
+    } catch (err) {
+      const e = err as { data?: { error?: string }; status?: number };
+      dispatch(
+        showToast({
+          message: `Rename failed: ${e.data?.error ?? e.status ?? "error"}`,
+          kind: "error",
+        }),
+      );
+    }
+  };
+
+  const onBadgeClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (projectId == null) return;
+    openActionMenu({
+      kind: "project",
+      badge: e.currentTarget,
+      items: [
+        { label: `Copy id ${projectId}`, onSelect: copyId },
+        { label: "Open only this project (new tab)", onSelect: openOnlyThisProject },
+        { label: "Edit project name", onSelect: onRenameProject },
+      ],
+    });
+  };
 
   const onAddKnowledge = async () => {
     const title = window.prompt(`New knowledge in "${project}" — title?`, "");
@@ -601,6 +744,17 @@ function ProjectGroup({
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
         </button>
+        {projectId != null && (
+          <button
+            type="button"
+            className="sidebar-group-id-badge"
+            onClick={onBadgeClick}
+            title={`Project id ${projectId} — click for menu`}
+            aria-label={`Project id ${projectId} menu`}
+          >
+            {projectId}
+          </button>
+        )}
       </div>
       {/* `hidden` rather than removing children — preserves each
           KnowledgeRow's local expand state across project collapse / re-open. */}

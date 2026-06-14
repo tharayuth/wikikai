@@ -4,8 +4,14 @@
 -- so it shows up in the filter / move-to-project pickers immediately.
 -- The list of "all known projects" is the UNION of this table + the
 -- distinct non-null `project` values on `knowledge`.
+--
+-- `id` is a stable auto-increment surfaced in the UI (sidebar badge) and
+-- used by the `?projects=1,2` menu-filter query param. `name` stays the
+-- UNIQUE business key — `knowledge.project` and `project_permissions`
+-- still reference it by name, so the id is additive, not a new FK target.
 CREATE TABLE IF NOT EXISTS projects (
-  name        TEXT PRIMARY KEY,
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL UNIQUE,
   created_at  TEXT NOT NULL
 );
 

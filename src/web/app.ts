@@ -356,6 +356,36 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Add a new (empty) page to a knowledge — powers the sidebar "+"
+  // add-page button. `content` defaults to empty so the user lands on a
+  // blank page ready to edit.
+  app.post("/api/knowledge/:id/pages", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      if (typeof req.body?.title !== "string" || !req.body.title.trim()) {
+        res.status(400).json({ error: "title is required" });
+        return;
+      }
+      const result = await opts.handlers.add_page({
+        content: "",
+        ...req.body,
+        knowledge_id: id,
+      });
+      res.status(201).json(result);
+    } catch (e) {
+      if (isNotFound(e)) {
+        res.status(404).json({ error: (e as Error).message });
+        return;
+      }
+      next(e);
+    }
+  });
+
   // ─── Projects: registry + derived names ───
   app.get("/api/projects", (req, res, next) => {
     try {
@@ -396,6 +426,21 @@ export function buildApp(opts: BuildAppOptions): Express {
     try {
       gateAdmin(req);
       const result = opts.knowledge.unregisterProject(req.params.name);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  });
+  // Rename a project (keeps its id). Re-points all knowledge + permissions.
+  app.patch("/api/projects/:name", (req, res, next) => {
+    try {
+      gateAdmin(req);
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      if (!name) {
+        res.status(400).json({ error: "name is required" });
+        return;
+      }
+      const result = opts.knowledge.renameProject(req.params.name, name);
       res.json(result);
     } catch (e) {
       next(e);

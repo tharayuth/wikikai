@@ -123,6 +123,7 @@ function UserGuideEn() {
         <tbody>
           <tr><td>Open a knowledge</td><td>Click an item in the sidebar</td></tr>
           <tr><td>Switch page</td><td>Click a tab above the content</td></tr>
+          <tr><td>Add a knowledge / page</td><td>Hover a <strong>project header</strong> in the sidebar → click the <Kbd>+</Kbd> to create a new knowledge in that project. Hover a <strong>topic row</strong> → click the <Kbd>+</Kbd> (just left of the star) to add a new page to that topic. Both prompt for a title, then open the new entry</td></tr>
           <tr><td>Filter sidebar by project</td><td>Click the <Kbd>⏷ ทุก project</Kbd> button next to the <strong>WikiKai</strong> logo (top-left of the topbar) → check / uncheck projects. The input at the top of the dialog plus the <Kbd>+ เพิ่ม</Kbd> button registers a brand-new empty project so it shows up in the picker before you've moved any documents into it. 🗑 deletes the project + all its knowledge (typed-confirm required)</td></tr>
           <tr><td>Star important topics</td><td>Click the star button on a sidebar topic, or the star button just before <Kbd>i</Kbd> in the header. Use the star button beside the sidebar filter input to show starred topics only. Stars are saved in this browser localStorage, not shared metadata</td></tr>
           <tr><td>Move knowledge to a different project</td><td>Open the info popover (<Kbd>i</Kbd>), click the <strong>project</strong> row → inline editor with autocomplete. Type a known project or any new name; Enter saves, Esc cancels. Empty value detaches the knowledge from any project</td></tr>
@@ -234,6 +235,7 @@ function UserGuideTh() {
         <tbody>
           <tr><td>เลือก knowledge</td><td>คลิกใน sidebar</td></tr>
           <tr><td>สลับ page</td><td>คลิก tab ด้านบนเนื้อหา</td></tr>
+          <tr><td>เพิ่ม knowledge / page</td><td>เอาเมาส์ชี้ที่ <strong>หัว project</strong> ใน sidebar → คลิก <Kbd>+</Kbd> เพื่อสร้าง knowledge ใหม่ใน project นั้น. เอาเมาส์ชี้ที่ <strong>แถว topic</strong> → คลิก <Kbd>+</Kbd> (อยู่ก่อนปุ่มดาว) เพื่อเพิ่ม page ใหม่ใน topic นั้น. ทั้งคู่จะถามชื่อก่อน แล้วเปิดรายการใหม่ให้</td></tr>
           <tr><td>กรอง sidebar ตาม project</td><td>คลิกปุ่ม <Kbd>⏷ ทุก project</Kbd> ติดกับโลโก้ <strong>WikiKai</strong> มุมซ้ายบนของ topbar → ติ๊ก / เอาออก. ใน dialog มี input ด้านบน + ปุ่ม <Kbd>+ เพิ่ม</Kbd> สำหรับสร้าง project ว่าง (โผล่ใน picker ทันที — รอย้าย knowledge เข้าไป). ปุ่ม 🗑 ลบ project + knowledge ในนั้นทั้งหมด (ต้องพิมพ์ชื่อยืนยัน)</td></tr>
           <tr><td>Star topic สำคัญ</td><td>คลิกปุ่มดาวบนรายการใน sidebar หรือปุ่มดาวก่อน <Kbd>i</Kbd> ใน header. ปุ่มดาวข้างช่อง filter ใน sidebar ใช้กรองให้เห็นเฉพาะ topic ที่ star ไว้. ค่า star เก็บใน localStorage ของ browser นี้ ไม่ใช่ metadata ที่แชร์กับคนอื่น</td></tr>
           <tr><td>ย้าย knowledge ไปอีก project</td><td>เปิด info popover (<Kbd>i</Kbd>) → คลิกแถว <strong>project</strong> → ช่อง input พร้อม autocomplete project ที่มี. พิมพ์ชื่อ project เดิม หรือชื่อใหม่ก็ได้, Enter = บันทึก, Esc = ยกเลิก. เว้นว่าง = ถอด project ออก</td></tr>
