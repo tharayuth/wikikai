@@ -674,9 +674,9 @@ function ProjectGroup({
       kind: "project",
       badge: e.currentTarget,
       items: [
-        { label: `Copy id ${projectId}`, onSelect: copyId },
-        { label: "Open only this project (new tab)", onSelect: openOnlyThisProject },
-        { label: "Edit project name", onSelect: onRenameProject },
+        { label: `Copy id ${projectId}`, icon: "copy", onSelect: copyId },
+        { label: "Open only this project (new tab)", icon: "open", onSelect: openOnlyThisProject },
+        { label: "Edit project name", icon: "edit", onSelect: onRenameProject },
       ],
     });
   };

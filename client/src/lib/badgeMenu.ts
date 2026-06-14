@@ -95,6 +95,60 @@ function writeClipboard(
 }
 
 /**
+ * Feather-style icon path markup keyed by a short name. Rendered as the
+ * inner content of a 24×24 stroked `<svg>` — see {@link makeIcon}.
+ */
+const MENU_ICONS: Record<string, string> = {
+  // overlapping rectangles — copy
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  // document with text lines — copy content
+  "copy-content":
+    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
+  // document with a plus — add page
+  "add-page":
+    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/>',
+  // pencil — edit / rename
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
+  // trash can — delete
+  delete:
+    '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
+  // arrow into a tray — open
+  open: '<path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
+};
+
+/** Build a stroked SVG icon element, or null when the name is unknown. */
+function makeIcon(name: string | undefined): SVGSVGElement | null {
+  if (!name || !MENU_ICONS[name]) return null;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "15");
+  svg.setAttribute("height", "15");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("menu-ico");
+  svg.innerHTML = MENU_ICONS[name]; // static markup — no untrusted input
+  return svg;
+}
+
+/** Set a menu button's content to an optional icon followed by a label. */
+function setMenuButtonContent(
+  btn: HTMLButtonElement,
+  icon: string | undefined,
+  label: string,
+): void {
+  btn.textContent = "";
+  const ico = makeIcon(icon);
+  if (ico) btn.appendChild(ico);
+  const span = document.createElement("span");
+  span.textContent = label;
+  btn.appendChild(span);
+}
+
+/**
  * Build and attach the popup menu. Returns nothing — the menu manages
  * its own lifecycle (outside-click + Escape close).
  */
@@ -105,26 +159,32 @@ export function openBadgeMenu(opts: BadgeMenuOpts): void {
   menu.className = "block-menu";
   menu.dataset.badgeKind = opts.kind;
 
-  const mkBtn = (action: string, label: string): HTMLButtonElement => {
+  const mkBtn = (
+    action: string,
+    label: string,
+    icon?: string,
+  ): HTMLButtonElement => {
     const b = document.createElement("button");
     b.type = "button";
     b.dataset.action = action;
-    b.textContent = label;
+    setMenuButtonContent(b, icon, label);
     menu.appendChild(b);
     return b;
   };
 
-  const copyBtn = mkBtn("copy", `Copy ${opts.copyText}`);
-  const copyContentBtn = opts.contentUrl ? mkBtn("copy-content", "Copy content") : null;
+  const copyBtn = mkBtn("copy", `Copy ${opts.copyText}`, "copy");
+  const copyContentBtn = opts.contentUrl
+    ? mkBtn("copy-content", "Copy content", "copy-content")
+    : null;
   // Extra items (e.g. "Add page") sit between the copy actions and
   // Edit/Delete. Click handlers attached below, once `close` exists.
   const extraBtns = (opts.extraItems ?? []).map((item) => {
-    const b = mkBtn("extra", item.label);
+    const b = mkBtn("extra", item.label, item.icon);
     if (item.danger) b.classList.add("danger");
     return { b, item };
   });
-  const editBtn = mkBtn("edit", opts.editLabel);
-  const deleteBtn = mkBtn("delete", opts.deleteLabel);
+  const editBtn = mkBtn("edit", opts.editLabel, "edit");
+  const deleteBtn = mkBtn("delete", opts.deleteLabel, "delete");
   deleteBtn.classList.add("danger");
 
   // Position the menu just below the badge.
@@ -260,6 +320,7 @@ export function openKnowledgeBadgeMenu(deps: {
     const addPage = deps.addPage;
     extraItems.push({
       label: "Add page",
+      icon: "add-page",
       onSelect: () => {
         const title = window.prompt(`New page in "${deps.title}" — title?`, "");
         if (!title || !title.trim()) return;
@@ -315,6 +376,8 @@ export function openKnowledgeBadgeMenu(deps: {
 
 export interface ActionMenuItem {
   label: string;
+  /** Optional leading icon — a key of the shared menu icon set. */
+  icon?: string;
   /** Renders in the danger (red) style — for destructive actions. */
   danger?: boolean;
   /** Fired on click. The menu closes first. */
@@ -358,7 +421,7 @@ export function openActionMenu(opts: {
   for (const item of opts.items) {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = item.label;
+    setMenuButtonContent(b, item.icon, item.label);
     if (item.danger) b.classList.add("danger");
     b.addEventListener("click", () => {
       close();

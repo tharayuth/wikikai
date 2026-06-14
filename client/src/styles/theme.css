@@ -259,15 +259,30 @@ a:hover { text-decoration: underline; }
 }
 .ki-id-badge {
   font-family: var(--mono);
-  font-size: 13px; font-weight: 600;
-  color: var(--accent-strong);
-  background: var(--accent-light);
-  padding: 2px 8px; border-radius: 4px;
+  font-size: 13px; font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  padding: 2px 7px; border-radius: 5px;
   flex-shrink: 0;
   cursor: pointer;
   border: none;
+  display: inline-flex; align-items: center; gap: 4px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: background .12s, box-shadow .12s, transform .06s;
 }
-.ki-id-badge:hover { background: var(--accent); color: white; }
+/* caret hints the badge opens a menu — only on the interactive button
+   (loading / error states render a plain span) */
+button.ki-id-badge::after {
+  content: "▾";
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.ki-id-badge:hover {
+  background: var(--accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.ki-id-badge:active { transform: translateY(1px); }
 .ki-title {
   font-size: 14px;
   font-weight: 600;
@@ -782,19 +797,27 @@ a:hover { text-decoration: underline; }
   display: flex; gap: 8px; align-items: center;
 }
 .sidebar-item .id-badge {
-  background: var(--accent-light);
-  color: var(--accent-strong);
-  padding: 1px 6px; border-radius: 4px;
-  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 5px 1px 6px; border-radius: 4px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
   border: none;
   cursor: pointer;
   line-height: inherit;
   flex-shrink: 0;
-  transition: background .12s, color .12s;
+  display: inline-flex; align-items: center; gap: 3px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 40%, transparent);
+  transition: background .12s, box-shadow .12s;
+}
+.sidebar-item .id-badge::after {
+  content: "▾";
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.85;
 }
 .sidebar-item .id-badge:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-strong);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* ───── Content viewer ───── */
@@ -1841,7 +1864,15 @@ a:hover { text-decoration: underline; }
   color: var(--text);
   border-radius: 5px;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
+.block-menu .menu-ico {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+.block-menu button:hover .menu-ico { opacity: 1; }
 .block-menu button:hover {
   background: var(--accent-light);
   color: var(--accent-strong);
