@@ -20,7 +20,7 @@
   --accent-strong: #4f46e5;
 
   --blue: #2563eb;          --blue-light: #eff5ff;
-  --green: #10b981;         --green-light: #ecfdf5;   --green-strong: #059669;
+  --green: #059669;         --green-light: #ecfdf5;   --green-strong: #047857;
   --amber: #d97706;         --amber-light: #fffbeb;
   --red: #dc2626;           --red-light: #fef2f2;
   --cyan: #0891b2;          --cyan-light: #ecfeff;
@@ -1814,10 +1814,12 @@ button.ki-id-badge::after {
   z-index: 5;
   font-family: var(--mono);
   font-size: 10px;
-  font-weight: 600;
-  color: var(--text-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  font-weight: 700;
+  /* Block badge reads in an amber/orange tone — distinct from the purple
+     &N (knowledge) and green #N (page) chips. */
+  color: var(--amber);
+  background: var(--amber-light);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--border));
   border-bottom: none;
   padding: 2px 7px 3px;
   border-radius: 4px 4px 0 0;
@@ -1843,9 +1845,9 @@ button.ki-id-badge::after {
 }
 
 .markdown-body .block-badge:hover {
-  color: var(--accent-strong);
-  border-color: var(--accent);
-  background: var(--accent-light);
+  color: #fff;
+  border-color: var(--amber);
+  background: var(--amber);
 }
 .markdown-body .block-badge.copied {
   color: white;
