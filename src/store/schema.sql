@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS pages (
   keywords      TEXT,                       -- comma-separated, per-page search hints
   created_at    TEXT    NOT NULL,
   updated_at    TEXT    NOT NULL,
-  version       INTEGER NOT NULL DEFAULT 1
+  version       INTEGER NOT NULL DEFAULT 1,
+  archived_at   TEXT                        -- NULL = active; ISO timestamp = archived (soft, never deleted)
 );
 
 CREATE INDEX IF NOT EXISTS idx_pages_kid_pos ON pages(knowledge_id, position);

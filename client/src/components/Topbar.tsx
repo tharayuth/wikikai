@@ -31,6 +31,13 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
   const selectedProjects = useAppSelector((s) => s.ui.selectedProjects);
   const [trigger, result] = useLazySearchQuery();
   const [open, setOpen] = useState(false);
+  const [includeArchived, setIncludeArchived] = useState(() => {
+    try {
+      return localStorage.getItem("wikikai-search-archived") === "1";
+    } catch {
+      return false;
+    }
+  });
   const wrapRef = useRef<HTMLDivElement>(null);
 
   // Snapshot of project filter for stable dep in useEffect.
@@ -50,12 +57,13 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
         q,
         limit: 20,
         projects: isIdLookup ? undefined : selectedProjects ?? undefined,
+        includeArchived,
       });
       setOpen(true);
     }, isIdLookup ? 0 : 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchText, trigger, projectsKey]);
+  }, [searchText, trigger, projectsKey, includeArchived]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -138,12 +146,33 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
               }}
             />
             {open && result.data && (
-              <SearchResults
-                hits={result.data.hits}
-                total={result.data.total}
-                query={searchText}
-                onPick={() => setOpen(false)}
-              />
+              <div className="search-dropdown">
+                <label className="search-archived-toggle">
+                  <input
+                    type="checkbox"
+                    checked={includeArchived}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setIncludeArchived(v);
+                      try {
+                        localStorage.setItem(
+                          "wikikai-search-archived",
+                          v ? "1" : "0",
+                        );
+                      } catch {
+                        /* private mode */
+                      }
+                    }}
+                  />
+                  Include archived pages
+                </label>
+                <SearchResults
+                  hits={result.data.hits}
+                  total={result.data.total}
+                  query={searchText}
+                  onPick={() => setOpen(false)}
+                />
+              </div>
             )}
           </div>
           <button

@@ -2065,4 +2065,52 @@ describe("PageStore", () => {
       expect(table!.row_count).toBe(2);
     });
   });
+
+  describe("archive", () => {
+    it("defaults to not archived", () => {
+      const { id } = pages.add({ knowledge_id: kid, title: "P", content: "x" });
+      expect(pages.getMetadata(id)!.archived).toBe(false);
+    });
+
+    it("setArchived flips the flag without deleting content", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "P",
+        content: "hello body",
+      });
+      pages.setArchived(id, true);
+      expect(pages.getMetadata(id)!.archived).toBe(true);
+      // content survives
+      expect(pages.get(id)!.content).toContain("hello body");
+      // restore
+      pages.setArchived(id, false);
+      expect(pages.getMetadata(id)!.archived).toBe(false);
+    });
+
+    it("exposes archived in list() and listAllTitles()", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "x" });
+      pages.add({ knowledge_id: kid, title: "B", content: "y" });
+      pages.setArchived(a.id, true);
+      const listed = pages.list(kid).find((p) => p.id === a.id)!;
+      expect(listed.archived).toBe(true);
+      const titles = pages.listAllTitles().find((p) => p.id === a.id)!;
+      expect(titles.archived).toBe(true);
+    });
+
+    it("search hides archived pages unless includeArchived", () => {
+      const { id } = pages.add({
+        knowledge_id: kid,
+        title: "Findable",
+        content: "uniquetoken here",
+      });
+      expect(pages.search("uniquetoken").some((h) => h.page_id === id)).toBe(true);
+      pages.setArchived(id, true);
+      expect(pages.search("uniquetoken").some((h) => h.page_id === id)).toBe(false);
+      expect(
+        pages
+          .search("uniquetoken", { includeArchived: true })
+          .some((h) => h.page_id === id),
+      ).toBe(true);
+    });
+  });
 });

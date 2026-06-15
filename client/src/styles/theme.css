@@ -213,6 +213,48 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 .topbar-search { position: relative; }
+/* Wrapper that becomes the search popover (the "include archived" toggle +
+   the results list). Takes over #search-results' absolute placement; the
+   inner list then flows statically inside it. */
+.search-dropdown {
+  position: absolute;
+  top: calc(var(--topbar-h) - 4px);
+  right: 100px;
+  width: max-content;
+  min-width: 480px;
+  max-width: calc(100vw - 132px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md), 0 8px 28px rgba(0, 0, 0, 0.10);
+  z-index: 50;
+  overflow: hidden;
+}
+.search-dropdown #search-results {
+  position: static;
+  top: auto;
+  right: auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  max-height: calc(100vh - var(--topbar-h) - 16vh);
+}
+/* "Include archived pages" row sits atop the search results popover. */
+.search-archived-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.search-archived-toggle input { cursor: pointer; margin: 0; }
 .topbar input[type="search"] {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -398,6 +440,51 @@ button.ki-id-badge::after {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   height: calc(100vh - var(--topbar-h));
+  position: relative;
+}
+
+/* Sidebar resize handle — sits on the right edge of the sidebar.
+   Positioned absolutely so it doesn't participate in the grid. */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  left: var(--sidebar-w);
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 5;
+  transform: translateX(-50%);
+  transition: background .12s;
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.dragging {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* Small "drag me" affordance — two short vertical bars at the top of
+   the handle, similar to the article resize handle. Always visible
+   (subtle) so users discover the handle without having to hover. */
+.sidebar-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 4px;
+  height: 12px;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(var(--text-3), var(--text-3)) 0 0 / 1px 100% no-repeat,
+    linear-gradient(var(--text-3), var(--text-3)) 100% 0 / 1px 100% no-repeat;
+  opacity: 0.55;
+  transition: opacity .12s, background .12s;
+  pointer-events: none;
+}
+.sidebar-resize-handle:hover::before,
+.sidebar-resize-handle.dragging::before {
+  opacity: 1;
+  background:
+    linear-gradient(var(--accent-strong), var(--accent-strong)) 0 0 / 1px 100% no-repeat,
+    linear-gradient(var(--accent-strong), var(--accent-strong)) 100% 0 / 1px 100% no-repeat;
 }
 
 /* ───── Sidebar ───── */
@@ -474,6 +561,30 @@ button.ki-id-badge::after {
   background: var(--amber-light);
   color: var(--amber);
   border-color: var(--amber);
+}
+/* Archived-only filter — same shape as the star filter, accent-toned. */
+.sidebar-archive-filter {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background .12s, border-color .12s, color .12s;
+}
+.sidebar-archive-filter:hover {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.sidebar-archive-filter.active {
+  background: var(--accent-light);
+  color: var(--accent-strong);
+  border-color: var(--accent);
 }
 .sidebar-empty {
   padding: 28px 18px;
@@ -663,7 +774,11 @@ button.ki-id-badge::after {
   padding: 2px 6px 6px 24px;
 }
 .sidebar-row.active-row .sidebar-page.active {
-  background: var(--accent);
+  background: var(--green);
+  color: white;
+}
+.sidebar-row.active-row .sidebar-page.active:hover {
+  background: var(--green-strong);
   color: white;
 }
 .sidebar-item .ki-body {
@@ -732,6 +847,12 @@ button.ki-id-badge::after {
   flex: 1 1 auto;
   min-width: 0;
 }
+/* Archived page shown in the "archived only" view — muted + struck. */
+.sidebar-page-li.archived .sidebar-page .page-title {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
+}
 .sidebar-page-handle {
   flex: 0 0 auto;
   display: flex;
@@ -779,8 +900,8 @@ button.ki-id-badge::after {
   text-decoration: none;
 }
 .sidebar-page.active {
-  background: var(--accent-light);
-  color: var(--accent-strong);
+  background: var(--green-light);
+  color: var(--green-strong);
   font-weight: 600;
 }
 .sidebar-item.active .title { font-weight: 600; }
@@ -1159,6 +1280,32 @@ button.ki-id-badge::after {
   border-color: var(--green-strong);
 }
 .page-edit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Archive / Unarchive — neutral outline so it reads as secondary next to
+   the green "Edit raw". Turns amber once the page is archived. */
+.page-archive-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  line-height: 1.4;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.page-archive-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.page-archive-btn.archived {
+  background: var(--amber-light);
+  border-color: var(--amber);
+  color: var(--amber);
+}
 .page-edit-actions {
   display: inline-flex;
   align-items: center;

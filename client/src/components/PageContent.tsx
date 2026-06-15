@@ -6,6 +6,7 @@ import {
   useGetPageRenderedQuery,
   useListRevisionsQuery,
   usePruneRevisionsMutation,
+  useSetPageArchivedMutation,
   useUpdatePageMutation,
 } from "../store/api";
 import { useAppDispatch, useAppSelector } from "../store";
@@ -93,6 +94,7 @@ export function PageContent({ pageId, line, block }: Props) {
   const [delPage] = useDeletePageMutation();
   const [pruneRevisions, pruneState] = usePruneRevisionsMutation();
   const [updatePage, updateState] = useUpdatePageMutation();
+  const [setPageArchived] = useSetPageArchivedMutation();
   const dispatch = useAppDispatch();
   const theme = useAppSelector((s) => s.ui.theme);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -255,6 +257,39 @@ export function PageContent({ pageId, line, block }: Props) {
   }
 
   const kid = meta.data.knowledge_id;
+  const isArchived = meta.data.archived === true;
+  const onToggleArchive = async () => {
+    const next = !isArchived;
+    if (
+      next &&
+      !window.confirm(
+        `Archive page "${meta.data!.title}"?\n\nIt will be hidden from the sidebar and search (but not deleted). You can restore it from the "Show archived only" view.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await setPageArchived({
+        page_id: pageId,
+        knowledge_id: kid,
+        archived: next,
+      }).unwrap();
+      dispatch(
+        showToast({
+          message: next ? "Page archived" : "Page restored",
+          kind: "success",
+        }),
+      );
+    } catch (err) {
+      const e = err as { data?: { error?: string }; status?: number };
+      dispatch(
+        showToast({
+          message: `${next ? "Archive" : "Restore"} failed: ${e.data?.error ?? e.status ?? "error"}`,
+          kind: "error",
+        }),
+      );
+    }
+  };
   const currentVersion = meta.data.version;
   const activeVersion = viewVersion ?? currentVersion;
   const revList = revisions.data?.revisions ?? [];
@@ -447,6 +482,17 @@ export function PageContent({ pageId, line, block }: Props) {
               disabled={viewVersion != null && viewVersion !== currentVersion}
             >
               ✎ Edit raw
+            </button>
+            <button
+              className={`page-archive-btn${isArchived ? " archived" : ""}`}
+              onClick={onToggleArchive}
+              title={
+                isArchived
+                  ? "Restore this page (unarchive)"
+                  : "Archive this page — hides it from sidebar + search without deleting"
+              }
+            >
+              {isArchived ? "⊡ Unarchive" : "⊟ Archive"}
             </button>
             {viewVersion != null && viewVersion !== currentVersion && (
               <button

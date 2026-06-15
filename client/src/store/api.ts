@@ -28,6 +28,8 @@ export interface PageMeta {
   version: number;
   line_count: number;
   url: string;
+  /** True when the page is soft-archived (hidden, not deleted). */
+  archived: boolean;
 }
 
 export interface KnowledgeWithPages extends KnowledgeMeta {
@@ -45,6 +47,7 @@ export interface PageContent {
   updated_at: string;
   total_lines: number;
   content: string;
+  archived?: boolean;
 }
 
 export interface SearchHit {
@@ -247,7 +250,13 @@ export const portalApi = createApi({
     }),
 
     listPageTitles: builder.query<
-      { knowledge_id: number; id: number; position: number; title: string }[],
+      {
+        knowledge_id: number;
+        id: number;
+        position: number;
+        title: string;
+        archived: boolean;
+      }[],
       void
     >({
       query: () => "page-titles",
@@ -511,6 +520,23 @@ export const portalApi = createApi({
       ],
     }),
 
+    setPageArchived: builder.mutation<
+      { id: number; archived: boolean },
+      { page_id: number; knowledge_id: number; archived: boolean }
+    >({
+      query: ({ page_id, archived }) => ({
+        url: `pages/${page_id}/archive`,
+        method: "PATCH",
+        body: { archived },
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Page", id: arg.page_id },
+        { type: "Knowledge", id: arg.knowledge_id },
+        { type: "KnowledgeList", id: "LIST" },
+        { type: "Page", id: "TITLES" },
+      ],
+    }),
+
     pruneRevisions: builder.mutation<
       { removed: number; kept_versions: number[] },
       number
@@ -571,9 +597,9 @@ export const portalApi = createApi({
 
     search: builder.query<
       SearchResponse,
-      { q: string; limit?: number; projects?: string[] }
+      { q: string; limit?: number; projects?: string[]; includeArchived?: boolean }
     >({
-      query: ({ q, limit = 20, projects }) => ({
+      query: ({ q, limit = 20, projects, includeArchived }) => ({
         url: "search",
         params: {
           q,
@@ -581,6 +607,7 @@ export const portalApi = createApi({
           ...(projects && projects.length > 0
             ? { projects: projects.join(",") }
             : {}),
+          ...(includeArchived ? { include_archived: "1" } : {}),
         },
       }),
     }),
@@ -646,6 +673,7 @@ export const {
   useGetPageRawQuery,
   useUpdatePageMutation,
   useDeletePageMutation,
+  useSetPageArchivedMutation,
   usePruneRevisionsMutation,
   useSearchQuery,
   useLazySearchQuery,

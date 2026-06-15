@@ -40,6 +40,12 @@ export function openDb(dbPath: string): Db {
   if (!hasColumn(db, "projects", "id")) {
     migrateProjectsAddId(db);
   }
+  if (!hasColumn(db, "pages", "archived_at")) {
+    // Soft-archive flag for pages. NULL = active; ISO timestamp = archived.
+    // Archived pages are hidden from the sidebar + search by default but
+    // never deleted.
+    db.exec(`ALTER TABLE pages ADD COLUMN archived_at TEXT`);
+  }
   return db;
 }
 

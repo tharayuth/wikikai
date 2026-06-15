@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useHash } from "./hooks/useHash";
 import { useServerEvents } from "./hooks/useServerEvents";
 import { useDocumentTitle } from "./hooks/useDocumentTitle";
@@ -15,6 +15,96 @@ import { AccountModal } from "./components/AccountModal";
 import { UsersAdminModal } from "./components/UsersAdminModal";
 import { ProjectFilterModal } from "./components/ProjectFilterModal";
 import { Toast } from "./components/Toast";
+
+const SIDEBAR_W_KEY = "wikikai-sidebar-w";
+let sidebarWidthRestored = false;
+
+function SidebarResizeHandle() {
+  const [dragging, setDragging] = useState(false);
+  const startRef = useRef<{ x: number; width: number } | null>(null);
+
+  // Restore from localStorage on first mount (belt-and-suspenders with
+  // the useLayoutEffect in App — that one runs before paint to avoid flash).
+  useEffect(() => {
+    if (sidebarWidthRestored) return;
+    sidebarWidthRestored = true;
+    try {
+      const raw = localStorage.getItem(SIDEBAR_W_KEY);
+      const n = raw == null ? NaN : Number(raw);
+      if (Number.isFinite(n) && n >= 200 && n <= 600) {
+        document.documentElement.style.setProperty("--sidebar-w", `${n}px`);
+      }
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const start = startRef.current;
+      if (!start) return;
+      const delta = e.clientX - start.x;
+      const next = Math.max(200, Math.min(600, start.width + delta));
+      document.documentElement.style.setProperty(
+        "--sidebar-w",
+        `${Math.round(next)}px`,
+      );
+    };
+    const onUp = () => {
+      setDragging(false);
+      startRef.current = null;
+      const cur = document.documentElement.style.getPropertyValue("--sidebar-w");
+      const n = parseInt(cur.replace("px", ""), 10);
+      if (Number.isFinite(n)) {
+        try {
+          localStorage.setItem(SIDEBAR_W_KEY, String(n));
+        } catch {
+          /* ignore */
+        }
+      }
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [dragging]);
+
+  return (
+    <div
+      className={`sidebar-resize-handle${dragging ? " dragging" : ""}`}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        const sidebar = document.getElementById("sidebar");
+        if (!sidebar) return;
+        startRef.current = {
+          x: e.clientX,
+          width: sidebar.getBoundingClientRect().width,
+        };
+        setDragging(true);
+      }}
+      onDoubleClick={() => {
+        // Reset to default
+        document.documentElement.style.removeProperty("--sidebar-w");
+        try {
+          localStorage.removeItem(SIDEBAR_W_KEY);
+        } catch {
+          /* ignore */
+        }
+      }}
+      title="Drag to resize sidebar · double-click to reset"
+      aria-label="Resize sidebar width"
+    />
+  );
+}
 
 export function App() {
   const { location, navigate } = useHash();
@@ -55,6 +145,15 @@ export function App() {
     } catch {
       /* private mode */
     }
+    try {
+      const raw = localStorage.getItem("wikikai-sidebar-w");
+      const n = raw == null ? NaN : Number(raw);
+      if (Number.isFinite(n) && n >= 200 && n <= 600) {
+        document.documentElement.style.setProperty("--sidebar-w", `${n}px`);
+      }
+    } catch {
+      /* private mode */
+    }
   }, []);
 
   // Auth gate — when the server has WIKIKAI_WEB_AUTH=1 AND the user
@@ -83,6 +182,7 @@ export function App() {
           activePid={location.pid}
           onPick={(kid) => navigate({ kid })}
         />
+        <SidebarResizeHandle />
         <Viewer
           kid={location.kid}
           pid={location.pid}

@@ -20,6 +20,8 @@ export interface PageMetadata {
   created_at: string;
   updated_at: string;
   version: number;
+  /** True when the page has been soft-archived (hidden, not deleted). */
+  archived: boolean;
 }
 
 export interface PageWithStats extends PageMetadata {
@@ -82,6 +84,7 @@ interface PageRow {
   created_at: string;
   updated_at: string;
   version: number;
+  archived_at: string | null;
 }
 
 function parseKeywords(k: string | null): string[] {
@@ -105,6 +108,7 @@ function rowToMetadata(row: PageRow): PageMetadata {
     created_at: row.created_at,
     updated_at: row.updated_at,
     version: row.version,
+    archived: row.archived_at != null,
   };
 }
 
@@ -1940,12 +1944,43 @@ export class PageStore {
    * Lightweight index of all pages — just the fields needed for client-side
    * filtering. Skips file reads so it stays cheap even with many pages.
    */
-  listAllTitles(): { knowledge_id: number; id: number; position: number; title: string }[] {
-    return this.db
+  listAllTitles(): {
+    knowledge_id: number;
+    id: number;
+    position: number;
+    title: string;
+    archived: boolean;
+  }[] {
+    const rows = this.db
       .prepare(
-        `SELECT knowledge_id, id, position, title FROM pages ORDER BY knowledge_id ASC, position ASC, id ASC`,
+        `SELECT knowledge_id, id, position, title, archived_at FROM pages ORDER BY knowledge_id ASC, position ASC, id ASC`,
       )
-      .all() as { knowledge_id: number; id: number; position: number; title: string }[];
+      .all() as {
+      knowledge_id: number;
+      id: number;
+      position: number;
+      title: string;
+      archived_at: string | null;
+    }[];
+    return rows.map((r) => ({
+      knowledge_id: r.knowledge_id,
+      id: r.id,
+      position: r.position,
+      title: r.title,
+      archived: r.archived_at != null,
+    }));
+  }
+
+  /** Soft-archive or restore a page. Never deletes content. Returns the
+   *  new archived state. */
+  setArchived(pageId: number, archived: boolean): { id: number; archived: boolean } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    this.db
+      .prepare(`UPDATE pages SET archived_at = ? WHERE id = ?`)
+      .run(archived ? new Date().toISOString() : null, pageId);
+    emitEvent({ type: "knowledge-changed", knowledge_id: meta.knowledge_id });
+    return { id: pageId, archived };
   }
 
   update(pageId: number, patch: UpdatePageInput): { id: number; version: number; updated_at: string } {
@@ -2785,6 +2820,8 @@ export class PageStore {
       projects?: string[];
       knowledge_id?: number;
       limit?: number;
+      /** Include soft-archived pages in results. Default false. */
+      includeArchived?: boolean;
     } = {},
   ): SearchHit[] {
     const trimmed = query.trim();
@@ -2808,6 +2845,9 @@ export class PageStore {
     const limit = Math.min(opts.limit ?? 50, 200);
     const filters: string[] = [];
     const params: Record<string, unknown> = { q: ftsQuery, limit };
+    if (!opts.includeArchived) {
+      filters.push("p.archived_at IS NULL");
+    }
     if (opts.knowledge_id !== undefined) {
       filters.push("p.knowledge_id = @kid");
       params.kid = opts.knowledge_id;

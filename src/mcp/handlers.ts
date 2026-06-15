@@ -325,6 +325,10 @@ export const SearchSchema = z.object({
     .optional()
     .describe("Optional. Restrict the search to a single knowledge document."),
   limit: z.number().int().min(1).max(200).optional(),
+  include_archived: z
+    .boolean()
+    .optional()
+    .describe("Include soft-archived pages in results. Default false."),
 });
 
 export const AddImageSchema = z.object({
@@ -1906,6 +1910,7 @@ export function buildToolHandlers(
         projects: parsed.projects,
         knowledge_id: parsed.knowledge_id,
         limit: parsed.limit,
+        includeArchived: parsed.include_archived,
       });
       const visible = visibleProjectsForCaller();
       const filtered =

@@ -76,6 +76,8 @@ interface RowProps {
   /** When set, force this row open + only show pages whose id is in the set. */
   pageFilter: Set<number> | null;
   starred: boolean;
+  /** Show only archived pages (true) vs hide archived pages (false). */
+  archivedOnly: boolean;
 }
 
 function SortablePageItem({
@@ -105,7 +107,11 @@ function SortablePageItem({
   };
 
   return (
-    <li ref={setNodeRef} style={style} className="sidebar-page-li">
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`sidebar-page-li${page.archived ? " archived" : ""}`}
+    >
       {!dragDisabled && (
         <button
           type="button"
@@ -155,6 +161,7 @@ function KnowledgeRow({
   onPickKnowledge,
   pageFilter,
   starred,
+  archivedOnly,
 }: RowProps) {
   const [open, setOpen] = useState(isActive);
   const dispatch = useAppDispatch();
@@ -196,14 +203,18 @@ function KnowledgeRow({
     if (isActive) setOpen(true);
   }, [isActive]);
 
-  const effectiveOpen = pageFilter != null ? true : open;
+  // A search page-filter or the archived-only view both force the row open.
+  const effectiveOpen = pageFilter != null || archivedOnly ? true : open;
   const { data } = useGetKnowledgeQuery(item.id, { skip: !effectiveOpen });
   const allPages = data?.pages ?? [];
-  const pages = pageFilter ? allPages.filter((p) => pageFilter.has(p.id)) : allPages;
+  const pages = (pageFilter ? allPages.filter((p) => pageFilter.has(p.id)) : allPages)
+    // archived-only mode shows just the archived pages; normal mode hides them.
+    .filter((p) => (archivedOnly ? p.archived : !p.archived));
 
-  // Drag-drop disabled while a page-filter is active — the rendered list
-  // isn't the full knowledge order, so dropping would scramble positions.
-  const dragDisabled = pageFilter != null || allPages.length < 2;
+  // Drag-drop disabled while a page-filter / archived view is active — the
+  // rendered list isn't the full knowledge order, so dropping would scramble
+  // positions.
+  const dragDisabled = pageFilter != null || archivedOnly || allPages.length < 2;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -365,9 +376,17 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     return { nameToId, idToName };
   }, [projectList]);
   const [starredOnly, setStarredOnly] = useState(false);
+  const [archivedOnly, setArchivedOnly] = useState(false);
   const [starredIds, setStarredIds] = useState<Set<number>>(() =>
     readStarredKnowledgeIds(),
   );
+
+  // Knowledge ids owning ≥1 archived page — drives the archived-only filter.
+  const archivedKids = useMemo(() => {
+    const s = new Set<number>();
+    for (const p of pageTitles) if (p.archived) s.add(p.knowledge_id);
+    return s;
+  }, [pageTitles]);
 
   useEffect(() => {
     const refresh = () => setStarredIds(readStarredKnowledgeIds());
@@ -399,9 +418,22 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
         set.has(it.project || "(no project)"),
       );
     })();
-    if (!starredOnly) return projectFiltered;
-    return projectFiltered.filter((it) => starredIds.has(it.id));
-  }, [items, selectedProjects, urlProjectIds, idToName, starredOnly, starredIds]);
+    const afterStar = starredOnly
+      ? projectFiltered.filter((it) => starredIds.has(it.id))
+      : projectFiltered;
+    // Archived-only view: keep just the topics that own an archived page.
+    if (archivedOnly) return afterStar.filter((it) => archivedKids.has(it.id));
+    return afterStar;
+  }, [
+    items,
+    selectedProjects,
+    urlProjectIds,
+    idToName,
+    starredOnly,
+    starredIds,
+    archivedOnly,
+    archivedKids,
+  ]);
 
   const q = filterText.trim().toLowerCase();
 
@@ -410,6 +442,9 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     if (!q) return null;
     const map = new Map<number, Set<number>>();
     for (const p of pageTitles) {
+      // Match only pages in the active archive state (don't surface archived
+      // pages in a normal filter, and vice-versa).
+      if (archivedOnly ? !p.archived : p.archived) continue;
       if (p.title.toLowerCase().includes(q)) {
         let set = map.get(p.knowledge_id);
         if (!set) {
@@ -420,7 +455,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
       }
     }
     return map;
-  }, [pageTitles, q]);
+  }, [pageTitles, q, archivedOnly]);
 
   const matched = useMemo(() => {
     if (!q) return filtered;
@@ -451,6 +486,30 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
           ×
         </button>
       )}
+      <button
+        type="button"
+        className={`sidebar-archive-filter${archivedOnly ? " active" : ""}`}
+        aria-label={archivedOnly ? "Show active topics" : "Show archived only"}
+        aria-pressed={archivedOnly}
+        title={archivedOnly ? "Showing archived only" : "Show archived only"}
+        onClick={() => setArchivedOnly((v) => !v)}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="15"
+          height="15"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M21 8v13H3V8" />
+          <path d="M1 3h22v5H1z" />
+          <path d="M10 12h4" />
+        </svg>
+      </button>
       <button
         type="button"
         className={`sidebar-star-filter${starredOnly ? " active" : ""}`}
@@ -498,6 +557,8 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
             </>
           ) : filterText ? (
             `No matches for "${filterText}"`
+          ) : archivedOnly ? (
+            "No archived pages"
           ) : starredOnly ? (
             "No starred topics"
           ) : (
@@ -553,6 +614,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
                 onPickKnowledge={onPick}
                 pageFilter={pageFilter}
                 starred={starredIds.has(it.id)}
+                archivedOnly={archivedOnly}
               />
             );
           })}

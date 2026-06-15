@@ -568,6 +568,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         updated_at: meta.updated_at,
         total_lines: r.total_lines,
         content: r.content,
+        archived: meta.archived,
       });
     } catch (e) {
       next(e);
@@ -762,6 +763,24 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Soft-archive / restore a page (keeps content). `{ archived: boolean }`.
+  app.patch("/api/pages/:pid/archive", (req, res, next) => {
+    try {
+      const pid = parseId(req.params.pid);
+      const meta = opts.pages.getMetadata(pid);
+      if (!meta) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      gateEdit(req, meta.knowledge_id);
+      const archived = req.body?.archived !== false; // default true
+      const r = opts.pages.setArchived(pid, archived);
+      res.json(r);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // Prune historical revisions, keep only the current/live version snapshot.
   app.delete("/api/pages/:pid/revisions", (req, res, next) => {
     try {
@@ -922,6 +941,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         projects: parseProjects(req.query.projects),
         knowledge_id: optionalInt(req.query.knowledge_id),
         limit: optionalInt(req.query.limit),
+        include_archived: req.query.include_archived === "1",
       });
       res.json(r);
     } catch (e) {
