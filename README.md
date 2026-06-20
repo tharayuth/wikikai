@@ -93,7 +93,7 @@ URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, ne
 
 **Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `get_example` (templates with `outline_only` + slice modes) · `get_table_row` (one row of a table by `@N` + index) · `find_table_rows` (header-aware filter across a table without reading the whole page)
 
-**Images** — `add_image` (base64 in, content-addressed) · `get_image` (returns inline image content block)
+**Images** — `add_image` (base64 in, **or `path` to import a server-local file with zero base64** when `WIKIKAI_IMAGE_IMPORT_ROOTS` is set; content-addressed) · `get_image` (returns inline image content block)
 
 **Interaction** — `toggle_task` (flip a plain `- [ ]` / `- [x]` task on a page — the same code path the web UI uses when a user clicks a rendered checkbox)
 
@@ -179,6 +179,7 @@ All settings come from env vars (or `.env` in the project root). See [`.env.exam
 | `WIKIKAI_TOKEN` | unset | If set, `/mcp` requires `Authorization: Bearer <token>` |
 | `WIKIKAI_WEB_AUTH` | `0` | If `1`, enables multi-user auth + per-project permissions (requires reverse-proxy for HTTPS + OAuth2) |
 | `WIKIKAI_PROJECT_ACL` | `1` | If `0`, disables project permission enforcement (emergency rollback) |
+| `WIKIKAI_IMAGE_IMPORT_ROOTS` | unset | Comma-separated absolute dirs. When set, `add_image({ path })` reads a local file off the server disk (no base64 → big token saving for same-machine images). Keep roots narrow — `/img` is unauthenticated. |
 
 ## Per-project permissions
 

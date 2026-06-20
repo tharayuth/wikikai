@@ -141,6 +141,10 @@ export function buildApp(opts: BuildAppOptions): Express {
       if (typeof kidRaw === "number" && Number.isInteger(kidRaw) && kidRaw > 0) {
         gateEdit(req, kidRaw);
       }
+      // Only base64 fields are forwarded — `path` is intentionally NOT
+      // accepted here. Local-path import must stay reachable solely via the
+      // token-gated /mcp tool, never the un-auth-gated browser surface,
+      // otherwise it becomes a file-exfiltration (LFI) vector.
       const result = await opts.handlers.add_image({
         data_base64: req.body?.data_base64,
         mime_type: req.body?.mime_type,
@@ -152,7 +156,9 @@ export function buildApp(opts: BuildAppOptions): Express {
       if (
         msg.startsWith("base64 decode failed") ||
         msg.includes("Invalid enum value") ||
-        msg.includes("Required")
+        msg.includes("Required") ||
+        msg.includes("exactly one of") ||
+        msg.includes("is required when sending")
       ) {
         res.status(400).json({ error: msg });
         return;

@@ -244,8 +244,16 @@ const addImageShape = {
   data_base64: z
     .string()
     .min(4)
+    .optional()
     .describe(
-      "Image bytes, base64-encoded. Max ~10MB decoded. Raw bytes only — no `data:` URI prefix.",
+      "Image bytes, base64-encoded. Max ~10MB decoded. Raw bytes only — no `data:` URI prefix. Use only when the file is NOT on the server machine; for a local file prefer `path` (no base64 ⇒ far cheaper). Mutually exclusive with `path`.",
+    ),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Absolute path to an image file ON THE SERVER machine — the server reads it off disk, so no bytes travel through the request (the token-cheap way to import an already-local file). Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS. Mutually exclusive with `data_base64`.",
     ),
   mime_type: z
     .enum([
@@ -256,7 +264,10 @@ const addImageShape = {
       "image/webp",
       "image/svg+xml",
     ])
-    .describe("MIME type of the bytes. Determines the file extension."),
+    .optional()
+    .describe(
+      "MIME type of the bytes. Required with `data_base64`. Optional with `path` (inferred from magic bytes / extension) — pass only to override. Determines the file extension.",
+    ),
   alt: z
     .string()
     .max(500)

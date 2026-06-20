@@ -163,7 +163,9 @@ Pick by intent:
 
 To attach an image to a knowledge page:
 
-1. `add_image({ data_base64, mime_type, alt? })` — uploads bytes. Returns `{ src: "/img/<hash>.<ext>", hash, size_bytes, … }`. Content-addressed → identical bytes dedupe automatically.
+1. `add_image(...)` — registers the image, returns `{ src: "/img/<hash>.<ext>", hash, size_bytes, … }`. Content-addressed → identical bytes dedupe automatically. Two ways to supply the bytes:
+   - **`{ path, alt? }`** — *prefer this when the file is on the same machine as the server.* The server reads the file off its own disk, so **no base64 enters your context** (a same-machine import that would cost tens-of-thousands of tokens as base64 becomes ~free). `path` must be absolute and under a server-configured import root (`WIKIKAI_IMAGE_IMPORT_ROOTS`); mime is inferred. If it's not on the server, download it there first, then import by path.
+   - **`{ data_base64, mime_type, alt? }`** — fallback for files NOT on the server machine. Sends the bytes inline (token-expensive for large images).
 2. Embed the returned `src` in markdown. **Default: plain markdown image** — covers virtually every case:
 
    ```markdown

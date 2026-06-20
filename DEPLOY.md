@@ -130,6 +130,28 @@ For an open internet deployment, protect the UI separately:
 
 Without one of these, anyone who can reach the URL can browse all knowledge — but they cannot write because writes go through MCP, which is token-gated.
 
+### Local-path image import (`WIKIKAI_IMAGE_IMPORT_ROOTS`)
+
+`add_image({ path })` lets the MCP tool import an image by reading it off the
+server's **own disk** instead of receiving base64 — a large token saving when
+the file is already on the server machine (e.g. downloaded there first, then
+imported). It is **disabled unless `WIKIKAI_IMAGE_IMPORT_ROOTS` is set** and is
+reachable **only** through the token-gated `/mcp` tool (the browser `/api/images`
+route never accepts a `path`).
+
+Caveats for networked deployments:
+- **`/img/<hash>` is served without authentication — even when `WIKIKAI_WEB_AUTH=1`.**
+  So any file ingested by path becomes downloadable at a stable same-origin URL
+  by anyone who can reach the server. Imported files are protected at the
+  **network layer only**.
+- Keep import roots **narrow** — a dedicated images/imports directory. Never
+  `$HOME` or `/`; a broad root on a network-reachable host is a
+  file-exfiltration (LFI) vector. The server logs a startup warning if a root
+  resolves to `$HOME` or the filesystem root.
+- Path resolution is sandboxed (realpath + containment check) so symlinks and
+  `../` cannot escape the configured roots, but the root breadth is your
+  responsibility.
+
 ## Healthcheck
 
 Quick liveness probe:

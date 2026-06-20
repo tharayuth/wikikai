@@ -50,6 +50,35 @@ export function mimeForExt(ext: string): string | null {
   return EXT_TO_MIME[ext.toLowerCase()] ?? null;
 }
 
+/** Detect image mime from the leading magic bytes. Returns null for
+ *  formats without a reliable binary signature (e.g. SVG, which is text)
+ *  — callers fall back to the file extension / explicit mime. Used by the
+ *  local-path import branch of `add_image` so a misnamed file is stored
+ *  under its true type. */
+export function sniffImageMime(buf: Buffer): string | null {
+  if (
+    buf.length >= 8 &&
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+    buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (buf.length >= 6 && /^GIF8[79]a$/.test(buf.toString("ascii", 0, 6))) {
+    return "image/gif";
+  }
+  if (
+    buf.length >= 12 &&
+    buf.toString("ascii", 0, 4) === "RIFF" &&
+    buf.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
 /** Parse a /img/<hash>.<ext> path into its hash + ext components. */
 export function parseImageSrc(src: string): { hash: string; ext: string } | null {
   const m = /^\/img\/([a-f0-9]{64})\.([a-z0-9]{2,5})$/i.exec(src);

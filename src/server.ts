@@ -76,6 +76,8 @@ export async function startServer(): Promise<RunningServer> {
     {
       publicBaseUrl: config.publicBaseUrl,
       projectAclEnabled: config.projectAclEnabled,
+      imageImportRoots: config.imageImportRoots,
+      imageImportEnabled: config.imageImportEnabled,
     },
     permissions,
     users,

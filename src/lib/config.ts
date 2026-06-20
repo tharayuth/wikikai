@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +40,15 @@ export interface Config {
   /** When false, `assertProjectAccess` no-ops — restores pre-ACL behaviour.
    *  Defaults to true. Set `WIKIKAI_PROJECT_ACL=0` to disable in prod. */
   projectAclEnabled: boolean;
+  /** Realpath'd directories under which `add_image({ path })` may read a
+   *  local file off the server's own disk (zero base64 through the MCP
+   *  request). EMPTY BY DEFAULT — local-path import is disabled until the
+   *  operator sets `WIKIKAI_IMAGE_IMPORT_ROOTS` (comma-separated absolute
+   *  paths). Keep roots narrow: `/img` is served without auth, so a broad
+   *  root on a network-reachable host is a file-exfiltration risk. */
+  imageImportRoots: string[];
+  /** Convenience flag — true iff `imageImportRoots` is non-empty. */
+  imageImportEnabled: boolean;
 }
 
 /**
@@ -99,6 +109,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     : null;
   const projectAclEnabled = (env.WIKIKAI_PROJECT_ACL ?? "1") !== "0";
 
+  // Local-path image import roots — disabled unless explicitly configured.
+  // Each entry is resolved + realpath'd once here so the handler's
+  // containment check compares symlink-free paths.
+  const home = os.homedir();
+  const imageImportRoots: string[] = [];
+  for (const rawRoot of (env.WIKIKAI_IMAGE_IMPORT_ROOTS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    const abs = path.resolve(rawRoot);
+    let real: string;
+    try {
+      real = fs.realpathSync(abs);
+    } catch {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[wikikai] WIKIKAI_IMAGE_IMPORT_ROOTS: skipping non-existent path ${abs}`,
+      );
+      continue;
+    }
+    if (real === path.parse(real).root || real === home) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[wikikai] WIKIKAI_IMAGE_IMPORT_ROOTS: ${real} is very broad ($HOME or filesystem root) — ` +
+          `narrow it to a dedicated images dir; /img is served without auth.`,
+      );
+    }
+    imageImportRoots.push(real);
+  }
+  const imageImportEnabled = imageImportRoots.length > 0;
+
   return {
     port,
     host,
@@ -112,5 +153,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bootstrapAdmin,
     mcpDefaultUserId,
     projectAclEnabled,
+    imageImportRoots,
+    imageImportEnabled,
   };
 }

@@ -22,10 +22,11 @@ describe("MCP tool handlers", () => {
   let users: UserStore;
   let images: ImageStore;
   let imagesDir: string;
+  let db: ReturnType<typeof openDb>;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aim-tools-"));
-    const db = openDb(":memory:");
+    db = openDb(":memory:");
     knowledge = new KnowledgeStore(db);
     pages = new PageStore(db, tmpDir);
     imagesDir = path.join(tmpDir, "images");
@@ -782,6 +783,132 @@ describe("MCP tool handlers", () => {
       const r = await h.get_image({ src: up.src });
       expect(r.embedded).toBe(true);
       expect(r.data_base64).toBeTruthy();
+    });
+  });
+
+  describe("add_image local-path import", () => {
+    // 1x1 transparent PNG.
+    const PNG_1x1 = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+      "base64",
+    );
+
+    function handlersWithRoots(roots: string[]) {
+      return buildToolHandlers(
+        knowledge,
+        pages,
+        images,
+        new PromptLogStore(db),
+        new ActivityLogStore(db),
+        {
+          publicBaseUrl: "http://test",
+          imageImportRoots: roots,
+          imageImportEnabled: roots.length > 0,
+        },
+        permissions,
+        users,
+        db,
+      );
+    }
+
+    function makeImportDir(prefix = "aim-import-"): string {
+      return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+    }
+
+    it("imports a local file by path with no base64", async () => {
+      const dir = makeImportDir();
+      const file = path.join(dir, "pic.png");
+      fs.writeFileSync(file, PNG_1x1);
+      const hi = handlersWithRoots([dir]);
+      const meta = await hi.add_image({ path: file });
+      expect(meta.mime).toBe("image/png");
+      expect(meta.size_bytes).toBe(PNG_1x1.length);
+      expect(images.get(meta.hash)).not.toBeNull();
+    });
+
+    it("dedups a path import against an identical base64 upload", async () => {
+      const dir = makeImportDir();
+      const file = path.join(dir, "pic.png");
+      fs.writeFileSync(file, PNG_1x1);
+      const hi = handlersWithRoots([dir]);
+      const viaB64 = await h.add_image({
+        data_base64: PNG_1x1.toString("base64"),
+        mime_type: "image/png",
+      });
+      const viaPath = await hi.add_image({ path: file });
+      expect(viaPath.hash).toBe(viaB64.hash);
+    });
+
+    it("is disabled by default when no roots are configured", async () => {
+      const dir = makeImportDir();
+      const file = path.join(dir, "pic.png");
+      fs.writeFileSync(file, PNG_1x1);
+      await expect(h.add_image({ path: file })).rejects.toThrow(/disabled/);
+    });
+
+    it("rejects a path outside the import root", async () => {
+      const dir = makeImportDir();
+      const outside = makeImportDir("aim-outside-");
+      const file = path.join(outside, "secret.png");
+      fs.writeFileSync(file, PNG_1x1);
+      const hi = handlersWithRoots([dir]);
+      await expect(hi.add_image({ path: file })).rejects.toThrow(
+        /outside the allowed/,
+      );
+    });
+
+    it("rejects a symlink that escapes the import root", async () => {
+      const dir = makeImportDir();
+      const outside = makeImportDir("aim-outside-");
+      const target = path.join(outside, "secret.png");
+      fs.writeFileSync(target, PNG_1x1);
+      const link = path.join(dir, "link.png");
+      fs.symlinkSync(target, link);
+      const hi = handlersWithRoots([dir]);
+      await expect(hi.add_image({ path: link })).rejects.toThrow(
+        /outside the allowed/,
+      );
+    });
+
+    it("requires an absolute path", async () => {
+      const dir = makeImportDir();
+      const hi = handlersWithRoots([dir]);
+      await expect(hi.add_image({ path: "relative/pic.png" })).rejects.toThrow(
+        /absolute/,
+      );
+    });
+
+    it("rejects a directory (non-regular file)", async () => {
+      const dir = makeImportDir();
+      const sub = path.join(dir, "sub");
+      fs.mkdirSync(sub);
+      const hi = handlersWithRoots([dir]);
+      await expect(hi.add_image({ path: sub })).rejects.toThrow(
+        /not a regular file/,
+      );
+    });
+
+    it("rejects sending both path and data_base64", async () => {
+      const dir = makeImportDir();
+      const file = path.join(dir, "pic.png");
+      fs.writeFileSync(file, PNG_1x1);
+      const hi = handlersWithRoots([dir]);
+      await expect(
+        hi.add_image({
+          path: file,
+          data_base64: PNG_1x1.toString("base64"),
+          mime_type: "image/png",
+        }),
+      ).rejects.toThrow(/exactly one of/);
+    });
+
+    it("infers mime from magic bytes even when the extension lies", async () => {
+      const dir = makeImportDir();
+      const file = path.join(dir, "actually-png.gif");
+      fs.writeFileSync(file, PNG_1x1);
+      const hi = handlersWithRoots([dir]);
+      const meta = await hi.add_image({ path: file });
+      expect(meta.mime).toBe("image/png");
     });
   });
 

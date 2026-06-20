@@ -1,8 +1,16 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
 import type { PageStore, PageEntry, PageWithStats, EditFeedback } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
-import { cleanupRemovedImageRefs, extractImageHashesSet } from "../store/images.js";
+import {
+  cleanupRemovedImageRefs,
+  extractImageHashesSet,
+  mimeForExt,
+  sniffImageMime,
+  IMAGE_MAX_BYTES,
+} from "../store/images.js";
 import type { Db } from "../store/db.js";
 import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
@@ -26,6 +34,81 @@ export interface HandlerContext {
   publicBaseUrl: string;
   /** Defaults to true. When false, project-level ACL is bypassed. */
   projectAclEnabled?: boolean;
+  /** Realpath'd allowed roots for `add_image({ path })`. Empty/undefined
+   *  ⇒ local-path import disabled (the default). */
+  imageImportRoots?: string[];
+  /** True iff local-path image import is enabled. */
+  imageImportEnabled?: boolean;
+}
+
+/**
+ * Read a local image file off the server's own disk for `add_image({ path })`.
+ * Security: only reachable via the (token-gated) MCP `add_image` tool — the
+ * `/api/images` browser route never forwards `path`. Defends against:
+ *   • disabled-by-default — throws unless the operator set import roots;
+ *   • traversal + symlink escape — `realpath` + `path.relative` containment;
+ *   • non-regular files / oversize — `fstat` on the open fd before reading.
+ * Returns the bytes plus the resolved mime (explicit override > magic-byte
+ * sniff > file extension).
+ */
+function readLocalImageFile(
+  rawPath: string,
+  ctx: HandlerContext,
+  mimeOverride: string | undefined,
+): { buffer: Buffer; mime: string } {
+  const roots = ctx.imageImportRoots ?? [];
+  if (!ctx.imageImportEnabled || roots.length === 0) {
+    throw new Error(
+      "local-path image import is disabled; set WIKIKAI_IMAGE_IMPORT_ROOTS on the server, or send `data_base64` instead",
+    );
+  }
+  if (!path.isAbsolute(rawPath)) {
+    throw new Error("`path` must be an absolute path");
+  }
+  let resolved: string;
+  try {
+    resolved = fs.realpathSync(rawPath);
+  } catch {
+    throw new Error("image file not found");
+  }
+  const contained = roots.some((root) => {
+    const rel = path.relative(root, resolved);
+    return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  });
+  if (!contained) {
+    throw new Error("`path` resolves outside the allowed import root(s)");
+  }
+  // Open once and stat the fd (not the path) so a symlink swap between the
+  // realpath check and the read cannot redirect us.
+  const fd = fs.openSync(resolved, "r");
+  let buffer: Buffer;
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) throw new Error("`path` is not a regular file");
+    if (st.size === 0) throw new Error("image file is empty");
+    if (st.size > IMAGE_MAX_BYTES) {
+      throw new Error(
+        `image too large: ${st.size} bytes (max ${IMAGE_MAX_BYTES})`,
+      );
+    }
+    buffer = Buffer.allocUnsafe(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = fs.readSync(fd, buffer, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  const ext = path.extname(resolved).replace(/^\./, "").toLowerCase();
+  const mime = mimeOverride ?? sniffImageMime(buffer) ?? mimeForExt(ext);
+  if (!mime) {
+    throw new Error(
+      `cannot determine image mime type from ${path.basename(resolved)} — pass mime_type explicitly`,
+    );
+  }
+  return { buffer, mime };
 }
 
 const USER_PROMPT_EDIT_NOTE =
@@ -331,31 +414,59 @@ export const SearchSchema = z.object({
     .describe("Include soft-archived pages in results. Default false."),
 });
 
-export const AddImageSchema = z.object({
-  data_base64: z
-    .string()
-    .min(4)
-    .describe(
-      "The image bytes, base64-encoded. Max ~10MB (decoded). Send raw bytes only — no `data:` URI prefix.",
-    ),
-  mime_type: z
-    .enum([
-      "image/png",
-      "image/jpeg",
-      "image/jpg",
-      "image/gif",
-      "image/webp",
-      "image/svg+xml",
-    ])
-    .describe("MIME type of the bytes. The server picks the file extension from this."),
-  alt: z
-    .string()
-    .max(500)
-    .optional()
-    .describe(
-      "Optional default alt text. Stored with the image record; rendering fences can override per-image.",
-    ),
-});
+export const AddImageSchema = z
+  .object({
+    data_base64: z
+      .string()
+      .min(4)
+      .optional()
+      .describe(
+        "The image bytes, base64-encoded. Max ~10MB (decoded). Send raw bytes only — no `data:` URI prefix. Use this only when the file is NOT on the server machine; for a local file prefer `path` (no base64 ⇒ far cheaper).",
+      ),
+    path: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Absolute path to an image file ON THE SERVER machine. The server reads it off disk — no bytes travel through the request, so this is the token-cheap way to import a file that is already local. Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS. Mutually exclusive with `data_base64`.",
+      ),
+    mime_type: z
+      .enum([
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/gif",
+        "image/webp",
+        "image/svg+xml",
+      ])
+      .optional()
+      .describe(
+        "MIME type of the bytes. Required with `data_base64`. Optional with `path` (inferred from magic bytes / file extension) — pass it only to override.",
+      ),
+    alt: z
+      .string()
+      .max(500)
+      .optional()
+      .describe(
+        "Optional default alt text. Stored with the image record; rendering fences can override per-image.",
+      ),
+  })
+  .superRefine((v, ctx) => {
+    const hasPath = typeof v.path === "string" && v.path.length > 0;
+    const hasB64 = typeof v.data_base64 === "string" && v.data_base64.length > 0;
+    if (hasPath === hasB64) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "supply exactly one of `path` or `data_base64`",
+      });
+    }
+    if (hasB64 && !v.mime_type) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "`mime_type` is required when sending `data_base64`",
+      });
+    }
+  });
 
 export const GetImageSchema = z
   .object({
@@ -2225,14 +2336,25 @@ export function buildToolHandlers(
       // add_image has no knowledge_id binding — images live in a shared
       // pool and are linked by reference from page content. The eventual
       // page edit that embeds the image will enforce per-project edit.
-      const raw = parsed.data_base64.replace(/^data:[^,]+,/, ""); // strip data: URI if present
       let bytes: Buffer;
-      try {
-        bytes = Buffer.from(raw, "base64");
-      } catch (e) {
-        throw new Error(`base64 decode failed: ${(e as Error).message}`);
+      let mime: string;
+      if (parsed.path !== undefined && parsed.path.length > 0) {
+        // Local-path branch: server reads bytes off its own disk so no
+        // base64 ever travels through the MCP request. Gated + sandboxed
+        // in readLocalImageFile.
+        const file = readLocalImageFile(parsed.path, ctx, parsed.mime_type);
+        bytes = file.buffer;
+        mime = file.mime;
+      } else {
+        const raw = parsed.data_base64!.replace(/^data:[^,]+,/, ""); // strip data: URI if present
+        try {
+          bytes = Buffer.from(raw, "base64");
+        } catch (e) {
+          throw new Error(`base64 decode failed: ${(e as Error).message}`);
+        }
+        mime = parsed.mime_type!; // superRefine guarantees presence with base64
       }
-      const meta = images.add(bytes, parsed.mime_type, parsed.alt ?? null);
+      const meta = images.add(bytes, mime, parsed.alt ?? null);
       const base = ctx.publicBaseUrl.replace(/\/$/, "");
       recordActivity({
         action: "upload",
