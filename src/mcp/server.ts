@@ -175,6 +175,12 @@ const readPageShape = {
     .describe(
       "By DEFAULT every `style=\"...\"` attribute inside `html-embed` fence bodies is stripped from the returned `content` — saves 60-70% of an html-embed block's tokens when you're just reading text/structure. Pass `true` only when you genuinely need to see/edit the presentation (recolouring, redesigning layout). No effect outside html-embed bodies.",
     ),
+  absolute_image_urls: z
+    .boolean()
+    .optional()
+    .describe(
+      "When `true`, rewrite every internal `/img/<hash>.<ext>` in the returned `content` to an absolute URL (against the server's public base URL) so images render anywhere that can reach the server — a relative `/img/...` only resolves inside the same-origin web portal. Use when surfacing images to a human or pasting markdown outside the portal. Changes `content`, so `hash` is omitted (don't feed it to `edit_lines`). The absolute URL is also in `images_referenced[].url` regardless of this flag.",
+    ),
 };
 
 const editLinesShape = {

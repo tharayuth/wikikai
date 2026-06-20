@@ -206,7 +206,9 @@ To **view** an image later, use `get_image({ hash })` or `get_image({ src })` �
 
 **Token control — `get_image({ ..., mode })`:** pass `mode: "meta"` to get metadata only (mime, size, dimensions, alt) with **no inline bytes** — the cheapest way to decide *what* an image is before paying for base64. `mode: "full"` (or omitting `mode`) inlines the bytes as today (still capped by `max_bytes`, default ~6MB). The response carries a `mode` field reporting which applied. Reach for `meta` first when you only need to know an image exists / its size; use `full` when you actually need to see the picture.
 
-`read_page` automatically returns an `images_referenced` array covering **both** sources — every `{ src, alt?, caption?, block_id?, via }` where `via` is `"images"` or `"html-embed"`. Use it to pick which image to `get_image` without re-parsing the page yourself.
+`read_page` automatically returns an `images_referenced` array covering **all** surfaces — every `{ src, url, alt?, caption?, block_id?, via }` where `via` is `"images"`, `"html-embed"`, or `"markdown"` (plain `![alt](/img/… "WxH/caption")`, title slot included). Use it to pick which image to `get_image` without re-parsing the page.
+
+**Showing an image to a human / outside the portal — use `url`, not `src`.** `src` is a relative `/img/<hash>` path that only resolves inside the same-origin web portal; pasted into a chat or another app it renders broken. `images_referenced[].url` is the absolute, cross-machine URL (it works from any machine that can reach the server). To get the whole page body with every image reference already absolute, call `read_page({ ..., absolute_image_urls: true })` — note that rewrites `content`, so its `hash` is omitted (don't feed it back to `edit_lines`).
 
 Tutorial doc lives at `/&4` — `get_outline({ knowledge_id: 4 })` + `read_page` to learn by example.
 

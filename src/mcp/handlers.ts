@@ -320,6 +320,12 @@ export const ReadPageSchema = z.object({
     .describe(
       "By DEFAULT every `style=\"...\"` attribute inside `html-embed` fence bodies is stripped from the returned `content` — inline styles bloat token cost (60-70% of a typical card/grid block) and add nothing when you're reading text/structure. Pass `true` when you need to see the presentation (recolouring, redesigning a layout). Only affects html-embed bodies; the rest of the markdown is untouched. Has no effect in `summary` mode (blocks are already collapsed to placeholder lines).",
     ),
+  absolute_image_urls: z
+    .boolean()
+    .optional()
+    .describe(
+      "When `true`, every internal `/img/<hash>.<ext>` reference in the returned `content` is rewritten to an absolute URL against the server's public base URL, so the image renders anywhere that can reach the server (a relative `/img/...` only resolves inside the same-origin web portal). Use when surfacing the page's images to a human or pasting the markdown outside the portal. Note: this changes `content`, so `hash` is omitted — do NOT use the rewritten content for `edit_lines`. The per-image absolute URL is always available in `images_referenced[].url` regardless of this flag.",
+    ),
 });
 
 export const EditLinesSchema = z.object({
@@ -967,9 +973,12 @@ export interface ToolHandlers {
      *  paragraphs, list items, markdown table cells. Pre-parsed so
      *  callers can `get_image(src)` without re-scanning the source
      *  themselves. `via` notes which surface the reference came from.
-     *  Empty array when the page has no images. */
+     *  `url` is the absolute, cross-machine URL (relative `src` only works
+     *  inside the same-origin portal). Empty array when the page has no
+     *  images. */
     images_referenced: {
       src: string;
+      url: string;
       alt?: string;
       caption?: string;
       block_id?: number;
@@ -1227,8 +1236,10 @@ export interface ToolHandlers {
  *  so callers can `get_image({ src })` without re-scanning. */
 function extractImageRefs(
   content: string,
+  base: string,
 ): {
   src: string;
+  url: string;
   alt?: string;
   caption?: string;
   block_id?: number;
@@ -1296,7 +1307,11 @@ function extractImageRefs(
   // outside any fence are also picked up — authors can reference images from
   // paragraphs, list items, or markdown table cells with no wrapper block.
   const INTERNAL = /^\/img\/[a-f0-9]{64}\.[a-z0-9]{2,5}$/i;
-  const mdImgRe = /!\[([^\]]*)\]\((\/img\/[a-f0-9]{64}\.[a-z0-9]{2,5})\)/gi;
+  // Allow the optional markdown title slot — `![alt](/img/x.jpg "WxH / caption")`
+  // — which is how inline images carry sizing or a caption. Without this the
+  // ref was silently dropped (the page's images never reached the caller).
+  const mdImgRe =
+    /!\[([^\]]*)\]\((\/img\/[a-f0-9]{64}\.[a-z0-9]{2,5})(?:\s+"([^"]*)")?\)/gi;
   const htmlImgRe = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
 
   for (const line of lines) {
@@ -1314,7 +1329,12 @@ function extractImageRefs(
         let mm: RegExpExecArray | null;
         mdImgRe.lastIndex = 0;
         while ((mm = mdImgRe.exec(line)) !== null) {
-          refs.push({ src: mm[2], alt: mm[1] || undefined, via: "markdown" });
+          refs.push({
+            src: mm[2],
+            alt: mm[1] || undefined,
+            caption: mm[3] || undefined,
+            via: "markdown",
+          });
         }
         htmlImgRe.lastIndex = 0;
         while ((mm = htmlImgRe.exec(line)) !== null) {
@@ -1337,7 +1357,26 @@ function extractImageRefs(
       }
     }
   }
-  return refs;
+  // Attach an absolute URL to every ref: internal `/img/...` paths resolve
+  // against the server's public base URL so the image renders from any
+  // machine that can reach the server (relative `/img/...` only works inside
+  // the same-origin portal). External URLs (images-fence) pass through.
+  return refs.map((r) => ({
+    ...r,
+    url: /^\//.test(r.src) ? `${base}${r.src}` : r.src,
+  }));
+}
+
+/** Rewrite every internal `/img/<hash>.<ext>` reference in `content` to an
+ *  absolute URL against `base`. Covers all three surfaces at once (markdown
+ *  `![](…)`, `<img src>` in html-embed, and images-fence src) since they all
+ *  contain the literal `/img/<hash>.<ext>`. Runs once on relative source, so
+ *  its own absolute output is never re-rewritten. */
+function absolutizeImgUrls(content: string, base: string): string {
+  return content.replace(
+    /\/img\/([a-f0-9]{64}\.[a-z0-9]{2,5})/gi,
+    `${base}/img/$1`,
+  );
 }
 
 function pageEntryShape(ctx: HandlerContext, p: PageEntry) {
@@ -1811,14 +1850,18 @@ export function buildToolHandlers(
       // Default to summary mode when the caller didn't say — saves
       // tokens on every navigation/probe read. AI workflows that need
       // the full body for editing must explicitly pass `mode: "full"`.
+      const imgBase = ctx.publicBaseUrl.replace(/\/$/, "");
       const mode = parsed.mode ?? "summary";
       if (mode === "summary") {
         const { skeleton, blocks } = pages.summarizePageContent(r.content);
-        const skelLines = skeleton === "" ? 0 : skeleton.split("\n").length;
+        const skelContent = parsed.absolute_image_urls
+          ? absolutizeImgUrls(skeleton, imgBase)
+          : skeleton;
+        const skelLines = skelContent === "" ? 0 : skelContent.split("\n").length;
         return {
           ...baseEnvelope,
           mode: "summary" as const,
-          content: skeleton,
+          content: skelContent,
           total_lines: skelLines,
           source_total_lines: r.total_lines,
           line_start: r.line_start,
@@ -1836,16 +1879,23 @@ export function buildToolHandlers(
               b.source_line_start,
             ),
           })),
-          images_referenced: extractImageRefs(r.content),
+          images_referenced: extractImageRefs(r.content, imgBase),
         };
       }
       // Full mode: strip inline `style="..."` from every html-embed
       // fence body unless the caller opted in to see them. Keeps the
       // common "AI reading to edit text" path cheap.
-      const fullContent = parsed.include_styles
+      const stripped = parsed.include_styles
         ? r.content
         : stripHtmlEmbedStylesInMarkdown(r.content);
-      const wasStripped = fullContent !== r.content;
+      const fullContent = parsed.absolute_image_urls
+        ? absolutizeImgUrls(stripped, imgBase)
+        : stripped;
+      // Any transform that changed the returned content (style-strip OR
+      // absolute-url rewrite) makes it unsafe to write back via
+      // `edit_lines` — omit the hash so a stale/edited body can't be
+      // committed over the source.
+      const contentChanged = fullContent !== r.content;
       return {
         ...baseEnvelope,
         mode: "full" as const,
@@ -1853,14 +1903,10 @@ export function buildToolHandlers(
         total_lines: r.total_lines,
         line_start: r.line_start,
         line_end: r.line_end,
-        // Hash omitted only when stripping actually changed the
-        // returned content — writing the stripped HTML back via
-        // `edit_lines` would wipe the user's inline styles from
-        // source, so we force a re-read with `include_styles: true`
-        // in that case. Pages with no html-embed bodies return hash
-        // normally regardless of the flag.
-        ...(wasStripped ? {} : { hash: r.hash }),
-        images_referenced: extractImageRefs(fullContent),
+        ...(contentChanged ? {} : { hash: r.hash }),
+        // Refs are parsed from the original (relative) source so detection
+        // works and `src` stays relative; `url` carries the absolute form.
+        images_referenced: extractImageRefs(r.content, imgBase),
       };
     },
 

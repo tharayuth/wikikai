@@ -912,6 +912,58 @@ describe("MCP tool handlers", () => {
     });
   });
 
+  describe("read_page image refs + absolute_image_urls", () => {
+    const PNG_B64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+    async function pageWithTitledImage() {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await h.add_image({ data_base64: PNG_B64, mime_type: "image/png" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: `intro\n\n![cmp shot](${img.src} "annotation w=640")\n`,
+      });
+      return { img, p };
+    }
+
+    it("detects a markdown image that uses the title slot (regression)", async () => {
+      const { img, p } = await pageWithTitledImage();
+      const r = await h.read_page({ page_id: p.id, mode: "full" });
+      expect(r.images_referenced).toHaveLength(1);
+      const ref = r.images_referenced[0];
+      expect(ref.src).toBe(img.src);
+      expect(ref.via).toBe("markdown");
+      expect(ref.caption).toBe("annotation w=640");
+    });
+
+    it("images_referenced[].url is absolute even without the flag", async () => {
+      const { img, p } = await pageWithTitledImage();
+      const r = await h.read_page({ page_id: p.id, mode: "full" });
+      expect(r.images_referenced[0].url).toBe(`http://test${img.src}`);
+    });
+
+    it("absolute_image_urls rewrites content and omits hash", async () => {
+      const { img, p } = await pageWithTitledImage();
+      const r = await h.read_page({
+        page_id: p.id,
+        mode: "full",
+        absolute_image_urls: true,
+      });
+      expect(r.content).toContain(`http://test${img.src}`);
+      expect(r.content).not.toMatch(/\]\(\/img\//); // no bare relative ref left
+      expect(r.hash).toBeUndefined();
+    });
+
+    it("default full read keeps relative content + returns hash", async () => {
+      const { img, p } = await pageWithTitledImage();
+      const r = await h.read_page({ page_id: p.id, mode: "full" });
+      expect(r.content).toContain(`(${img.src} "annotation w=640")`);
+      expect(r.content).not.toContain("http://test/img/");
+      expect(r.hash).toBeTruthy();
+    });
+  });
+
   describe("plural table-row aliases (Phase 4)", () => {
     async function makeTable() {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
