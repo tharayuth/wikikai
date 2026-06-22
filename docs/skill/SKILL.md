@@ -35,6 +35,7 @@ Skip WikiKai for: one-shot questions, code-only edits, chit-chat.
 - `delete_page({ page_id })`
 - `list_pages({ knowledge_id })`
 - `reorder_pages({ knowledge_id, order: [pid, pid, ...] })`
+- `move_page_to_knowledge({ page_id, knowledge_id, position? })` — move a page into a DIFFERENT knowledge (keeps id, history, images; appends when `position` omitted). Use `move_page` / `move_page_to` to reorder within one knowledge.
 
 ### Fine-grained edits
 - `read_page({ page_id, line_start?, line_end?, mode? })` — content + `total_lines` + parent knowledge structure. Two modes:

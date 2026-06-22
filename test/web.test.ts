@@ -737,6 +737,54 @@ describe("HTTP routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("POST /api/pages/:pid/move moves a page to another knowledge", async () => {
+    const k1 = knowledge.add({ title: "K1", project: "examples" });
+    const k2 = knowledge.add({ title: "K2", project: "examples" });
+    const p = pages.add({ knowledge_id: k1.id, title: "P", content: "body" });
+    pages.add({ knowledge_id: k2.id, title: "X", content: "" });
+
+    const res = await request(app)
+      .post(`/api/pages/${p.id}/move`)
+      .send({ knowledge_id: k2.id });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      from_knowledge_id: k1.id,
+      to_knowledge_id: k2.id,
+      position: 2,
+    });
+
+    const src = await request(app).get(`/api/knowledge/${k1.id}`);
+    expect(src.body.pages).toHaveLength(0);
+    const dst = await request(app).get(`/api/knowledge/${k2.id}`);
+    expect(dst.body.pages.map((pg: { title: string }) => pg.title)).toEqual([
+      "X",
+      "P",
+    ]);
+  });
+
+  it("POST /api/pages/:pid/move rejects same-knowledge + bad input", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const p = pages.add({ knowledge_id: k.id, title: "P", content: "" });
+
+    const same = await request(app)
+      .post(`/api/pages/${p.id}/move`)
+      .send({ knowledge_id: k.id });
+    expect(same.status).toBe(400);
+
+    const noKid = await request(app).post(`/api/pages/${p.id}/move`).send({});
+    expect(noKid.status).toBe(400);
+
+    const missingTarget = await request(app)
+      .post(`/api/pages/${p.id}/move`)
+      .send({ knowledge_id: 9999 });
+    expect(missingTarget.status).toBe(404);
+
+    const missingPage = await request(app)
+      .post(`/api/pages/9999/move`)
+      .send({ knowledge_id: k.id });
+    expect(missingPage.status).toBe(404);
+  });
+
   it("GET /api/knowledge/:id/outline returns heading tree", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "# T\n\n## A\n\n## B" });

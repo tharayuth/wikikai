@@ -147,6 +147,57 @@ describe("MCP tool handlers", () => {
     });
   });
 
+  describe("move_page_to_knowledge", () => {
+    it("moves a page into another knowledge (append by default)", async () => {
+      const k1 = await h.add_knowledge({ title: "K1", project: "examples" });
+      const k2 = await h.add_knowledge({ title: "K2", project: "examples" });
+      const a = await h.add_page({ knowledge_id: k1.id, title: "A", content: "aa" });
+      const b = await h.add_page({ knowledge_id: k1.id, title: "B", content: "bb" });
+      await h.add_page({ knowledge_id: k2.id, title: "X", content: "xx" });
+
+      const r = await h.move_page_to_knowledge({
+        page_id: a.id,
+        knowledge_id: k2.id,
+      });
+      expect(r.ok).toBe(true);
+      expect(r.from_knowledge_id).toBe(k1.id);
+      expect(r.to_knowledge_id).toBe(k2.id);
+      expect(r.position).toBe(2);
+
+      const src = await h.list_pages({ knowledge_id: k1.id });
+      expect(src.map((p) => p.title)).toEqual(["B"]);
+      const dst = await h.list_pages({ knowledge_id: k2.id });
+      expect(dst.map((p) => p.title)).toEqual(["X", "A"]);
+      // moved page keeps its id and content.
+      expect(b.id).not.toBe(a.id);
+    });
+
+    it("honours an explicit position", async () => {
+      const k1 = await h.add_knowledge({ title: "K1", project: "examples" });
+      const k2 = await h.add_knowledge({ title: "K2", project: "examples" });
+      await h.add_page({ knowledge_id: k2.id, title: "X", content: "" });
+      await h.add_page({ knowledge_id: k2.id, title: "Y", content: "" });
+      const p = await h.add_page({ knowledge_id: k1.id, title: "P", content: "" });
+
+      const r = await h.move_page_to_knowledge({
+        page_id: p.id,
+        knowledge_id: k2.id,
+        position: 1,
+      });
+      expect(r.position).toBe(1);
+      const dst = await h.list_pages({ knowledge_id: k2.id });
+      expect(dst.map((p) => p.title)).toEqual(["P", "X", "Y"]);
+    });
+
+    it("rejects moving into the same knowledge", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "examples" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "" });
+      await expect(
+        h.move_page_to_knowledge({ page_id: p.id, knowledge_id: k.id }),
+      ).rejects.toThrow(/already in/);
+    });
+  });
+
   describe("read_page + edit_lines + edit_section + replace_text", () => {
     it("read_page mode:'full' returns slice + hash + url with line", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });

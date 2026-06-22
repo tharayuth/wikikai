@@ -251,6 +251,82 @@ describe("PageStore", () => {
     });
   });
 
+  describe("moveToKnowledge (cross-knowledge)", () => {
+    let kid2: number;
+    beforeEach(() => {
+      kid2 = knowledge.add({ title: "Doc2", project: "examples" }).id;
+    });
+
+    it("appends to the target by default and compacts the source", () => {
+      const a = pages.add({ knowledge_id: kid, title: "A", content: "aa" });
+      const b = pages.add({ knowledge_id: kid, title: "B", content: "bb" });
+      const c = pages.add({ knowledge_id: kid, title: "C", content: "cc" });
+      const x = pages.add({ knowledge_id: kid2, title: "X", content: "xx" });
+
+      const r = pages.moveToKnowledge(b.id, kid2);
+      expect(r.from_knowledge_id).toBe(kid);
+      expect(r.to_knowledge_id).toBe(kid2);
+      expect(r.position).toBe(2);
+      expect(r.order).toEqual([x.id, b.id]);
+
+      // Source compacted A(1), C(2).
+      expect(pages.list(kid).map((p) => [p.position, p.title])).toEqual([
+        [1, "A"],
+        [2, "C"],
+      ]);
+      // a/c untouched, the moved page now belongs to kid2.
+      expect(pages.getMetadata(a.id)!.knowledge_id).toBe(kid);
+      expect(pages.getMetadata(b.id)!.knowledge_id).toBe(kid2);
+    });
+
+    it("moves the markdown file on disk and preserves content", () => {
+      const p = pages.add({ knowledge_id: kid, title: "P", content: "body" });
+      const oldFp = path.join(tmpDir, String(kid), `${p.id}.md`);
+      expect(fs.existsSync(oldFp)).toBe(true);
+
+      pages.moveToKnowledge(p.id, kid2);
+
+      const newFp = path.join(tmpDir, String(kid2), `${p.id}.md`);
+      expect(fs.existsSync(oldFp)).toBe(false);
+      expect(fs.readFileSync(newFp, "utf8")).toBe("body");
+      expect(pages.get(p.id)!.content).toBe("body");
+    });
+
+    it("honours an explicit 1-based position and shifts target pages", () => {
+      const x = pages.add({ knowledge_id: kid2, title: "X", content: "" });
+      const y = pages.add({ knowledge_id: kid2, title: "Y", content: "" });
+      const p = pages.add({ knowledge_id: kid, title: "P", content: "" });
+
+      const r = pages.moveToKnowledge(p.id, kid2, 2);
+      expect(r.position).toBe(2);
+      expect(r.order).toEqual([x.id, p.id, y.id]);
+    });
+
+    it("keeps the page findable in FTS after the move", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "Unique zebra",
+        content: "needle haystack",
+      });
+      pages.moveToKnowledge(p.id, kid2);
+      const hits = pages.search("zebra");
+      const hit = hits.find((h) => h.page_id === p.id);
+      expect(hit).toBeTruthy();
+      expect(hit!.knowledge_id).toBe(kid2);
+    });
+
+    it("rejects moving into the same knowledge", () => {
+      const p = pages.add({ knowledge_id: kid, title: "P", content: "" });
+      expect(() => pages.moveToKnowledge(p.id, kid)).toThrow(/already in/);
+    });
+
+    it("rejects unknown page or target knowledge", () => {
+      const p = pages.add({ knowledge_id: kid, title: "P", content: "" });
+      expect(() => pages.moveToKnowledge(99999, kid2)).toThrow(/not found/);
+      expect(() => pages.moveToKnowledge(p.id, 99999)).toThrow(/not found/);
+    });
+  });
+
   // ───────── Line ops ─────────
 
   describe("readLines", () => {

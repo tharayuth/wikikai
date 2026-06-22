@@ -659,6 +659,38 @@ export const portalApi = createApi({
         { type: "ActivityLog", id: "LIST" },
       ],
     }),
+    movePageToKnowledge: builder.mutation<
+      {
+        ok: true;
+        from_knowledge_id: number;
+        to_knowledge_id: number;
+        position: number;
+        order: number[];
+      },
+      {
+        page_id: number;
+        from_knowledge_id: number;
+        to_knowledge_id: number;
+        position?: number;
+      }
+    >({
+      query: ({ page_id, to_knowledge_id, position }) => ({
+        url: `pages/${page_id}/move`,
+        method: "POST",
+        body: {
+          knowledge_id: to_knowledge_id,
+          ...(position != null ? { position } : {}),
+        },
+      }),
+      // Both knowledges change (pages list + updated_at), and the page→topic
+      // title map shifts. Invalidate both topics, the title list, and activity.
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Knowledge", id: arg.from_knowledge_id },
+        { type: "Knowledge", id: arg.to_knowledge_id },
+        { type: "Page", id: "TITLES" },
+        { type: "ActivityLog", id: "LIST" },
+      ],
+    }),
   }),
 });
 
@@ -700,4 +732,5 @@ export const {
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
   useReorderPagesMutation,
+  useMovePageToKnowledgeMutation,
 } = portalApi;

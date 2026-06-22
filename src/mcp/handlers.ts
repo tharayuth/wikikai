@@ -303,6 +303,22 @@ export const MovePageToSchema = z.object({
   user_prompt: z.string().max(2000).optional(),
 });
 
+export const MovePageToKnowledgeSchema = z.object({
+  page_id: z.number().int().positive(),
+  knowledge_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Target knowledge id to move the page into"),
+  position: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("1-based slot in the target knowledge; defaults to the end"),
+  user_prompt: z.string().max(2000).optional(),
+});
+
 export const ReadPageSchema = z.object({
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1).optional(),
@@ -808,6 +824,7 @@ export type ToolInputs = {
   reorder_pages: z.infer<typeof ReorderPagesSchema>;
   move_page: z.infer<typeof MovePageSchema>;
   move_page_to: z.infer<typeof MovePageToSchema>;
+  move_page_to_knowledge: z.infer<typeof MovePageToKnowledgeSchema>;
   read_page: z.infer<typeof ReadPageSchema>;
   edit_lines: z.infer<typeof EditLinesSchema>;
   edit_section: z.infer<typeof EditSectionSchema>;
@@ -913,6 +930,15 @@ export interface ToolHandlers {
   reorder_pages(input: ToolInputs["reorder_pages"]): Promise<{ ok: true; order: number[] }>;
   move_page(input: ToolInputs["move_page"]): Promise<{ ok: true; order: number[] }>;
   move_page_to(input: ToolInputs["move_page_to"]): Promise<{ ok: true; order: number[] }>;
+  move_page_to_knowledge(
+    input: ToolInputs["move_page_to_knowledge"],
+  ): Promise<{
+    ok: true;
+    from_knowledge_id: number;
+    to_knowledge_id: number;
+    position: number;
+    order: number[];
+  }>;
 
   read_page(input: ToolInputs["read_page"]): Promise<{
     page_id: number;
@@ -1812,6 +1838,40 @@ export function buildToolHandlers(
       });
       logIf("move_page_to", parsed.user_prompt, r.knowledge_id, parsed.page_id, null);
       return { ok: true, order: r.order };
+    },
+
+    async move_page_to_knowledge(input) {
+      const parsed = MovePageToKnowledgeSchema.parse(input);
+      // Gate both ends: edit access on the page's current project AND on the
+      // target knowledge's project.
+      gateEditByPid(parsed.page_id);
+      const target = knowledge.get(parsed.knowledge_id);
+      gateEditByProject(target?.project);
+      const r = pages.moveToKnowledge(
+        parsed.page_id,
+        parsed.knowledge_id,
+        parsed.position,
+      );
+      recordActivity({
+        action: "reorder",
+        target: "knowledge",
+        knowledge_id: r.to_knowledge_id,
+        page_id: parsed.page_id,
+      });
+      logIf(
+        "move_page_to_knowledge",
+        parsed.user_prompt,
+        r.to_knowledge_id,
+        parsed.page_id,
+        null,
+      );
+      return {
+        ok: true,
+        from_knowledge_id: r.from_knowledge_id,
+        to_knowledge_id: r.to_knowledge_id,
+        position: r.position,
+        order: r.order,
+      };
     },
 
     // ─── line ops ───

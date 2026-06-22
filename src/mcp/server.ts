@@ -159,6 +159,24 @@ const movePageToShape = {
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 };
 
+const movePageToKnowledgeShape = {
+  page_id: z.number().int().positive().describe("Page to move"),
+  knowledge_id: z
+    .number()
+    .int()
+    .positive()
+    .describe("Target knowledge id to move the page into (a DIFFERENT knowledge)"),
+  position: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      "1-based slot in the target knowledge's page list; defaults to the end (append)",
+    ),
+  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+};
+
 const readPageShape = {
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1).optional().describe("1-based; default 1"),
@@ -797,6 +815,20 @@ export function createMcpServer(
       inputSchema: movePageToShape,
     },
     async (input) => jsonContent(await handlers.move_page_to(input)),
+  );
+
+  server.registerTool(
+    "move_page_to_knowledge",
+    {
+      title: "Move a page into another knowledge",
+      description:
+        "Move one page out of its current knowledge and into a DIFFERENT one. The page keeps its id, " +
+        "history, and embedded images; it lands at `position` in the target (1-based) or at the end when " +
+        "omitted. Source pages compact to close the gap. Use `move_page` / `move_page_to` to reorder " +
+        "within a single knowledge.",
+      inputSchema: movePageToKnowledgeShape,
+    },
+    async (input) => jsonContent(await handlers.move_page_to_knowledge(input)),
   );
 
   // ─── Line / section operations ───

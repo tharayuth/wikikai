@@ -123,6 +123,7 @@ function UserGuideEn() {
         <tbody>
           <tr><td>Open a knowledge</td><td>Click an item in the sidebar</td></tr>
           <tr><td>Switch page</td><td>Click a tab above the content</td></tr>
+          <tr><td>Reorder or move a page</td><td>Grab a page's drag handle (⋮⋮, appears on hover in the sidebar) → drag <strong>up/down</strong> to reorder within the topic, or drop it <strong>onto another topic</strong> to move the page there (it appends to that topic's pages). The target topic highlights while you hover it</td></tr>
           <tr><td>Add a knowledge / page</td><td>Hover a <strong>project header</strong> in the sidebar → click the <Kbd>+</Kbd> to create a new knowledge in that project. To add a <strong>page</strong>, click the <code>&amp;N</code> badge (sidebar topic row or topbar) → <Kbd>Add page</Kbd>. Both prompt for a title, then open the new entry</td></tr>
           <tr><td>Filter sidebar by project</td><td>Click the <Kbd>⏷ ทุก project</Kbd> button next to the <strong>WikiKai</strong> logo (top-left of the topbar) → check / uncheck projects. The input at the top of the dialog plus the <Kbd>+ เพิ่ม</Kbd> button registers a brand-new empty project so it shows up in the picker before you've moved any documents into it. 🗑 deletes the project + all its knowledge (typed-confirm required)</td></tr>
           <tr><td>Star important topics</td><td>Click the star button on a sidebar topic, or the star button just before <Kbd>i</Kbd> in the header. Use the star button beside the sidebar filter input to show starred topics only. Stars are saved in this browser localStorage, not shared metadata</td></tr>
@@ -236,6 +237,7 @@ function UserGuideTh() {
         <tbody>
           <tr><td>เลือก knowledge</td><td>คลิกใน sidebar</td></tr>
           <tr><td>สลับ page</td><td>คลิก tab ด้านบนเนื้อหา</td></tr>
+          <tr><td>จัดลำดับ / ย้าย page</td><td>จับ handle ลาก (⋮⋮ โผล่เมื่อ hover ใน sidebar) → ลาก <strong>ขึ้น/ลง</strong> เพื่อจัดลำดับใน topic เดิม หรือวาง <strong>บน topic อื่น</strong> เพื่อย้าย page ไปที่นั่น (ต่อท้าย page ของ topic นั้น). topic เป้าหมายจะ highlight ตอน hover</td></tr>
           <tr><td>เพิ่ม knowledge / page</td><td>เอาเมาส์ชี้ที่ <strong>หัว project</strong> ใน sidebar → คลิก <Kbd>+</Kbd> เพื่อสร้าง knowledge ใหม่ใน project นั้น. ส่วนการเพิ่ม <strong>page</strong> ให้คลิก badge <code>&amp;N</code> (ที่แถว topic ใน sidebar หรือ topbar) → <Kbd>Add page</Kbd>. ทั้งคู่จะถามชื่อก่อน แล้วเปิดรายการใหม่ให้</td></tr>
           <tr><td>กรอง sidebar ตาม project</td><td>คลิกปุ่ม <Kbd>⏷ ทุก project</Kbd> ติดกับโลโก้ <strong>WikiKai</strong> มุมซ้ายบนของ topbar → ติ๊ก / เอาออก. ใน dialog มี input ด้านบน + ปุ่ม <Kbd>+ เพิ่ม</Kbd> สำหรับสร้าง project ว่าง (โผล่ใน picker ทันที — รอย้าย knowledge เข้าไป). ปุ่ม 🗑 ลบ project + knowledge ในนั้นทั้งหมด (ต้องพิมพ์ชื่อยืนยัน)</td></tr>
           <tr><td>Star topic สำคัญ</td><td>คลิกปุ่มดาวบนรายการใน sidebar หรือปุ่มดาวก่อน <Kbd>i</Kbd> ใน header. ปุ่มดาวข้างช่อง filter ใน sidebar ใช้กรองให้เห็นเฉพาะ topic ที่ star ไว้. ค่า star เก็บใน localStorage ของ browser นี้ ไม่ใช่ metadata ที่แชร์กับคนอื่น</td></tr>
@@ -355,6 +357,7 @@ function McpGuideEn() {
           <tr><td><code>delete_page</code></td><td>Delete one page; remaining pages compact their positions automatically</td></tr>
           <tr><td><code>list_pages</code></td><td>List all pages (every field except content)</td></tr>
           <tr><td><code>reorder_pages</code></td><td>Change tab order — pass an array of page_ids as the new order (must be a permutation of all existing pages)</td></tr>
+          <tr><td><code>move_page_to_knowledge</code></td><td>Move a page into a <strong>different</strong> knowledge — keeps its id, history + images; lands at <code>position</code> or the end. (Humans: drag a page's handle onto another topic in the sidebar.)</td></tr>
         </tbody>
       </table>
 
@@ -553,6 +556,7 @@ function McpGuideTh() {
           <tr><td><code>delete_page</code></td><td>ลบ page เดียว (position ของ page อื่นจะ compact ขึ้นเอง)</td></tr>
           <tr><td><code>list_pages</code></td><td>list page ทุก field ยกเว้น content</td></tr>
           <tr><td><code>reorder_pages</code></td><td>เปลี่ยนลำดับ tab — ส่ง array ของ page_id ใน order ใหม่ (permutation)</td></tr>
+          <tr><td><code>move_page_to_knowledge</code></td><td>ย้าย page ไป knowledge <strong>อื่น</strong> — คง id, history + รูป; วางที่ <code>position</code> หรือท้ายสุด. (คน: ลาก handle ของ page ไปวางบน topic อื่นใน sidebar)</td></tr>
         </tbody>
       </table>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useAddKnowledgeMutation,
   useAddPageMutation,
@@ -7,6 +7,7 @@ import {
   useListKnowledgeQuery,
   useListPageTitlesQuery,
   useListProjectsQuery,
+  useMovePageToKnowledgeMutation,
   useRenameProjectMutation,
   useReorderPagesMutation,
   useUpdateKnowledgeMutation,
@@ -27,6 +28,7 @@ import {
   PointerSensor,
   KeyboardSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -78,6 +80,10 @@ interface RowProps {
   starred: boolean;
   /** Show only archived pages (true) vs hide archived pages (false). */
   archivedOnly: boolean;
+  /** Publish this knowledge's full page-id order up to the sidebar drag
+   *  handler (so cross-/within-knowledge drops can compute positions). */
+  registerOrder: (kid: number, order: number[]) => void;
+  unregisterOrder: (kid: number) => void;
 }
 
 function SortablePageItem({
@@ -98,7 +104,11 @@ function SortablePageItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: page.id, disabled: dragDisabled });
+  } = useSortable({
+    id: page.id,
+    disabled: dragDisabled,
+    data: { type: "page", kid, pageId: page.id },
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -116,8 +126,8 @@ function SortablePageItem({
         <button
           type="button"
           className="sidebar-page-handle"
-          aria-label={`Reorder ${page.title}`}
-          title="Drag to reorder"
+          aria-label={`Reorder or move ${page.title}`}
+          title="Drag to reorder, or drop onto another topic to move it there"
           {...attributes}
           {...listeners}
           onClick={(e) => e.preventDefault()}
@@ -162,13 +172,22 @@ function KnowledgeRow({
   pageFilter,
   starred,
   archivedOnly,
+  registerOrder,
+  unregisterOrder,
 }: RowProps) {
   const [open, setOpen] = useState(isActive);
   const dispatch = useAppDispatch();
-  const [reorderPages] = useReorderPagesMutation();
   const [addPage] = useAddPageMutation();
   const [deleteKnowledge] = useDeleteKnowledgeMutation();
   const [updateKnowledge] = useUpdateKnowledgeMutation();
+
+  // Each row is a drop zone — dropping a page onto it moves the page into this
+  // knowledge (appended to the end). Namespaced id avoids clashing with the
+  // numeric page sortable ids.
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `k:${item.id}`,
+    data: { type: "knowledge", kid: item.id },
+  });
 
   const onIdBadgeClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The badge sits inside the row's <a>; stop the click from also
@@ -211,42 +230,30 @@ function KnowledgeRow({
     // archived-only mode shows just the archived pages; normal mode hides them.
     .filter((p) => (archivedOnly ? p.archived : !p.archived));
 
-  // Drag-drop disabled while a page-filter / archived view is active — the
-  // rendered list isn't the full knowledge order, so dropping would scramble
-  // positions.
-  const dragDisabled = pageFilter != null || archivedOnly || allPages.length < 2;
+  // Publish the full page order so the sidebar-level drag handler can compute
+  // reorder permutations and cross-knowledge drop positions. Re-runs only when
+  // the actual id sequence changes (orderKey), not on every render.
+  const orderKey = allPages.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (!effectiveOpen) return;
+    const ids = orderKey ? orderKey.split(",").map(Number) : [];
+    registerOrder(item.id, ids);
+    return () => unregisterOrder(item.id);
+  }, [item.id, orderKey, effectiveOpen, registerOrder, unregisterOrder]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      // Require a small drag distance so plain clicks on the handle don't
-      // trigger a drag-start (and the page link below still gets clicks).
-      activationConstraint: { distance: 4 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = allPages.map((p) => p.id);
-    const oldIdx = ids.indexOf(Number(active.id));
-    const newIdx = ids.indexOf(Number(over.id));
-    if (oldIdx < 0 || newIdx < 0) return;
-    const next = [...ids];
-    next.splice(oldIdx, 1);
-    next.splice(newIdx, 0, Number(active.id));
-    try {
-      await reorderPages({ knowledge_id: item.id, order: next }).unwrap();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reorder";
-      dispatch(showToast(`Reorder failed: ${msg}`));
-    }
-  }
+  // Page drag is disabled while a page-filter / archived view is active — the
+  // rendered list isn't the full knowledge order, so a reorder drop would
+  // scramble positions. A single-page knowledge stays draggable so the page
+  // can be moved OUT to another topic.
+  const dragDisabled = pageFilter != null || archivedOnly;
 
   return (
-    <div className={`sidebar-row has-star-action${isActive ? " active-row" : ""}`}>
+    <div
+      ref={setDropRef}
+      className={`sidebar-row has-star-action${isActive ? " active-row" : ""}${
+        isOver ? " drop-target" : ""
+      }`}
+    >
       <a
         className={`sidebar-item${isActive ? " active" : ""}`}
         href={`/&${item.id}`}
@@ -326,28 +333,22 @@ function KnowledgeRow({
         </svg>
       </button>
       {effectiveOpen && pages.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
+        <SortableContext
+          items={pages.map((p) => p.id)}
+          strategy={verticalListSortingStrategy}
         >
-          <SortableContext
-            items={pages.map((p) => p.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <ul className="sidebar-pages">
-              {pages.map((p) => (
-                <SortablePageItem
-                  key={p.id}
-                  kid={item.id}
-                  page={p}
-                  isActive={isActive && p.id === activePid}
-                  dragDisabled={dragDisabled}
-                />
-              ))}
-            </ul>
-          </SortableContext>
-        </DndContext>
+          <ul className="sidebar-pages">
+            {pages.map((p) => (
+              <SortablePageItem
+                key={p.id}
+                kid={item.id}
+                page={p}
+                isActive={isActive && p.id === activePid}
+                dragDisabled={dragDisabled}
+              />
+            ))}
+          </ul>
+        </SortableContext>
       )}
     </div>
   );
@@ -396,6 +397,94 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
       window.removeEventListener("storage", refresh);
     };
   }, []);
+
+  // ─── Drag-and-drop (sidebar-wide) ───
+  // One DndContext wraps every row so a page can be dragged within its
+  // knowledge (reorder) OR onto another knowledge (move). Each expanded row
+  // publishes its page-id order into this map; the drop handler reads it to
+  // build reorder permutations and resolve drop positions.
+  const dispatch = useAppDispatch();
+  const [reorderPages] = useReorderPagesMutation();
+  const [movePageToKnowledge] = useMovePageToKnowledgeMutation();
+  const ordersRef = useRef<Map<number, number[]>>(new Map());
+  const registerOrder = useCallback((kid: number, order: number[]) => {
+    ordersRef.current.set(kid, order);
+  }, []);
+  const unregisterOrder = useCallback((kid: number) => {
+    ordersRef.current.delete(kid);
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Small drag distance so plain clicks on the handle don't start a drag
+      // (and the page link below still receives clicks).
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+      const activeData = active.data.current as
+        | { type: "page"; kid: number; pageId: number }
+        | undefined;
+      if (!activeData || activeData.type !== "page") return;
+      const pageId = activeData.pageId;
+      const sourceKid = activeData.kid;
+      const overData = over.data.current as
+        | { type: "page"; kid: number; pageId: number }
+        | { type: "knowledge"; kid: number }
+        | undefined;
+      if (!overData) return;
+
+      // Same-knowledge reorder: dropped on a sibling page.
+      if (overData.type === "page" && overData.kid === sourceKid) {
+        if (active.id === over.id) return;
+        const ids = ordersRef.current.get(sourceKid) ?? [];
+        const oldIdx = ids.indexOf(pageId);
+        const newIdx = ids.indexOf(Number(over.id));
+        if (oldIdx < 0 || newIdx < 0) return;
+        const next = [...ids];
+        next.splice(oldIdx, 1);
+        next.splice(newIdx, 0, pageId);
+        try {
+          await reorderPages({ knowledge_id: sourceKid, order: next }).unwrap();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to reorder";
+          dispatch(showToast(`Reorder failed: ${msg}`));
+        }
+        return;
+      }
+
+      // Cross-knowledge move. Target is either the hovered page's knowledge
+      // (insert at that page's slot) or a knowledge row (append to the end).
+      const targetKid = overData.kid;
+      if (targetKid === sourceKid) return;
+      let position: number | undefined;
+      if (overData.type === "page") {
+        const targetIds = ordersRef.current.get(targetKid) ?? [];
+        const overIdx = targetIds.indexOf(Number(over.id));
+        if (overIdx >= 0) position = overIdx + 1;
+      }
+      try {
+        await movePageToKnowledge({
+          page_id: pageId,
+          from_knowledge_id: sourceKid,
+          to_knowledge_id: targetKid,
+          position,
+        }).unwrap();
+        dispatch(showToast({ message: "Page moved", kind: "success" }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to move page";
+        dispatch(showToast({ message: `Move failed: ${msg}`, kind: "error" }));
+      }
+    },
+    [dispatch, reorderPages, movePageToKnowledge],
+  );
 
   const filtered = useMemo(() => {
     const projectFiltered = (() => {
@@ -583,41 +672,49 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   return (
     <aside className="sidebar" id="sidebar">
       {searchBox}
-      {projectGroups.map(([project, list]) => {
-        const containsActive =
-          activeKid != null && list.some((it) => it.id === activeKid);
-        return (
-        <ProjectGroup
-          key={project}
-          project={project}
-          projectId={nameToId.get(project) ?? null}
-          containsActive={containsActive}
-        >
-          {list.map((it) => {
-            // Only narrow pages list when the knowledge appeared *because* a
-            // page matched (i.e. its title / project did not match `q`).
-            const onlyByPageMatch =
-              q !== "" &&
-              !it.title.toLowerCase().includes(q) &&
-              !(it.project ?? "").toLowerCase().includes(q);
-            const pageFilter =
-              onlyByPageMatch ? matchedPagesByKid?.get(it.id) ?? null : null;
-            return (
-              <KnowledgeRow
-                key={it.id}
-                item={it}
-                isActive={it.id === activeKid}
-                activePid={activePid}
-                onPickKnowledge={onPick}
-                pageFilter={pageFilter}
-                starred={starredIds.has(it.id)}
-                archivedOnly={archivedOnly}
-              />
-            );
-          })}
-        </ProjectGroup>
-        );
-      })}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        {projectGroups.map(([project, list]) => {
+          const containsActive =
+            activeKid != null && list.some((it) => it.id === activeKid);
+          return (
+          <ProjectGroup
+            key={project}
+            project={project}
+            projectId={nameToId.get(project) ?? null}
+            containsActive={containsActive}
+          >
+            {list.map((it) => {
+              // Only narrow pages list when the knowledge appeared *because* a
+              // page matched (i.e. its title / project did not match `q`).
+              const onlyByPageMatch =
+                q !== "" &&
+                !it.title.toLowerCase().includes(q) &&
+                !(it.project ?? "").toLowerCase().includes(q);
+              const pageFilter =
+                onlyByPageMatch ? matchedPagesByKid?.get(it.id) ?? null : null;
+              return (
+                <KnowledgeRow
+                  key={it.id}
+                  item={it}
+                  isActive={it.id === activeKid}
+                  activePid={activePid}
+                  onPickKnowledge={onPick}
+                  pageFilter={pageFilter}
+                  starred={starredIds.has(it.id)}
+                  archivedOnly={archivedOnly}
+                  registerOrder={registerOrder}
+                  unregisterOrder={unregisterOrder}
+                />
+              );
+            })}
+          </ProjectGroup>
+          );
+        })}
+      </DndContext>
     </aside>
   );
 }

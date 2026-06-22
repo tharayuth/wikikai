@@ -787,6 +787,53 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Move a page into a DIFFERENT knowledge — powers sidebar drag-and-drop of
+  // a page onto another topic. `position` optional (defaults to the end).
+  app.post("/api/pages/:pid/move", async (req, res, next) => {
+    try {
+      const pid = parseId(req.params.pid);
+      const meta = opts.pages.getMetadata(pid);
+      if (!meta) {
+        res.status(404).json({ error: "page not found" });
+        return;
+      }
+      const targetKid = Number(req.body?.knowledge_id);
+      if (!Number.isInteger(targetKid) || targetKid < 1) {
+        res
+          .status(400)
+          .json({ error: "knowledge_id (positive integer) is required" });
+        return;
+      }
+      if (targetKid === meta.knowledge_id) {
+        res
+          .status(400)
+          .json({ error: "page is already in that knowledge" });
+        return;
+      }
+      if (!opts.knowledge.get(targetKid)) {
+        res.status(404).json({ error: `knowledge #${targetKid} not found` });
+        return;
+      }
+      // Gate edit access on both the source and the destination project.
+      gateEdit(req, meta.knowledge_id);
+      gateEdit(req, targetKid);
+      const position =
+        req.body?.position == null ? undefined : Number(req.body.position);
+      const result = await opts.handlers.move_page_to_knowledge({
+        page_id: pid,
+        knowledge_id: targetKid,
+        position,
+      });
+      res.json(result);
+    } catch (e) {
+      if (isNotFound(e)) {
+        res.status(404).json({ error: (e as Error).message });
+        return;
+      }
+      next(e);
+    }
+  });
+
   // Prune historical revisions, keep only the current/live version snapshot.
   app.delete("/api/pages/:pid/revisions", (req, res, next) => {
     try {

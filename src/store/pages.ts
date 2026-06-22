@@ -2365,6 +2365,96 @@ export class PageStore {
     return { knowledge_id: knowledgeId, order: next };
   }
 
+  /**
+   * Move a page into a *different* knowledge. The markdown file moves on disk
+   * (its name is the page id, which never changes), the source positions
+   * compact, and the page lands at `position` (1-based) in the target —
+   * defaulting to the end. Images are content-addressed + global, so embedded
+   * references survive the move untouched.
+   */
+  moveToKnowledge(
+    pageId: number,
+    targetKnowledgeId: number,
+    position?: number,
+  ): {
+    from_knowledge_id: number;
+    to_knowledge_id: number;
+    position: number;
+    order: number[];
+  } {
+    const meta = this.getMetadata(pageId);
+    if (!meta) throw new Error(`page #${pageId} not found`);
+    const fromKid = meta.knowledge_id;
+    if (targetKnowledgeId === fromKid) {
+      throw new Error(
+        `page #${pageId} is already in knowledge #${targetKnowledgeId} — ` +
+          `use move_page / move_page_to to reorder within a knowledge`,
+      );
+    }
+    const ownerExists = this.db
+      .prepare(`SELECT id FROM knowledge WHERE id = ?`)
+      .get(targetKnowledgeId);
+    if (!ownerExists) {
+      throw new Error(`knowledge #${targetKnowledgeId} not found`);
+    }
+
+    return this.db.transaction(() => {
+      const maxPos = (this.db
+        .prepare(
+          `SELECT COALESCE(MAX(position), 0) AS m FROM pages WHERE knowledge_id = ?`,
+        )
+        .get(targetKnowledgeId) as { m: number }).m;
+
+      let pos = position ?? maxPos + 1;
+      if (pos < 1) pos = 1;
+      if (pos > maxPos + 1) pos = maxPos + 1;
+
+      // Make room in the target if inserting before the end.
+      if (pos <= maxPos) {
+        this.db
+          .prepare(
+            `UPDATE pages SET position = position + 1 WHERE knowledge_id = ? AND position >= ?`,
+          )
+          .run(targetKnowledgeId, pos);
+      }
+
+      // Re-point the row to the new knowledge + slot.
+      this.db
+        .prepare(`UPDATE pages SET knowledge_id = ?, position = ? WHERE id = ?`)
+        .run(targetKnowledgeId, pos, pageId);
+
+      // Compact the gap left behind in the source knowledge.
+      this.db
+        .prepare(
+          `UPDATE pages SET position = position - 1 WHERE knowledge_id = ? AND position > ?`,
+        )
+        .run(fromKid, meta.position);
+
+      // Relocate the markdown file. dirFor() creates the target directory.
+      const oldFp = this.filePath(fromKid, pageId);
+      if (fs.existsSync(oldFp)) {
+        fs.renameSync(oldFp, this.filePath(targetKnowledgeId, pageId));
+      }
+
+      // FTS rowid is the page id and the content is unchanged, so the
+      // pages_fts row needs no update — the knowledge_id it joins to lives in
+      // the `pages` table we just updated.
+
+      // Bump both knowledges so version/updated_at advance and SSE listeners
+      // on either side refresh.
+      this.bumpKnowledge(fromKid);
+      this.bumpKnowledge(targetKnowledgeId, pageId);
+
+      const order = this.list(targetKnowledgeId).map((p) => p.id);
+      return {
+        from_knowledge_id: fromKid,
+        to_knowledge_id: targetKnowledgeId,
+        position: pos,
+        order,
+      };
+    })();
+  }
+
   // ─────────── Line operations ───────────
 
   readLines(pageId: number, lineStart?: number, lineEnd?: number): {

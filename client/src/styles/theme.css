@@ -735,6 +735,12 @@ button.ki-id-badge::after {
 .sidebar-row.has-star-action {
   position: relative;
 }
+/* Highlight a topic while a dragged page hovers it — signals "drop here to
+   move the page into this knowledge". */
+.sidebar-row.drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent) inset;
+}
 .sidebar-item {
   display: flex;
   align-items: center;
