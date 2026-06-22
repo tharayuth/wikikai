@@ -15,25 +15,11 @@ export interface UiState {
   accountOpen: boolean;
   usersAdminOpen: boolean;
   toast: { message: string; kind: ToastKind; ts: number } | null;
-  /** Project names selected for filtering. null = no filter (show all). */
-  selectedProjects: string[] | null;
+  /** Whether the project-filter modal is open. The selection itself lives in
+   *  the URL (`?projects=`), not in Redux — see hooks/useHash.ts. */
   projectFilterOpen: boolean;
   /** Live state of the /api/events SSE channel. */
   sseStatus: SseStatus;
-}
-
-function initialSelectedProjects(): string[] | null {
-  try {
-    const raw = localStorage.getItem("wikikai-selected-projects");
-    if (raw == null) return null;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
-      return parsed;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
 }
 
 function initialTheme(): Theme {
@@ -68,7 +54,6 @@ const initialState: UiState = {
   accountOpen: false,
   usersAdminOpen: false,
   toast: null,
-  selectedProjects: initialSelectedProjects(),
   projectFilterOpen: false,
   sseStatus: "connecting",
 };
@@ -143,21 +128,6 @@ export const uiSlice = createSlice({
     clearToast(state) {
       state.toast = null;
     },
-    setSelectedProjects(state, action: PayloadAction<string[] | null>) {
-      state.selectedProjects = action.payload;
-      try {
-        if (action.payload == null) {
-          localStorage.removeItem("wikikai-selected-projects");
-        } else {
-          localStorage.setItem(
-            "wikikai-selected-projects",
-            JSON.stringify(action.payload),
-          );
-        }
-      } catch {
-        /* ignore */
-      }
-    },
     openProjectFilter(state) {
       state.projectFilterOpen = true;
     },
@@ -185,7 +155,6 @@ export const {
   closeUsersAdmin,
   showToast,
   clearToast,
-  setSelectedProjects,
   openProjectFilter,
   closeProjectFilter,
   setSseStatus,

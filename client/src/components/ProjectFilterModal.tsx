@@ -8,11 +8,8 @@ import {
   useRemoveProjectMutation,
 } from "../store/api";
 import { useAppDispatch, useAppSelector } from "../store";
-import {
-  closeProjectFilter,
-  setSelectedProjects,
-  showToast,
-} from "../store/uiSlice";
+import { closeProjectFilter, showToast } from "../store/uiSlice";
+import { buildProjectsSearch, useHash } from "../hooks/useHash";
 
 const NO_PROJECT_KEY = "(no project)";
 
@@ -24,8 +21,9 @@ interface ProjectRow {
 
 export function ProjectFilterModal() {
   const dispatch = useAppDispatch();
+  const { location, navigate } = useHash();
+  const filter = location.projects;
   const open = useAppSelector((s) => s.ui.projectFilterOpen);
-  const selected = useAppSelector((s) => s.ui.selectedProjects);
   const { data: items = [] } = useListKnowledgeQuery();
   const { data: projectsData } = useListProjectsQuery();
   const [delKnowledge] = useDeleteKnowledgeMutation();
@@ -54,6 +52,57 @@ export function ProjectFilterModal() {
       a.name.localeCompare(b.name, undefined, { numeric: true }),
     );
   }, [projectsData, items]);
+
+  // name <-> id maps from the registry. "(no project)" has no id; it rides the
+  // `none` sentinel in `?projects=` instead.
+  const { nameToId, idToName } = useMemo(() => {
+    const nameToId = new Map<string, number>();
+    const idToName = new Map<number, string>();
+    for (const p of projectsData?.projects ?? []) {
+      if (p.id != null) {
+        nameToId.set(p.name, p.id);
+        idToName.set(p.id, p.name);
+      }
+    }
+    return { nameToId, idToName };
+  }, [projectsData]);
+
+  // The currently-selected project names, derived from the URL `?projects=`.
+  // null = no filter (every project is implicitly selected).
+  const selectedSet = useMemo<Set<string> | null>(() => {
+    if (filter == null) return null;
+    const s = new Set<string>();
+    for (const id of filter.ids) {
+      const n = idToName.get(id);
+      if (n) s.add(n);
+    }
+    if (filter.noProject) s.add(NO_PROJECT_KEY);
+    return s;
+  }, [filter, idToName]);
+
+  // Write a selection to the URL `?projects=`, preserving the open page so the
+  // filter change doesn't navigate away. null names = "All projects" (param
+  // removed); an empty array = "Clear all" (`?projects=`, shows nothing).
+  const applyNames = (names: string[] | null) => {
+    let search: string;
+    if (names == null) {
+      search = "";
+    } else {
+      const tokens = names
+        .map((n) => (n === NO_PROJECT_KEY ? "none" : nameToId.get(n)))
+        .filter((t): t is number | "none" => t != null);
+      search = buildProjectsSearch(tokens);
+    }
+    navigate(
+      {
+        kid: location.kid,
+        pid: location.pid,
+        line: location.line,
+        block: location.block,
+      },
+      { replace: true, search },
+    );
+  };
 
   const onAddProject = async () => {
     const trimmed = newName.trim();
@@ -112,9 +161,9 @@ export function ProjectFilterModal() {
         /* ignore: not registered or already gone */
       }
     }
-    if (selected && selected.includes(name)) {
-      const next = selected.filter((p) => p !== name);
-      dispatch(setSelectedProjects(next.length > 0 ? next : null));
+    if (selectedSet && selectedSet.has(name)) {
+      const next = [...selectedSet].filter((p) => p !== name);
+      applyNames(next.length > 0 ? next : null);
     }
     setDeletingProject(null);
     dispatch(
@@ -146,30 +195,29 @@ export function ProjectFilterModal() {
 
   // Treat null (no filter) as "everything selected".
   const isChecked = (name: string) =>
-    selected == null ? true : selected.includes(name);
+    selectedSet == null ? true : selectedSet.has(name);
 
   const toggle = (name: string) => {
-    if (selected == null) {
-      const next = projects.filter((p) => p.name !== name).map((p) => p.name);
-      dispatch(setSelectedProjects(next));
-      return;
-    }
-    const has = selected.includes(name);
-    const next = has
-      ? selected.filter((p) => p !== name)
-      : [...selected, name];
-    if (next.length === projects.length) {
-      dispatch(setSelectedProjects(null));
+    const all = projects.map((p) => p.name);
+    let next: string[];
+    if (selectedSet == null) {
+      // Currently "all" — unticking one yields everything except it.
+      next = all.filter((n) => n !== name);
     } else {
-      dispatch(setSelectedProjects(next));
+      const base = all.filter((n) => selectedSet.has(n));
+      next = selectedSet.has(name)
+        ? base.filter((n) => n !== name)
+        : [...base, name];
     }
+    // Collapse a full selection back to "All projects" (param removed).
+    applyNames(next.length === all.length ? null : next);
   };
 
-  const selectAll = () => dispatch(setSelectedProjects(null));
-  const clearAll = () => dispatch(setSelectedProjects([]));
+  const selectAll = () => applyNames(null);
+  const clearAll = () => applyNames([]);
 
   const activeCount =
-    selected == null ? projects.length : selected.length;
+    selectedSet == null ? projects.length : selectedSet.size;
 
   const onBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     downOnBackdropRef.current = e.target === e.currentTarget;

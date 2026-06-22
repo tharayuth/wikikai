@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import {
   openAccount,
@@ -12,8 +12,10 @@ import {
   portalApi,
   useGetAuthMeQuery,
   useLazySearchQuery,
+  useListProjectsQuery,
   useLogoutMutation,
 } from "../store/api";
+import { useHash } from "../hooks/useHash";
 import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
 import { SseStatus } from "./SseStatus";
@@ -28,7 +30,9 @@ interface TopbarProps {
 export function Topbar({ searchText, onSearchText, activeKid, activePid }: TopbarProps) {
   const dispatch = useAppDispatch();
   const theme = useAppSelector((s) => s.ui.theme);
-  const selectedProjects = useAppSelector((s) => s.ui.selectedProjects);
+  const { location } = useHash();
+  const urlFilter = location.projects;
+  const { data: projectList } = useListProjectsQuery();
   const [trigger, result] = useLazySearchQuery();
   const [open, setOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(() => {
@@ -40,8 +44,29 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
   });
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  // Resolve the URL `?projects=` filter (ids + "(no project)") into the project
+  // names the search endpoint expects. undefined = no filter (search all).
+  const filterNames = useMemo<string[] | undefined>(() => {
+    if (urlFilter == null) return undefined;
+    const idToName = new Map<number, string>();
+    for (const p of projectList?.projects ?? []) {
+      if (p.id != null) idToName.set(p.id, p.name);
+    }
+    const names: string[] = [];
+    for (const id of urlFilter.ids) {
+      const n = idToName.get(id);
+      if (n) names.push(n);
+    }
+    if (urlFilter.noProject) names.push("(no project)");
+    return names;
+  }, [urlFilter, projectList]);
+
+  // Count of selected projects for the badge label. null filter = "All".
+  const filterCount =
+    urlFilter == null ? null : urlFilter.ids.length + (urlFilter.noProject ? 1 : 0);
+
   // Snapshot of project filter for stable dep in useEffect.
-  const projectsKey = selectedProjects?.join("|") ?? "";
+  const projectsKey = (filterNames ?? []).join("|");
 
   useEffect(() => {
     const q = searchText.trim();
@@ -56,7 +81,7 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
       trigger({
         q,
         limit: 20,
-        projects: isIdLookup ? undefined : selectedProjects ?? undefined,
+        projects: isIdLookup ? undefined : filterNames,
         includeArchived,
       });
       setOpen(true);
@@ -90,17 +115,17 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
         </h1>
         <button
           type="button"
-          className={`brand-filter-btn${selectedProjects ? " active" : ""}`}
+          className={`brand-filter-btn${filterCount != null ? " active" : ""}`}
           onClick={() => dispatch(openProjectFilter())}
           title={
-            selectedProjects
-              ? `Filtering ${selectedProjects.length} project — click to edit`
+            filterCount != null
+              ? `Filtering ${filterCount} project — click to edit`
               : "Pick projects to show / delete projects"
           }
         >
           <span aria-hidden>⏷</span>
           <span className="brand-filter-label">
-            {selectedProjects ? `${selectedProjects.length} project` : "All projects"}
+            {filterCount != null ? `${filterCount} project` : "All projects"}
           </span>
         </button>
       </div>

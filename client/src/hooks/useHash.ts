@@ -1,27 +1,60 @@
 import { useCallback, useEffect, useState } from "react";
 
+/** Parsed `?projects=` menu filter. The query param is the single source of
+ *  truth for which projects the sidebar/search show.
+ *
+ *  - param absent          → `null` (no filter — "All projects")
+ *  - `?projects=`          → `{ ids: [], noProject: false }` (filter active but
+ *                            empty — "Clear all", shows nothing)
+ *  - `?projects=1,2,none`  → `{ ids: [1, 2], noProject: true }`
+ *
+ *  Numeric tokens are project ids (in URL order); the `none` sentinel selects
+ *  the synthetic "(no project)" bucket, which has no registry id. */
+export interface ProjectFilter {
+  ids: number[];
+  noProject: boolean;
+}
+
 export interface HashLocation {
   kid: number | null;
   pid: number | null;
   line: number | null;
   block: number | null;
-  /** Project ids from the `?projects=1,2` query param — restricts the
-   *  sidebar menu to those projects. null = param absent (no filter). */
-  projectIds: number[] | null;
+  /** Parsed `?projects=` filter, or null when the param is absent. */
+  projects: ProjectFilter | null;
 }
 
 const NAV_EVENT = "wikikai-nav";
 
-/** Parse `?projects=1,2` into a list of positive ids. Returns null when the
- *  param is absent or contains no valid id (= "no filter"). */
-export function parseProjectIds(search: string): number[] | null {
+/** Parse `?projects=1,2,none` into a {@link ProjectFilter}. Returns null only
+ *  when the param is entirely absent — a present-but-empty `?projects=` is an
+ *  explicit empty selection (show nothing), distinct from "no filter". */
+export function parseProjectFilter(search: string): ProjectFilter | null {
   const raw = new URLSearchParams(search).get("projects");
   if (raw == null) return null;
-  const ids = raw
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isInteger(n) && n > 0);
-  return ids.length > 0 ? ids : null;
+  let noProject = false;
+  const ids: number[] = [];
+  for (const tok of raw.split(",")) {
+    const t = tok.trim();
+    if (!t) continue;
+    if (t === "none") {
+      noProject = true;
+      continue;
+    }
+    const n = Number(t);
+    if (Number.isInteger(n) && n > 0) ids.push(n);
+  }
+  return { ids, noProject };
+}
+
+/** Build the `?projects=` query string for a set of selected tokens (project
+ *  ids and/or the "none" sentinel). An empty list yields `?projects=` (explicit
+ *  "show nothing"); pass null to clear the param entirely ("All projects"). */
+export function buildProjectsSearch(
+  tokens: (number | "none")[] | null,
+): string {
+  if (tokens == null) return "";
+  return `?projects=${tokens.join(",")}`;
 }
 
 /**
@@ -54,10 +87,10 @@ export function currentQueryString(): string {
  */
 export function parseLocation(): HashLocation {
   if (typeof window === "undefined")
-    return { kid: null, pid: null, line: null, block: null, projectIds: null };
+    return { kid: null, pid: null, line: null, block: null, projects: null };
   const path = window.location.pathname;
   const hash = window.location.hash;
-  const projectIds = parseProjectIds(currentQueryString());
+  const projects = parseProjectFilter(currentQueryString());
 
   // New format: path holds knowledge
   const pathMatch = path.match(/^\/&?(\d+)\/?$/);
@@ -69,7 +102,7 @@ export function parseLocation(): HashLocation {
       pid: hashMatch ? Number(hashMatch[1]) : null,
       line: hashMatch && hashMatch[2] ? Number(hashMatch[2]) : null,
       block: hashMatch && hashMatch[3] ? Number(hashMatch[3]) : null,
-      projectIds,
+      projects,
     };
   }
 
@@ -82,11 +115,11 @@ export function parseLocation(): HashLocation {
         pid: m[2] ? Number(m[2]) : null,
         line: m[3] ? Number(m[3]) : null,
         block: null,
-        projectIds,
+        projects,
       };
     }
   }
-  return { kid: null, pid: null, line: null, block: null, projectIds };
+  return { kid: null, pid: null, line: null, block: null, projects };
 }
 
 /** Render the URL string for a target location (relative, e.g.

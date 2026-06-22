@@ -13,7 +13,7 @@ import {
   type KnowledgeMeta,
   type PageMeta,
 } from "../store/api";
-import { useAppDispatch, useAppSelector } from "../store";
+import { useAppDispatch } from "../store";
 import { navigateTo, useHash } from "../hooks/useHash";
 import { openActionMenu, openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import { showToast } from "../store/uiSlice";
@@ -358,8 +358,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   const { data: pageTitles = [] } = useListPageTitlesQuery();
   const { data: projectList } = useListProjectsQuery();
   const { location } = useHash();
-  const urlProjectIds = location.projectIds;
-  const selectedProjects = useAppSelector((s) => s.ui.selectedProjects);
+  const urlFilter = location.projects;
   const [filterText, setFilterText] = useState("");
 
   // name <-> id maps from the project registry (ids power the sidebar badge
@@ -400,23 +399,21 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
 
   const filtered = useMemo(() => {
     const projectFiltered = (() => {
-      // `?projects=1,2` in the URL wins over the modal filter — it locks the
-      // menu to those project ids. We wait until the registry has loaded
-      // (idToName populated) before applying it, to avoid an empty flash.
-      if (urlProjectIds != null && idToName.size > 0) {
-        const allowed = new Set(
-          urlProjectIds
-            .map((id) => idToName.get(id))
-            .filter((n): n is string => n != null),
-        );
-        return items.filter((it) => allowed.has(it.project || "(no project)"));
-      }
-      if (selectedProjects == null) return items;
-      if (selectedProjects.length === 0) return [];
-      const set = new Set(selectedProjects);
-      return items.filter((it) =>
-        set.has(it.project || "(no project)"),
+      // `?projects=` in the URL is the single source of truth. Absent → no
+      // filter (show all). Present → keep only the selected ids + the
+      // "(no project)" bucket (sentinel `none`); a present-but-empty param is
+      // an explicit empty selection (show nothing).
+      if (urlFilter == null) return items;
+      // Wait until the registry has loaded before resolving ids → names, to
+      // avoid an empty flash when ids are present but the map is still empty.
+      if (urlFilter.ids.length > 0 && idToName.size === 0) return items;
+      const allowed = new Set(
+        urlFilter.ids
+          .map((id) => idToName.get(id))
+          .filter((n): n is string => n != null),
       );
+      if (urlFilter.noProject) allowed.add("(no project)");
+      return items.filter((it) => allowed.has(it.project || "(no project)"));
     })();
     const afterStar = starredOnly
       ? projectFiltered.filter((it) => starredIds.has(it.id))
@@ -426,8 +423,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     return afterStar;
   }, [
     items,
-    selectedProjects,
-    urlProjectIds,
+    urlFilter,
     idToName,
     starredOnly,
     starredIds,
@@ -574,10 +570,11 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   // the natural order in which knowledge appears.
   const projectGroups = (() => {
     const groups = groupByProject(matched);
-    if (urlProjectIds == null) return groups;
+    const orderIds = urlFilter?.ids;
+    if (orderIds == null || orderIds.length === 0) return groups;
     const rank = (name: string) => {
       const id = nameToId.get(name);
-      const i = id != null ? urlProjectIds.indexOf(id) : -1;
+      const i = id != null ? orderIds.indexOf(id) : -1;
       return i < 0 ? Number.MAX_SAFE_INTEGER : i;
     };
     return [...groups].sort((a, b) => rank(a[0]) - rank(b[0]));
