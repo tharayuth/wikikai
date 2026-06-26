@@ -3739,7 +3739,7 @@ button.ki-id-badge::after {
   display: flex;
   align-items: center;
   gap: 4px;
-  white-space: nowrap;
+  flex-wrap: wrap;
 }
 .users-table-token code {
   flex: 1;
@@ -3747,6 +3747,18 @@ button.ki-id-badge::after {
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* When revealed, show the whole token — break across lines instead of
+   clipping at 220px, and take the full cell width so the buttons wrap
+   neatly onto the next line. */
+.users-table-token code.token-full {
+  flex-basis: 100%;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-all;
 }
 .users-table-actions {
   display: flex;

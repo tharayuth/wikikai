@@ -16,6 +16,38 @@ import {
 } from "../store/api";
 
 /**
+ * Copy text to the clipboard, with a fallback for insecure (http) origins.
+ * The portal is commonly served over plain http on a LAN IP, where
+ * `navigator.clipboard` is unavailable — fall back to a hidden textarea +
+ * `execCommand("copy")` so the Copy button still works there.
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy path */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Admin-only user management dialog. Lists every account; lets the
  * current admin add, edit, delete, or rotate the MCP token for any
  * user. The last admin is protected — the API refuses deletes and
@@ -331,6 +363,7 @@ function UserRow({
 }): JSX.Element {
   const [editing, setEditing] = useState(false);
   const [showToken, setShowToken] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [update] = useUpdateAdminUserMutation();
   const [del, { isLoading: deleting }] = useDeleteAdminUserMutation();
   const [regen, { isLoading: regenerating }] = useRegenerateUserMcpTokenMutation();
@@ -358,6 +391,15 @@ function UserRow({
   const masked = token
     ? `${token.slice(0, 4)}${"•".repeat(8)}${token.slice(-4)}`
     : "—";
+
+  const onCopy = () => {
+    if (!token) return;
+    copyText(token).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
 
   return (
     <>
@@ -394,7 +436,10 @@ function UserRow({
             : "never"}
         </td>
         <td className="users-table-token">
-          <code title={showToken ? token : ""}>
+          <code
+            className={showToken ? "token-full" : undefined}
+            title={showToken ? token : ""}
+          >
             {showToken ? token : masked}
           </code>
           <button
@@ -404,6 +449,15 @@ function UserRow({
             disabled={!token}
           >
             {showToken ? "Hide" : "Show"}
+          </button>
+          <button
+            type="button"
+            className="account-btn small"
+            onClick={onCopy}
+            disabled={!token}
+            title="Copy MCP token to clipboard"
+          >
+            {copied ? "Copied!" : "Copy"}
           </button>
           <button
             type="button"
