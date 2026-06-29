@@ -3979,8 +3979,15 @@ button.ki-id-badge::after {
 }
 
 /* ─── Public share viewer (/share/<token>) ─── */
+/* The global `body { overflow: hidden }` locks the viewport for the main
+   app (which scrolls its inner panels). The public viewer isn't inside those
+   panels, so it owns its own full-height scroll container — otherwise touch
+   scrolling is dead on phones/tablets. */
 .public-view {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg);
   color: var(--text);
   display: flex;
@@ -4124,4 +4131,30 @@ button.ki-id-badge::after {
 .share-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Public viewer — phone / small-tablet tuning */
+@media (max-width: 640px) {
+  .public-header {
+    padding: 10px 14px;
+  }
+  .public-title {
+    font-size: 14px;
+  }
+  /* Many tabs shouldn't stack into a tall block — scroll them sideways. */
+  .public-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 12px;
+  }
+  .public-tab {
+    flex: 0 0 auto;
+  }
+  .public-main {
+    padding: 0;
+  }
+  .public-view .markdown-body {
+    padding: 16px 14px 32px;
+  }
 }
