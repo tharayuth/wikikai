@@ -4036,31 +4036,23 @@ button.ki-id-badge::after {
   font-size: 15px;
   flex-shrink: 0;
 }
-.public-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* Page navigation is a dropdown (not a tab strip) — knowledge docs can have
+   dozens of pages, which overflowed the strip, especially on mobile. */
+.public-pagenav {
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
-.public-tab {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-2);
-  padding: 4px 12px;
-  border-radius: 6px;
-  cursor: pointer;
+.public-page-select {
+  width: 100%;
+  max-width: 360px;
   font-size: 13px;
-  white-space: nowrap;
-}
-.public-tab:hover {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--surface-2);
-}
-.public-tab.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  color: var(--text);
+  cursor: pointer;
 }
 .public-main {
   flex: 1;
@@ -4141,15 +4133,11 @@ button.ki-id-badge::after {
   .public-title {
     font-size: 14px;
   }
-  /* Many tabs shouldn't stack into a tall block — scroll them sideways. */
-  .public-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+  .public-pagenav {
     padding: 8px 12px;
   }
-  .public-tab {
-    flex: 0 0 auto;
+  .public-page-select {
+    max-width: none;
   }
   .public-main {
     padding: 0;

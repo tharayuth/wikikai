@@ -150,17 +150,19 @@ export function PublicView({ token }: { token: string }): JSX.Element {
         </button>
       </header>
       {data.pages.length > 1 && (
-        <nav className="public-tabs" aria-label="Pages">
-          {data.pages.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={`public-tab${p.id === activePid ? " active" : ""}`}
-              onClick={() => setActivePid(p.id)}
-            >
-              {p.title}
-            </button>
-          ))}
+        <nav className="public-pagenav" aria-label="Pages">
+          <select
+            className="public-page-select"
+            aria-label="เลือกหน้า"
+            value={activePid ?? ""}
+            onChange={(e) => setActivePid(Number(e.target.value))}
+          >
+            {data.pages.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title}
+              </option>
+            ))}
+          </select>
         </nav>
       )}
       <main className="public-main">
