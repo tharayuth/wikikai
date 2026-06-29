@@ -137,6 +137,7 @@ export function useMermaidCharts(
   deps: ReadonlyArray<unknown>,
   theme: "light" | "dark",
   pageId?: number,
+  opts?: { readOnly?: boolean },
 ): void {
   useEffect(() => {
     const root = containerRef.current;
@@ -270,17 +271,24 @@ export function useMermaidCharts(
     }
 
     // ─── @N block badges → menu (Copy / Edit code) ───
-    const badgeNodes = Array.from(root.querySelectorAll<HTMLButtonElement>("button.block-badge"));
+    // Skipped in read-only mode (public share view): the menu's Copy-content
+    // and Edit/Delete actions hit auth-gated /api/blocks endpoints that an
+    // unauthenticated visitor can't use, so we don't wire them. Mermaid /
+    // chart click-to-open and the image lightbox stay — those use public
+    // routes (/mermaid, /chart, /img).
     const badgeHandlers: { el: HTMLButtonElement; handler: (e: Event) => void }[] = [];
-    for (const btn of badgeNodes) {
-      const id = btn.getAttribute("data-block-id");
-      if (!id) continue;
-      const handler = (e: Event) => {
-        e.stopPropagation(); // don't trigger parent click (chart/mermaid open)
-        openBlockBadgeMenu(btn, id);
-      };
-      btn.addEventListener("click", handler);
-      badgeHandlers.push({ el: btn, handler });
+    if (!opts?.readOnly) {
+      const badgeNodes = Array.from(root.querySelectorAll<HTMLButtonElement>("button.block-badge"));
+      for (const btn of badgeNodes) {
+        const id = btn.getAttribute("data-block-id");
+        if (!id) continue;
+        const handler = (e: Event) => {
+          e.stopPropagation(); // don't trigger parent click (chart/mermaid open)
+          openBlockBadgeMenu(btn, id);
+        };
+        btn.addEventListener("click", handler);
+        badgeHandlers.push({ el: btn, handler });
+      }
     }
 
     return () => {

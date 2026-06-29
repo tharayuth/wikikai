@@ -99,6 +99,11 @@ export function requireAuth(opts: AuthOptions) {
       p === "/api/auth/login" ||
       p === "/api/auth/logout" ||
       p === "/api/auth/me" ||
+      // Public read-only knowledge sharing: the /share/<token> viewer page
+      // and its /api/share/<token> data are gated by the unguessable token
+      // itself, not by a session — bypass the login wall for them.
+      p.startsWith("/share/") ||
+      p.startsWith("/api/share/") ||
       p.startsWith("/assets/") ||
       p.startsWith("/img/") ||
       p === "/favicon-32.png" ||

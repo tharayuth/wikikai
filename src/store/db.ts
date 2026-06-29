@@ -46,6 +46,18 @@ export function openDb(dbPath: string): Db {
     // never deleted.
     db.exec(`ALTER TABLE pages ADD COLUMN archived_at TEXT`);
   }
+  if (!hasColumn(db, "knowledge", "share_token")) {
+    // Public read-only share link. NULL = not shared; non-null = capability
+    // token in the /share/<token> URL.
+    db.exec(`ALTER TABLE knowledge ADD COLUMN share_token TEXT`);
+  }
+  // Unique index lives here (not in schema.sql) so it runs AFTER the column
+  // exists on BOTH fresh DBs (column from CREATE TABLE) and legacy DBs (column
+  // from the ALTER above). NULLs are distinct in SQLite, so un-shared rows
+  // coexist; UNIQUE only guards against token collisions.
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_k_share ON knowledge(share_token)`,
+  );
   return db;
 }
 

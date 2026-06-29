@@ -327,6 +327,128 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // ─── Public share link management (authenticated, edit-gated) ───
+  // A non-null share_token makes a knowledge readable, read-only, without a
+  // login via /share/<token>. Enabling/rotating/disabling requires edit
+  // access to the knowledge's project — same gate as any other mutation.
+  const shareStatus = (token: string | null) => ({
+    shared: !!token,
+    share_token: token,
+    url: token
+      ? `${opts.publicBaseUrl.replace(/\/$/, "")}/share/${token}`
+      : null,
+  });
+
+  app.get("/api/knowledge/:id/share", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      res.json(shareStatus(opts.knowledge.getShareToken(id)));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/api/knowledge/:id/share", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      res.json(shareStatus(opts.knowledge.enableShare(id)));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/api/knowledge/:id/share/rotate", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      res.json(shareStatus(opts.knowledge.rotateShare(id)));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/api/knowledge/:id/share", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      opts.knowledge.disableShare(id);
+      res.json(shareStatus(null));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ─── Public share read endpoints (NO auth — scoped by the token itself) ───
+  // Reachable without a session because the unguessable token IS the
+  // credential. Strictly read-only and strictly scoped to the one knowledge
+  // the token resolves to — a page id from any other document 404s.
+  app.get("/api/share/:token", (req, res, next) => {
+    try {
+      const k = opts.knowledge.findByShareToken(String(req.params.token));
+      if (!k) {
+        res.status(404).json({ error: "share link not found" });
+        return;
+      }
+      const pages = opts.pages.list(k.id).map((p) => ({
+        id: p.id,
+        title: p.title,
+        position: p.position,
+        line_count: p.line_count,
+      }));
+      res.json({
+        knowledge: {
+          id: k.id,
+          title: k.title,
+          project: k.project,
+          updated_at: k.updated_at,
+          version: k.version,
+        },
+        pages,
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get("/api/share/:token/pages/:pid/rendered", async (req, res, next) => {
+    try {
+      const k = opts.knowledge.findByShareToken(String(req.params.token));
+      if (!k) {
+        res.status(404).type("text/html").send("<p>not found</p>");
+        return;
+      }
+      const pid = parseId(req.params.pid);
+      const meta = opts.pages.getMetadata(pid);
+      // Scope guard: the page must belong to the shared knowledge.
+      if (!meta || meta.knowledge_id !== k.id) {
+        res.status(404).type("text/html").send("<p>not found</p>");
+        return;
+      }
+      const html = await renderMarkdown(opts.pages.readLines(pid).content);
+      res.type("text/html").send(html);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // Reorder pages within a knowledge. Body: { order: number[] } — full
   // permutation of every existing page id. Used by the Sidebar's drag-drop UI.
   app.post("/api/knowledge/:id/reorder", async (req, res, next) => {

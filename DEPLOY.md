@@ -130,6 +130,21 @@ For an open internet deployment, protect the UI separately:
 
 Without one of these, anyone who can reach the URL can browse all knowledge — but they cannot write because writes go through MCP, which is token-gated.
 
+### Public share links (`/share/<token>`)
+
+An editor can turn on a per-document **public read-only share link** from the
+`&N` badge menu → "Share…". While enabled, `GET /share/<token>` and its
+`/api/share/<token>` data are reachable **without any login**, even when
+`WIKIKAI_WEB_AUTH=1` — the unguessable 192-bit token is the credential.
+
+- Scope is strict: a token resolves to exactly **one** knowledge, read-only;
+  a page id from any other document 404s. No mutations, no other docs.
+- It exposes that document's content **and its `/img` images** to anyone with
+  the link (the link is a capability — treat it like a secret URL).
+- Revocable: "Regenerate" issues a new token (old link dies instantly); turning
+  sharing off makes the link 404. Enabling/rotating/disabling requires edit
+  access to the document's project.
+
 ### Local-path image import (`WIKIKAI_IMAGE_IMPORT_ROOTS`)
 
 `add_image({ path })` lets the MCP tool import an image by reading it off the

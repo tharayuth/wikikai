@@ -14,6 +14,8 @@ export interface UiState {
   activityLogOpen: boolean;
   accountOpen: boolean;
   usersAdminOpen: boolean;
+  /** Knowledge id whose public-share dialog is open, or null when closed. */
+  shareKnowledgeId: number | null;
   toast: { message: string; kind: ToastKind; ts: number } | null;
   /** Whether the project-filter modal is open. The selection itself lives in
    *  the URL (`?projects=`), not in Redux — see hooks/useHash.ts. */
@@ -53,6 +55,7 @@ const initialState: UiState = {
   activityLogOpen: false,
   accountOpen: false,
   usersAdminOpen: false,
+  shareKnowledgeId: null,
   toast: null,
   projectFilterOpen: false,
   sseStatus: "connecting",
@@ -115,6 +118,12 @@ export const uiSlice = createSlice({
     closeUsersAdmin(state) {
       state.usersAdminOpen = false;
     },
+    openShareModal(state, action: PayloadAction<number>) {
+      state.shareKnowledgeId = action.payload;
+    },
+    closeShareModal(state) {
+      state.shareKnowledgeId = null;
+    },
     showToast(
       state,
       action: PayloadAction<string | { message: string; kind?: ToastKind }>,
@@ -153,6 +162,8 @@ export const {
   closeAccount,
   openUsersAdmin,
   closeUsersAdmin,
+  openShareModal,
+  closeShareModal,
   showToast,
   clearToast,
   openProjectFilter,

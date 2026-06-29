@@ -17,7 +17,7 @@ import {
 import { useAppDispatch } from "../store";
 import { navigateTo, useHash } from "../hooks/useHash";
 import { openActionMenu, openKnowledgeBadgeMenu } from "../lib/badgeMenu";
-import { showToast } from "../store/uiSlice";
+import { openShareModal, showToast } from "../store/uiSlice";
 import {
   readStarredKnowledgeIds,
   STARRED_KNOWLEDGE_EVENT,
@@ -214,6 +214,7 @@ function KnowledgeRow({
       onDeleted: () => {
         if (isActive) navigateTo({ kid: null });
       },
+      onShare: () => dispatch(openShareModal(item.id)),
     });
   };
 

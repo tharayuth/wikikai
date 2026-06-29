@@ -36,6 +36,14 @@ export interface KnowledgeWithPages extends KnowledgeMeta {
   pages: PageMeta[];
 }
 
+/** Public-share state for a knowledge. `share_token`/`url` are non-null only
+ *  while sharing is enabled. Returned by the edit-gated share endpoints. */
+export interface ShareStatus {
+  shared: boolean;
+  share_token: string | null;
+  url: string | null;
+}
+
 export interface PageContent {
   id: number;
   knowledge_id: number;
@@ -160,6 +168,7 @@ export const portalApi = createApi({
     "ActivityLog",
     "Auth",
     "Permissions",
+    "Share",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -432,6 +441,23 @@ export const portalApi = createApi({
         { type: "Projects", id: "LIST" },
         { type: "PromptLog", id: arg.id },
       ],
+    }),
+
+    getShareStatus: builder.query<ShareStatus, number>({
+      query: (id) => `knowledge/${id}/share`,
+      providesTags: (_r, _e, id) => [{ type: "Share", id }],
+    }),
+    enableShare: builder.mutation<ShareStatus, number>({
+      query: (id) => ({ url: `knowledge/${id}/share`, method: "POST" }),
+      invalidatesTags: (_r, _e, id) => [{ type: "Share", id }],
+    }),
+    rotateShare: builder.mutation<ShareStatus, number>({
+      query: (id) => ({ url: `knowledge/${id}/share/rotate`, method: "POST" }),
+      invalidatesTags: (_r, _e, id) => [{ type: "Share", id }],
+    }),
+    disableShare: builder.mutation<ShareStatus, number>({
+      query: (id) => ({ url: `knowledge/${id}/share`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, id) => [{ type: "Share", id }],
     }),
 
     getPage: builder.query<PageContent, number>({
@@ -733,4 +759,8 @@ export const {
   useResizeInlineImageMutation,
   useReorderPagesMutation,
   useMovePageToKnowledgeMutation,
+  useGetShareStatusQuery,
+  useEnableShareMutation,
+  useRotateShareMutation,
+  useDisableShareMutation,
 } = portalApi;

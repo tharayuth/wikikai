@@ -966,4 +966,122 @@ describe("HTTP routes", () => {
       off();
     }
   });
+
+  describe("public share links", () => {
+    function makeDoc() {
+      const k = knowledge.add({ title: "Shared Doc", project: "examples" });
+      const p = pages.add({
+        knowledge_id: k.id,
+        title: "Page 1",
+        content: "# Hello\n\nworld",
+      });
+      return { kid: k.id, pid: p.id };
+    }
+
+    it("enable → public read → rotate → disable lifecycle", async () => {
+      const { kid, pid } = makeDoc();
+
+      // off by default
+      let r = await request(app).get(`/api/knowledge/${kid}/share`);
+      expect(r.status).toBe(200);
+      expect(r.body.shared).toBe(false);
+      expect(r.body.share_token).toBeNull();
+
+      // enable
+      r = await request(app).post(`/api/knowledge/${kid}/share`);
+      expect(r.body.shared).toBe(true);
+      const token = r.body.share_token as string;
+      expect(token).toMatch(/^[a-f0-9]{48}$/);
+      expect(r.body.url).toBe(`http://test/share/${token}`);
+
+      // enable is idempotent — same token
+      r = await request(app).post(`/api/knowledge/${kid}/share`);
+      expect(r.body.share_token).toBe(token);
+
+      // public read — scoped to this doc, no auth
+      r = await request(app).get(`/api/share/${token}`);
+      expect(r.status).toBe(200);
+      expect(r.body.knowledge.id).toBe(kid);
+      expect(r.body.knowledge.title).toBe("Shared Doc");
+      expect(r.body.pages.map((p: { id: number }) => p.id)).toContain(pid);
+
+      // public rendered page
+      r = await request(app).get(`/api/share/${token}/pages/${pid}/rendered`);
+      expect(r.status).toBe(200);
+      expect(r.text).toContain("<h1");
+
+      // rotate → new token, old one dies
+      const rot = await request(app).post(`/api/knowledge/${kid}/share/rotate`);
+      const token2 = rot.body.share_token as string;
+      expect(token2).not.toBe(token);
+      expect((await request(app).get(`/api/share/${token}`)).status).toBe(404);
+      expect((await request(app).get(`/api/share/${token2}`)).status).toBe(200);
+
+      // disable → public link 404s
+      expect(
+        (await request(app).delete(`/api/knowledge/${kid}/share`)).status,
+      ).toBe(200);
+      expect((await request(app).get(`/api/share/${token2}`)).status).toBe(404);
+    });
+
+    it("unknown token → 404", async () => {
+      expect((await request(app).get(`/api/share/deadbeef`)).status).toBe(404);
+    });
+
+    it("a page id from another knowledge is rejected (scope guard)", async () => {
+      const { kid } = makeDoc();
+      const other = knowledge.add({ title: "Other", project: "examples" });
+      const otherPage = pages.add({
+        knowledge_id: other.id,
+        title: "Secret",
+        content: "secret",
+      });
+      const token = (await request(app).post(`/api/knowledge/${kid}/share`))
+        .body.share_token as string;
+      const r = await request(app).get(
+        `/api/share/${token}/pages/${otherPage.id}/rendered`,
+      );
+      expect(r.status).toBe(404);
+    });
+  });
+
+  it("share routes bypass the login wall when web auth is on", async () => {
+    const db = openDb(":memory:");
+    const k2 = new KnowledgeStore(db);
+    const p2 = new PageStore(db, tmpDir);
+    const images = new ImageStore(db, path.join(tmpDir, "sh-img"));
+    const promptLog = new PromptLogStore(db);
+    const activityLog = new ActivityLogStore(db);
+    const users = new UserStore(db);
+    const sessions = new SessionStore(db, users);
+    const permissions = new PermissionStore(db);
+    users.create({
+      email: "admin",
+      password: "pw",
+      display_name: "Admin",
+      is_admin: true,
+    });
+    const handlers = buildToolHandlers(
+      k2, p2, images, promptLog, activityLog,
+      { publicBaseUrl: "http://test" }, permissions, users, db,
+    );
+    const authedApp = buildApp({
+      knowledge: k2, pages: p2, images, promptLog, activityLog,
+      users, sessions, permissions, handlers,
+      publicBaseUrl: "http://test", webAuth: true,
+    });
+
+    const k = k2.add({ title: "Doc", project: "examples" });
+    p2.add({ knowledge_id: k.id, title: "P", content: "hi" });
+    const token = k2.enableShare(k.id);
+
+    // a normal gated route without a session → bounced (401 for /api/*)
+    expect((await request(authedApp).get(`/api/knowledge/${k.id}`)).status).toBe(
+      401,
+    );
+    // the share route is reachable without a session
+    const r = await request(authedApp).get(`/api/share/${token}`);
+    expect(r.status).toBe(200);
+    expect(r.body.knowledge.id).toBe(k.id);
+  });
 });

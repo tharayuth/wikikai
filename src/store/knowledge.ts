@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { Db } from "./db.js";
 import { emitEvent } from "../lib/events.js";
 
@@ -357,6 +358,54 @@ export class KnowledgeStore {
 
   remove(id: number): void {
     this.db.prepare(`DELETE FROM knowledge WHERE id = ?`).run(id);
+    emitEvent({ type: "knowledge-changed" });
+  }
+
+  // ─────────── Public share link ───────────
+
+  /** Current share token for a knowledge, or null when not shared. */
+  getShareToken(id: number): string | null {
+    const row = this.db
+      .prepare(`SELECT share_token FROM knowledge WHERE id = ?`)
+      .get(id) as { share_token: string | null } | undefined;
+    return row?.share_token ?? null;
+  }
+
+  /** Resolve a knowledge by its public share token. Returns null for an
+   *  unknown / disabled token. The single entry point the public,
+   *  unauthenticated /share endpoints use to scope access to one document. */
+  findByShareToken(token: string): KnowledgeMetadata | null {
+    if (!token) return null;
+    const row = this.db
+      .prepare(`SELECT * FROM knowledge WHERE share_token = ?`)
+      .get(token) as Row | undefined;
+    return row ? rowToMetadata(row) : null;
+  }
+
+  /** Enable sharing — generate a token if none exists, else return the
+   *  existing one (idempotent). Returns the active token. */
+  enableShare(id: number): string {
+    const existing = this.getShareToken(id);
+    if (existing) return existing;
+    return this.rotateShare(id);
+  }
+
+  /** Issue a fresh share token, invalidating any previous link. */
+  rotateShare(id: number): string {
+    const token = crypto.randomBytes(24).toString("hex");
+    const r = this.db
+      .prepare(`UPDATE knowledge SET share_token = ? WHERE id = ?`)
+      .run(token, id);
+    if (r.changes === 0) throw new Error(`knowledge #${id} not found`);
+    emitEvent({ type: "knowledge-changed" });
+    return token;
+  }
+
+  /** Disable sharing — clears the token so the public link 404s. */
+  disableShare(id: number): void {
+    this.db
+      .prepare(`UPDATE knowledge SET share_token = NULL WHERE id = ?`)
+      .run(id);
     emitEvent({ type: "knowledge-changed" });
   }
 }

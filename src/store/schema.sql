@@ -27,12 +27,16 @@ CREATE TABLE IF NOT EXISTS knowledge (
   author       TEXT,
   created_at   TEXT    NOT NULL,
   updated_at   TEXT    NOT NULL,
-  version      INTEGER NOT NULL DEFAULT 1  -- bumps when metadata changes
+  version      INTEGER NOT NULL DEFAULT 1,  -- bumps when metadata changes
+  share_token  TEXT                         -- non-null = public read-only share link enabled
 );
 
 CREATE INDEX IF NOT EXISTS idx_k_project ON knowledge(project);
 CREATE INDEX IF NOT EXISTS idx_k_session ON knowledge(session_id);
 CREATE INDEX IF NOT EXISTS idx_k_updated ON knowledge(updated_at);
+-- NOTE: the unique index on share_token (idx_k_share) is created in db.ts,
+-- AFTER the column-add migration runs — a legacy DB that predates the column
+-- would fail this statement here (schema.sql runs before migrations).
 
 -- ───── Pages: chapters within a knowledge ─────
 CREATE TABLE IF NOT EXISTS pages (

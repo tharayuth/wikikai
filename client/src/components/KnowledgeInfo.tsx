@@ -6,7 +6,7 @@ import {
   useUpdateKnowledgeMutation,
 } from "../store/api";
 import { useAppDispatch } from "../store";
-import { showToast } from "../store/uiSlice";
+import { openShareModal, showToast } from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
 import { openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import { navigateTo } from "../hooks/useHash";
@@ -154,9 +154,10 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
                 dispatch(showToast(kind ? { message, kind } : message)),
               onPageAdded: (pid) => navigateTo({ kid: meta.id, pid }),
               onDeleted: () => navigateTo({ kid: null }),
+              onShare: () => dispatch(openShareModal(meta.id)),
             });
           }}
-          title="knowledge actions: copy / edit / delete"
+          title="knowledge actions: copy / edit / share / delete"
         >
           &amp;{meta.id}
         </button>
