@@ -117,6 +117,8 @@ const MENU_ICONS: Record<string, string> = {
   // three connected nodes — share
   share:
     '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+  // price-tag outline — manage knowledge tags
+  tag: '<path d="M20.59 13.41 11 3.83V2H2v9h1.83l9.58 9.59a2 2 0 0 0 2.82 0l5.34-5.34a2 2 0 0 0 0-2.84z"/><circle cx="7" cy="7" r="1.5"/>',
 };
 
 /** Build a stroked SVG icon element, or null when the name is unknown. */
@@ -320,6 +322,9 @@ export function openKnowledgeBadgeMenu(deps: {
   /** When provided, the menu gains a "Share…" item that opens the public
    *  read-only share dialog for this knowledge. */
   onShare?: () => void;
+  /** When provided, the menu gains a "จัดการ tags" item immediately before
+   *  "Edit knowledge name". */
+  onManageTags?: () => void;
 }): void {
   const extraItems: ActionMenuItem[] = [];
   if (deps.addPage) {
@@ -344,6 +349,14 @@ export function openKnowledgeBadgeMenu(deps: {
   if (deps.onShare) {
     const onShare = deps.onShare;
     extraItems.push({ label: "Share…", icon: "share", onSelect: onShare });
+  }
+  if (deps.onManageTags) {
+    const onManageTags = deps.onManageTags;
+    extraItems.push({
+      label: "จัดการ tags",
+      icon: "tag",
+      onSelect: onManageTags,
+    });
   }
   openBadgeMenu({
     extraItems,

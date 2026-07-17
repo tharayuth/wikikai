@@ -6,7 +6,11 @@ import {
   useUpdateKnowledgeMutation,
 } from "../store/api";
 import { useAppDispatch } from "../store";
-import { openShareModal, showToast } from "../store/uiSlice";
+import {
+  openKnowledgeTagsModal,
+  openShareModal,
+  showToast,
+} from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
 import { openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import { navigateTo } from "../hooks/useHash";
@@ -155,9 +159,11 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
               onPageAdded: (pid) => navigateTo({ kid: meta.id, pid }),
               onDeleted: () => navigateTo({ kid: null }),
               onShare: () => dispatch(openShareModal(meta.id)),
+              onManageTags: () =>
+                dispatch(openKnowledgeTagsModal(meta.id)),
             });
           }}
-          title="knowledge actions: copy / edit / share / delete"
+          title="knowledge actions: copy / share / tags / edit / delete"
         >
           &amp;{meta.id}
         </button>

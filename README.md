@@ -105,7 +105,7 @@ Every mutation tool returns the affected entity's URL so the AI can hand a link 
 
 - Theme-aware (light / dark), Sarabun/IBM Plex Sans Thai for Thai content
 - Sidebar grouped by project, with a filter dialog (and **add empty project / move knowledge** workflow)
-- Knowledge tags editable as chips from the info popover, shown on sidebar topics, and matched by the sidebar text filter
+- Knowledge tags editable from the `&N` badge menu's **จัดการ tags** dialog (or the info popover), shown on sidebar topics, and matched by the sidebar text filter
 - FTS-powered search across content / titles / keywords / block ids (`@47` direct lookup)
 - Per-page version dropdown + line-level diff modal + prune-old-revisions
 - Inline editor (CodeMirror 6) with **Add Images** dialog (file picker + drag-drop, context-aware insertion form)

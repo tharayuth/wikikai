@@ -10,16 +10,22 @@ interface Props {
   tags: string[];
   suggestions: string[];
   disabled?: boolean;
+  initiallyEditing?: boolean;
   onSave: (tags: string[]) => Promise<void>;
+  onCancel?: () => void;
+  onSaved?: () => void;
 }
 
 export function KnowledgeTagEditor({
   tags,
   suggestions,
   disabled = false,
+  initiallyEditing = false,
   onSave,
+  onCancel,
+  onSaved,
 }: Props) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initiallyEditing);
   const [draft, setDraft] = useState(() => dedupeKnowledgeTags(tags));
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +75,7 @@ export function KnowledgeTagEditor({
     setInput("");
     setError(null);
     setEditing(false);
+    onCancel?.();
   };
 
   const save = async () => {
@@ -80,6 +87,7 @@ export function KnowledgeTagEditor({
       await onSave(next);
       setInput("");
       setEditing(false);
+      onSaved?.();
     } catch {
       setError("Could not save tags. Please try again.");
     } finally {
@@ -222,4 +230,3 @@ export function KnowledgeTagEditor({
     </div>
   );
 }
-

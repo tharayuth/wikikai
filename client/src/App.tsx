@@ -15,6 +15,7 @@ import { AccountModal } from "./components/AccountModal";
 import { UsersAdminModal } from "./components/UsersAdminModal";
 import { ProjectFilterModal } from "./components/ProjectFilterModal";
 import { ShareModal } from "./components/ShareModal";
+import { KnowledgeTagsModal } from "./components/KnowledgeTagsModal";
 import { Toast } from "./components/Toast";
 
 const SIDEBAR_W_KEY = "wikikai-sidebar-w";
@@ -198,6 +199,7 @@ export function App() {
       <UsersAdminModal />
       <ProjectFilterModal />
       <ShareModal />
+      <KnowledgeTagsModal />
       <Toast />
     </>
   );

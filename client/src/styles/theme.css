@@ -1251,6 +1251,32 @@ button.ki-id-badge::after {
   opacity: .5;
   cursor: not-allowed;
 }
+.knowledge-tags-modal {
+  width: min(560px, 92vw);
+  max-height: 82vh;
+}
+.knowledge-tags-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.knowledge-tags-modal-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.knowledge-tags-modal-hint {
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.knowledge-tags-modal-error {
+  color: var(--red);
+  font-size: 13px;
+}
 .info-popover .prompt-heading {
   display: flex;
   align-items: center;

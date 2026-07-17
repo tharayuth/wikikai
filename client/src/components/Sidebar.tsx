@@ -17,7 +17,11 @@ import {
 import { useAppDispatch } from "../store";
 import { navigateTo, useHash } from "../hooks/useHash";
 import { openActionMenu, openKnowledgeBadgeMenu } from "../lib/badgeMenu";
-import { openShareModal, showToast } from "../store/uiSlice";
+import {
+  openKnowledgeTagsModal,
+  openShareModal,
+  showToast,
+} from "../store/uiSlice";
 import {
   readStarredKnowledgeIds,
   STARRED_KNOWLEDGE_EVENT,
@@ -215,6 +219,7 @@ function KnowledgeRow({
         if (isActive) navigateTo({ kid: null });
       },
       onShare: () => dispatch(openShareModal(item.id)),
+      onManageTags: () => dispatch(openKnowledgeTagsModal(item.id)),
     });
   };
 
@@ -296,7 +301,7 @@ function KnowledgeRow({
               type="button"
               className="id-badge"
               onClick={onIdBadgeClick}
-              title={`&${item.id} actions: copy / edit / delete`}
+              title={`&${item.id} actions: copy / share / tags / edit / delete`}
               aria-label={`Knowledge ${item.id} actions`}
             >
               &amp;{item.id}
