@@ -22,7 +22,7 @@ Skip WikiKai for: one-shot questions, code-only edits, chit-chat.
 
 ### Knowledge (whole documents)
 - `add_knowledge({ title, project?, session_id?, user_prompt?, tokens_used?, tags?, first_page? })` — create. Returns `{ id, url }`.
-- `edit_knowledge({ id, ...metadata })` — update metadata only (no content).
+- `edit_knowledge({ id, ...metadata })` — update metadata only (no content), including replacing the knowledge's `tags` array.
 - `list_knowledge({ project?, tag?, session_id?, search? })` — metadata-only listing.
 - `get_knowledge({ id, include_pages? })` — meta + page list with line counts.
 - `delete_knowledge({ id })` — cascades to pages.
@@ -87,7 +87,7 @@ Non-admin users authenticated by their personal MCP token (`mcp_token`) only see
 2. **Create with first_page** to save a round-trip:
    ```
    add_knowledge({
-     title, project, session_id, user_prompt, tokens_used,
+     title, project, tags, session_id, user_prompt, tokens_used,
      first_page: { title, content }
    })
    ```
@@ -122,6 +122,7 @@ Returns hits with `url`, `line`, `snippet`, `page_title`, `knowledge_title`. Ope
 | `outline_only:true` before `read_page` | 10× cheaper |
 | One major H1/H2 per page | Tab navigation works naturally |
 | Use `project` to group | Sidebar groups by project |
+| Use `tags` to classify across projects | The portal edits them at **i → tags** and its sidebar filter matches tag text |
 | Star important knowledge in the web portal | Browser-local preference; useful for filtering the sidebar without changing shared metadata |
 
 ## Content fences (use them — they render rich)

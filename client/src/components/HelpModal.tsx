@@ -126,6 +126,7 @@ function UserGuideEn() {
           <tr><td>Reorder or move a page</td><td>Grab a page's drag handle (⋮⋮, appears on hover in the sidebar) → drag <strong>up/down</strong> to reorder within the topic, or drop it <strong>onto another topic</strong> to move the page there (it appends to that topic's pages). The target topic highlights while you hover it</td></tr>
           <tr><td>Add a knowledge / page</td><td>Hover a <strong>project header</strong> in the sidebar → click the <Kbd>+</Kbd> to create a new knowledge in that project. To add a <strong>page</strong>, click the <code>&amp;N</code> badge (sidebar topic row or topbar) → <Kbd>Add page</Kbd>. Both prompt for a title, then open the new entry</td></tr>
           <tr><td>Filter sidebar by project</td><td>Click the <Kbd>⏷ ทุก project</Kbd> button next to the <strong>WikiKai</strong> logo (top-left of the topbar) → check / uncheck projects. The input at the top of the dialog plus the <Kbd>+ เพิ่ม</Kbd> button registers a brand-new empty project so it shows up in the picker before you've moved any documents into it. 🗑 deletes the project + all its knowledge (typed-confirm required)</td></tr>
+          <tr><td>Add or edit knowledge tags</td><td>Open the info popover (<Kbd>i</Kbd>) → use the <strong>tags</strong> row. Type a tag and press Enter (or paste comma-separated tags), choose an existing suggestion, and remove a tag with <Kbd>×</Kbd>. Tags appear as chips in the sidebar; the sidebar filter matches tag text too. Limit: 20 tags per knowledge, 60 characters each</td></tr>
           <tr><td>Star important topics</td><td>Click the star button on a sidebar topic, or the star button just before <Kbd>i</Kbd> in the header. Use the star button beside the sidebar filter input to show starred topics only. Stars are saved in this browser localStorage, not shared metadata</td></tr>
           <tr><td>Move knowledge to a different project</td><td>Open the info popover (<Kbd>i</Kbd>), click the <strong>project</strong> row → inline editor with autocomplete. Type a known project or any new name; Enter saves, Esc cancels. Empty value detaches the knowledge from any project</td></tr>
           <tr><td>Show info (session, tokens, prompt)</td><td>Click the <Kbd>i</Kbd> button left of the title</td></tr>
@@ -241,6 +242,7 @@ function UserGuideTh() {
           <tr><td>จัดลำดับ / ย้าย page</td><td>จับ handle ลาก (⋮⋮ โผล่เมื่อ hover ใน sidebar) → ลาก <strong>ขึ้น/ลง</strong> เพื่อจัดลำดับใน topic เดิม หรือวาง <strong>บน topic อื่น</strong> เพื่อย้าย page ไปที่นั่น (ต่อท้าย page ของ topic นั้น). topic เป้าหมายจะ highlight ตอน hover</td></tr>
           <tr><td>เพิ่ม knowledge / page</td><td>เอาเมาส์ชี้ที่ <strong>หัว project</strong> ใน sidebar → คลิก <Kbd>+</Kbd> เพื่อสร้าง knowledge ใหม่ใน project นั้น. ส่วนการเพิ่ม <strong>page</strong> ให้คลิก badge <code>&amp;N</code> (ที่แถว topic ใน sidebar หรือ topbar) → <Kbd>Add page</Kbd>. ทั้งคู่จะถามชื่อก่อน แล้วเปิดรายการใหม่ให้</td></tr>
           <tr><td>กรอง sidebar ตาม project</td><td>คลิกปุ่ม <Kbd>⏷ ทุก project</Kbd> ติดกับโลโก้ <strong>WikiKai</strong> มุมซ้ายบนของ topbar → ติ๊ก / เอาออก. ใน dialog มี input ด้านบน + ปุ่ม <Kbd>+ เพิ่ม</Kbd> สำหรับสร้าง project ว่าง (โผล่ใน picker ทันที — รอย้าย knowledge เข้าไป). ปุ่ม 🗑 ลบ project + knowledge ในนั้นทั้งหมด (ต้องพิมพ์ชื่อยืนยัน)</td></tr>
+          <tr><td>เพิ่ม / แก้ tags ของ knowledge</td><td>เปิด info popover (<Kbd>i</Kbd>) → แถว <strong>tags</strong>. พิมพ์ tag แล้วกด Enter (หรือวางหลาย tag คั่นด้วย comma), เลือก suggestion จาก tag ที่เคยใช้ และกด <Kbd>×</Kbd> เพื่อลบ. Tags แสดงเป็น chips ใน sidebar และช่อง filter ของ sidebar ค้นด้วยชื่อ tag ได้. จำกัด 20 tags ต่อ knowledge, tag ละไม่เกิน 60 ตัวอักษร</td></tr>
           <tr><td>Star topic สำคัญ</td><td>คลิกปุ่มดาวบนรายการใน sidebar หรือปุ่มดาวก่อน <Kbd>i</Kbd> ใน header. ปุ่มดาวข้างช่อง filter ใน sidebar ใช้กรองให้เห็นเฉพาะ topic ที่ star ไว้. ค่า star เก็บใน localStorage ของ browser นี้ ไม่ใช่ metadata ที่แชร์กับคนอื่น</td></tr>
           <tr><td>ย้าย knowledge ไปอีก project</td><td>เปิด info popover (<Kbd>i</Kbd>) → คลิกแถว <strong>project</strong> → ช่อง input พร้อม autocomplete project ที่มี. พิมพ์ชื่อ project เดิม หรือชื่อใหม่ก็ได้, Enter = บันทึก, Esc = ยกเลิก. เว้นว่าง = ถอด project ออก</td></tr>
           <tr><td>ดูข้อมูล (session, tokens, prompt)</td><td>คลิกปุ่ม <Kbd>i</Kbd> ด้านซ้ายของ title</td></tr>
@@ -340,7 +342,7 @@ function McpGuideEn() {
       <table>
         <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>add_knowledge</code></td><td>Create a new document. Accepts title + project + session_id + user_prompt + tokens_used + optional first_page. Returns <code>{`{ id, url }`}</code></td></tr>
+          <tr><td><code>add_knowledge</code></td><td>Create a new document. Accepts title + project + tags + session_id + user_prompt + tokens_used + optional first_page. Returns <code>{`{ id, url }`}</code></td></tr>
           <tr><td><code>edit_knowledge</code></td><td>Update metadata (title / project / tags / session_id / user_prompt / tokens_used) — content is unchanged</td></tr>
           <tr><td><code>list_knowledge</code></td><td>List metadata only (filterable by project / tag / session_id / search) — content is not returned, saving tokens</td></tr>
           <tr><td><code>get_knowledge</code></td><td>Return metadata + page list (with line counts) — useful for discovering what pages exist</td></tr>
@@ -428,7 +430,7 @@ function McpGuideEn() {
         <li><strong>user_prompt</strong> — the user's verbatim message that triggered the change. Accepted by <em>every</em> mutation tool (add_knowledge / add_page / edit_page / append_page / edit_lines / edit_section / replace_text / edit_knowledge). When provided, the server appends a row to the <strong>prompt log</strong> linked to the knowledge + (optionally) page. Capped at 500 chars on insert. Read back with <code>get_prompt_log</code>; the info popover shows the same timeline.</li>
         <li><strong>tokens_used</strong> — optional, total tokens the client consumed (input + output) — surfaced in the info popover for cost tracking</li>
         <li><strong>project</strong> — group key (e.g. repo name) used to group entries in the sidebar</li>
-        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags filter knowledge entries; keywords add weight to FTS search on a page</li>
+        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags classify knowledge entries and can be edited from the portal's <Kbd>i</Kbd> popover; keywords add weight to FTS search on a page</li>
       </ul>
 
       <h3>Block-choice guidance — pick a prepared block FIRST</h3>
@@ -539,7 +541,7 @@ function McpGuideTh() {
       <table>
         <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
         <tbody>
-          <tr><td><code>add_knowledge</code></td><td>สร้างเอกสารใหม่. รับ title + project + session_id + user_prompt + tokens_used + first_page (optional). คืน <code>{`{ id, url }`}</code></td></tr>
+          <tr><td><code>add_knowledge</code></td><td>สร้างเอกสารใหม่. รับ title + project + tags + session_id + user_prompt + tokens_used + first_page (optional). คืน <code>{`{ id, url }`}</code></td></tr>
           <tr><td><code>edit_knowledge</code></td><td>แก้ metadata (title/project/tags/session_id/user_prompt/tokens_used) — ไม่แตะ content</td></tr>
           <tr><td><code>list_knowledge</code></td><td>list metadata เท่านั้น (กรอง project/tag/session_id/search) — ไม่ส่ง content เพื่อประหยัด token</td></tr>
           <tr><td><code>get_knowledge</code></td><td>คืน metadata + page list (line count ต่อ page) — ใช้รู้ว่ามี page อะไรบ้าง</td></tr>
@@ -627,7 +629,7 @@ function McpGuideTh() {
         <li><strong>user_prompt</strong> — ข้อความผู้ใช้ verbatim ที่กระตุ้นให้เกิดการแก้. <em>ทุก mutation tool</em> รับ field นี้ (add_knowledge / add_page / edit_page / append_page / edit_lines / edit_section / replace_text / edit_knowledge). เมื่อใส่มา server เก็บลง <strong>prompt log</strong> ผูกกับ knowledge + (ถ้ามี) page นั้น ๆ. ตัดที่ 500 ตัวอักษรตอน insert. ดู log ผ่าน <code>get_prompt_log</code> หรือใน info popover (แสดงเป็น timeline)</li>
         <li><strong>tokens_used</strong> — optional, token ที่ client ใช้ทั้งหมด (input + output รวมกัน) สำหรับ track cost</li>
         <li><strong>project</strong> — group key เช่น repo name → ใช้ group ใน sidebar</li>
-        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags ใช้กรอง knowledge, keywords ใช้เพิ่มน้ำหนัก FTS search ของ page</li>
+        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags ใช้จัดหมวด knowledge และแก้ได้จาก info popover <Kbd>i</Kbd> ใน portal; keywords ใช้เพิ่มน้ำหนัก FTS search ของ page</li>
       </ul>
 
       <h3>เลือก block ให้ถูก — ใช้ prepared block ก่อน</h3>

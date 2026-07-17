@@ -923,6 +923,32 @@ button.ki-id-badge::after {
   font-size: 11px; color: var(--text-3);
   display: flex; gap: 8px; align-items: center;
 }
+.sidebar-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.sidebar-tags span {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 9.5px;
+  line-height: 1.55;
+}
+.sidebar-item.active .sidebar-tags span {
+  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--accent-strong);
+}
 .sidebar-item .id-badge {
   background: var(--accent);
   color: #fff;
@@ -1099,6 +1125,132 @@ button.ki-id-badge::after {
   background: var(--red-light); color: var(--red); border-color: var(--red);
 }
 .info-popover .ip-project-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.knowledge-tags-view {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.knowledge-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.knowledge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent-strong);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.knowledge-tag button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.knowledge-tag button:hover:not(:disabled) {
+  background: var(--surface);
+}
+.knowledge-tags-empty {
+  color: var(--text-3);
+  font-style: italic;
+}
+.knowledge-tags-edit {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.knowledge-tags-edit:hover:not(:disabled) { text-decoration: underline; }
+.knowledge-tags-edit:disabled { opacity: .5; cursor: not-allowed; }
+.knowledge-tags-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.knowledge-tag-list.editing:empty { display: none; }
+.knowledge-tags-input-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.knowledge-tags-input-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.knowledge-tags-input-row input:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.knowledge-tags-count {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.knowledge-tags-error {
+  color: var(--red);
+  font-size: 11px;
+}
+.knowledge-tags-actions {
+  display: flex;
+  gap: 6px;
+}
+.knowledge-tags-actions button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.knowledge-tags-actions button:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+.knowledge-tags-actions button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  filter: brightness(1.03);
+}
+.knowledge-tags-actions button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 .info-popover .prompt-heading {
   display: flex;
   align-items: center;

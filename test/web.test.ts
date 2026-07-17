@@ -708,6 +708,26 @@ describe("HTTP routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("PATCH /api/knowledge/:id updates tags and tag filter finds it", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const updated = await request(app)
+      .patch(`/api/knowledge/${k.id}`)
+      .send({ tags: ["roadmap", "urgent"] });
+    expect(updated.status).toBe(200);
+
+    const detail = await request(app).get(`/api/knowledge/${k.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.tags).toEqual(["roadmap", "urgent"]);
+
+    const matching = await request(app).get("/api/knowledge?tag=urgent");
+    expect(matching.status).toBe(200);
+    expect(matching.body.map((item: { id: number }) => item.id)).toEqual([k.id]);
+
+    const missing = await request(app).get("/api/knowledge?tag=backlog");
+    expect(missing.status).toBe(200);
+    expect(missing.body).toEqual([]);
+  });
+
   it("POST /api/knowledge/:id/pages adds an empty page", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const res = await request(app)

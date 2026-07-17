@@ -3,12 +3,14 @@ import type { KnowledgeMeta, PageMeta } from "../store/api";
 import {
   useDeleteKnowledgeMutation,
   useGetPromptLogQuery,
+  useListKnowledgeQuery,
   useListProjectsQuery,
   useUpdateKnowledgeMutation,
 } from "../store/api";
 import { navigateTo } from "../hooks/useHash";
 import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
+import { KnowledgeTagEditor } from "./KnowledgeTagEditor";
 
 interface Props {
   meta: KnowledgeMeta;
@@ -55,6 +57,7 @@ export function InfoPopover({ meta, activePage, onClose }: Props) {
   const dispatch = useAppDispatch();
   const ref = useRef<HTMLDivElement>(null);
   const { data: projectsData } = useListProjectsQuery();
+  const { data: knowledges = [] } = useListKnowledgeQuery();
   const { data: promptLog } = useGetPromptLogQuery(meta.id);
   const [updateKnowledge, { isLoading: saving }] = useUpdateKnowledgeMutation();
   const [deleteKnowledge, { isLoading: deleting }] = useDeleteKnowledgeMutation();
@@ -69,6 +72,17 @@ export function InfoPopover({ meta, activePage, onClose }: Props) {
   const knownProjects = useMemo(
     () => (projectsData?.projects ?? []).map((p) => p.name),
     [projectsData],
+  );
+  const knownTags = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          knowledges
+            .flatMap((knowledge) => knowledge.tags)
+            .map((tag) => [tag.toLocaleLowerCase(), tag]),
+        ).values(),
+      ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    [knowledges],
   );
 
   useEffect(() => {
@@ -301,12 +315,36 @@ export function InfoPopover({ meta, activePage, onClose }: Props) {
           </>
         )}
 
-        {(meta.tags ?? []).length > 0 && (
-          <>
-            <dt>tags</dt>
-            <dd>{meta.tags.join(", ")}</dd>
-          </>
-        )}
+        <dt>tags</dt>
+        <dd>
+          <KnowledgeTagEditor
+            tags={meta.tags ?? []}
+            suggestions={knownTags}
+            disabled={saving}
+            onSave={async (tags) => {
+              try {
+                await updateKnowledge({ id: meta.id, tags }).unwrap();
+                dispatch(
+                  showToast({
+                    message:
+                      tags.length > 0
+                        ? `Updated tags for &${meta.id}`
+                        : `Removed all tags from &${meta.id}`,
+                    kind: "success",
+                  }),
+                );
+              } catch (error) {
+                dispatch(
+                  showToast({
+                    message: `Failed to update tags for &${meta.id}`,
+                    kind: "error",
+                  }),
+                );
+                throw error;
+              }
+            }}
+          />
+        </dd>
 
         <dt>created</dt>
         <dd>{new Date(meta.created_at).toLocaleString()}</dd>

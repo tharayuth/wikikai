@@ -304,6 +304,14 @@ function KnowledgeRow({
             <span>{relTime(item.updated_at)}</span>
             {item.version > 1 && <span>v{item.version}</span>}
           </div>
+          {item.tags.length > 0 && (
+            <div className="sidebar-tags" title={item.tags.join(", ")}>
+              {item.tags.slice(0, 3).map((tag) => (
+                <span key={tag.toLocaleLowerCase()}>{tag}</span>
+              ))}
+              {item.tags.length > 3 && <span>+{item.tags.length - 3}</span>}
+            </div>
+          )}
         </div>
       </a>
       <button
@@ -549,6 +557,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
       (it) =>
         it.title.toLowerCase().includes(q) ||
         (it.project ?? "").toLowerCase().includes(q) ||
+        it.tags.some((tag) => tag.toLowerCase().includes(q)) ||
         (matchedPagesByKid?.has(it.id) ?? false),
     );
   }, [filtered, q, matchedPagesByKid]);
@@ -557,10 +566,10 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     <div className="sidebar-search">
       <input
         type="search"
-        placeholder="Filter project / topic / page…"
+        placeholder="Filter project / topic / tag / page…"
         value={filterText}
         onChange={(e) => setFilterText(e.target.value)}
-        aria-label="Filter projects, topics, or pages"
+        aria-label="Filter projects, topics, tags, or pages"
       />
       {filterText && (
         <button
@@ -694,7 +703,8 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
               const onlyByPageMatch =
                 q !== "" &&
                 !it.title.toLowerCase().includes(q) &&
-                !(it.project ?? "").toLowerCase().includes(q);
+                !(it.project ?? "").toLowerCase().includes(q) &&
+                !it.tags.some((tag) => tag.toLowerCase().includes(q));
               const pageFilter =
                 onlyByPageMatch ? matchedPagesByKid?.get(it.id) ?? null : null;
               return (
