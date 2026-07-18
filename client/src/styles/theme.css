@@ -18,6 +18,7 @@
   --accent: #6366f1;
   --accent-light: #eef0ff;
   --accent-strong: #4f46e5;
+  --accent-text: #ffffff;
 
   --blue: #2563eb;          --blue-light: #eff5ff;
   --green: #059669;         --green-light: #ecfdf5;   --green-strong: #047857;
@@ -53,6 +54,7 @@
   --accent: #818cf8;
   --accent-light: #2b2d50;
   --accent-strong: #a5b4fc;
+  --accent-text: #ffffff;
 
   --blue-light: #1e293b;
   --green-light: #14322a;   --green-strong: #34d399;
@@ -493,14 +495,20 @@ button.ki-id-badge::after {
   border-right: 1px solid var(--border);
   overflow-y: auto;
   padding: 0 0 12px;
-  --search-h: 52px;
+  --search-h: 57px;
 }
-.sidebar-search {
+.sidebar.has-tag-filter {
+  --search-h: 89px;
+}
+.sidebar-filter-stack {
   position: sticky;
   top: 0;
   z-index: 3;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+.sidebar-search {
+  background: var(--surface);
   padding: 10px 12px;
   display: flex;
   align-items: center;
@@ -538,6 +546,114 @@ button.ki-id-badge::after {
 .sidebar-search-clear:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+.sidebar-tag-filter {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background .12s, border-color .12s, color .12s;
+}
+.sidebar-tag-filter:hover {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.sidebar-tag-filter.active {
+  background: var(--accent-light);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+.sidebar-tag-filter-count {
+  position: absolute;
+  top: -6px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+.sidebar-selected-tags {
+  height: 32px;
+  padding: 0 12px 9px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sidebar-selected-tag-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.sidebar-selected-tag {
+  flex: 0 0 auto;
+  max-width: 180px;
+  padding: 2px 5px 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent-strong);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-selected-tag button {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sidebar-selected-tag button:hover {
+  background: var(--surface);
+}
+.sidebar-tag-filter-clear {
+  flex: 0 0 auto;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sidebar-tag-filter-clear:hover {
+  text-decoration: underline;
 }
 .sidebar-star-filter {
   flex: 0 0 auto;
@@ -3072,6 +3188,59 @@ button.ki-id-badge::after {
   background: var(--surface-2);
   border: 1px solid var(--border);
   padding: 1px 7px; border-radius: 10px;
+}
+
+/* ───── Sidebar tag filter modal ───── */
+.tag-filter-modal-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.tag-filter-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.tag-filter-modal .pf-action:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.tag-filter-search-row {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.tag-filter-modal-hint {
+  margin: 0;
+  padding: 8px 18px 2px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.tag-filter-list {
+  min-height: 80px;
+}
+.tag-filter-empty {
+  padding: 18px;
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+}
+.tag-filter-modal-footer {
+  padding: 10px 18px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+.tag-filter-modal-footer button {
+  padding: 5px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* Icon-button "active" state + small numeric badge for the project filter */

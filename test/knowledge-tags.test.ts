@@ -3,6 +3,7 @@ import {
   MAX_KNOWLEDGE_TAGS,
   MAX_KNOWLEDGE_TAG_LENGTH,
   dedupeKnowledgeTags,
+  matchesAnyKnowledgeTag,
   mergeKnowledgeTagInput,
 } from "../client/src/lib/knowledgeTags";
 
@@ -45,5 +46,21 @@ describe("knowledge tag helpers", () => {
     const result = mergeKnowledgeTagInput(current, "one-more");
     expect(result.tags).toHaveLength(MAX_KNOWLEDGE_TAGS);
     expect(result.overflow).toEqual(["one-more"]);
+  });
+
+  it("matches any selected tag case-insensitively", () => {
+    expect(matchesAnyKnowledgeTag(["Urgent", "customer-a"], ["urgent"])).toBe(
+      true,
+    );
+    expect(
+      matchesAnyKnowledgeTag(
+        ["Urgent", "customer-a"],
+        ["roadmap", "CUSTOMER-A"],
+      ),
+    ).toBe(true);
+    expect(matchesAnyKnowledgeTag(["Urgent"], ["roadmap", "review"])).toBe(
+      false,
+    );
+    expect(matchesAnyKnowledgeTag(["Urgent"], [])).toBe(true);
   });
 });

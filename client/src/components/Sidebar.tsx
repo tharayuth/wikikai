@@ -27,6 +27,11 @@ import {
   STARRED_KNOWLEDGE_EVENT,
   toggleKnowledgeStar,
 } from "../lib/starredKnowledge";
+import { matchesAnyKnowledgeTag } from "../lib/knowledgeTags";
+import {
+  SidebarTagFilterModal,
+  type SidebarTagFilterOption,
+} from "./SidebarTagFilterModal";
 import {
   DndContext,
   PointerSensor,
@@ -391,9 +396,43 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   }, [projectList]);
   const [starredOnly, setStarredOnly] = useState(false);
   const [archivedOnly, setArchivedOnly] = useState(false);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [starredIds, setStarredIds] = useState<Set<number>>(() =>
     readStarredKnowledgeIds(),
   );
+
+  const tagOptions = useMemo<SidebarTagFilterOption[]>(() => {
+    const byKey = new Map<string, SidebarTagFilterOption>();
+    for (const item of items) {
+      const seenInKnowledge = new Set<string>();
+      for (const tag of item.tags) {
+        const key = tag.toLocaleLowerCase();
+        if (seenInKnowledge.has(key)) continue;
+        seenInKnowledge.add(key);
+        const existing = byKey.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          byKey.set(key, { tag, count: 1 });
+        }
+      }
+    }
+    return [...byKey.values()].sort((a, b) =>
+      a.tag.localeCompare(b.tag, undefined, { numeric: true }),
+    );
+  }, [items]);
+
+  const toggleSelectedTag = useCallback((tag: string) => {
+    const key = tag.toLocaleLowerCase();
+    setSelectedTags((current) =>
+      current.some((selected) => selected.toLocaleLowerCase() === key)
+        ? current.filter((selected) => selected.toLocaleLowerCase() !== key)
+        : [...current, tag],
+    );
+  }, []);
+  const clearSelectedTags = useCallback(() => setSelectedTags([]), []);
+  const closeTagPicker = useCallback(() => setTagPickerOpen(false), []);
 
   // Knowledge ids owning ≥1 archived page — drives the archived-only filter.
   const archivedKids = useMemo(() => {
@@ -518,9 +557,12 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
       if (urlFilter.noProject) allowed.add("(no project)");
       return items.filter((it) => allowed.has(it.project || "(no project)"));
     })();
+    const afterTags = projectFiltered.filter((item) =>
+      matchesAnyKnowledgeTag(item.tags, selectedTags),
+    );
     const afterStar = starredOnly
-      ? projectFiltered.filter((it) => starredIds.has(it.id))
-      : projectFiltered;
+      ? afterTags.filter((it) => starredIds.has(it.id))
+      : afterTags;
     // Archived-only view: keep just the topics that own an archived page.
     if (archivedOnly) return afterStar.filter((it) => archivedKids.has(it.id));
     return afterStar;
@@ -528,6 +570,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
     items,
     urlFilter,
     idToName,
+    selectedTags,
     starredOnly,
     starredIds,
     archivedOnly,
@@ -568,76 +611,167 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   }, [filtered, q, matchedPagesByKid]);
 
   const searchBox = (
-    <div className="sidebar-search">
-      <input
-        type="search"
-        placeholder="Filter project / topic / tag / page…"
-        value={filterText}
-        onChange={(e) => setFilterText(e.target.value)}
-        aria-label="Filter projects, topics, tags, or pages"
+    <>
+      <div className="sidebar-filter-stack">
+        <div className="sidebar-search">
+          <input
+            type="search"
+            placeholder="Filter project / topic / tag / page…"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            aria-label="Filter projects, topics, tags, or pages"
+          />
+          {filterText && (
+            <button
+              type="button"
+              className="sidebar-search-clear"
+              aria-label="Clear text filter"
+              onClick={() => setFilterText("")}
+            >
+              ×
+            </button>
+          )}
+          <button
+            type="button"
+            className={`sidebar-tag-filter${selectedTags.length > 0 ? " active" : ""}`}
+            aria-label={
+              selectedTags.length > 0
+                ? `Edit tag filter: ${selectedTags.join(", ")}`
+                : "Filter by tags"
+            }
+            aria-pressed={selectedTags.length > 0}
+            title={
+              selectedTags.length > 0
+                ? `Filtering by ${selectedTags.length} tag${selectedTags.length === 1 ? "" : "s"}`
+                : "Filter by tags"
+            }
+            onClick={() => setTagPickerOpen(true)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20.59 13.41 11 3.83V2H2v9h1.83l9.58 9.59a2 2 0 0 0 2.82 0l5.34-5.34a2 2 0 0 0 0-2.84z" />
+              <circle cx="7" cy="7" r="1.5" />
+            </svg>
+            {selectedTags.length > 0 && (
+              <span className="sidebar-tag-filter-count" aria-hidden="true">
+                {selectedTags.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`sidebar-archive-filter${archivedOnly ? " active" : ""}`}
+            aria-label={
+              archivedOnly ? "Show active topics" : "Show archived only"
+            }
+            aria-pressed={archivedOnly}
+            title={archivedOnly ? "Showing archived only" : "Show archived only"}
+            onClick={() => setArchivedOnly((v) => !v)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 8v13H3V8" />
+              <path d="M1 3h22v5H1z" />
+              <path d="M10 12h4" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={`sidebar-star-filter${starredOnly ? " active" : ""}`}
+            aria-label={
+              starredOnly ? "Show all topics" : "Show starred topics only"
+            }
+            aria-pressed={starredOnly}
+            title={
+              starredOnly
+                ? "Showing starred topics only"
+                : "Show starred topics only"
+            }
+            onClick={() => setStarredOnly((v) => !v)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill={starredOnly ? "currentColor" : "none"}
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+        </div>
+        {selectedTags.length > 0 && (
+          <div className="sidebar-selected-tags">
+            <div
+              className="sidebar-selected-tag-list"
+              aria-label="Selected tag filters"
+            >
+              {selectedTags.map((tag) => (
+                <span
+                  className="sidebar-selected-tag"
+                  key={tag.toLocaleLowerCase()}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => toggleSelectedTag(tag)}
+                    aria-label={`Remove tag filter ${tag}`}
+                    title={`Remove ${tag}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="sidebar-tag-filter-clear"
+              onClick={clearSelectedTags}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+      <SidebarTagFilterModal
+        open={tagPickerOpen}
+        options={tagOptions}
+        selectedTags={selectedTags}
+        onToggle={toggleSelectedTag}
+        onClear={clearSelectedTags}
+        onClose={closeTagPicker}
       />
-      {filterText && (
-        <button
-          type="button"
-          className="sidebar-search-clear"
-          aria-label="Clear filter"
-          onClick={() => setFilterText("")}
-        >
-          ×
-        </button>
-      )}
-      <button
-        type="button"
-        className={`sidebar-archive-filter${archivedOnly ? " active" : ""}`}
-        aria-label={archivedOnly ? "Show active topics" : "Show archived only"}
-        aria-pressed={archivedOnly}
-        title={archivedOnly ? "Showing archived only" : "Show archived only"}
-        onClick={() => setArchivedOnly((v) => !v)}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="15"
-          height="15"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M21 8v13H3V8" />
-          <path d="M1 3h22v5H1z" />
-          <path d="M10 12h4" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className={`sidebar-star-filter${starredOnly ? " active" : ""}`}
-        aria-label={starredOnly ? "Show all topics" : "Show starred topics only"}
-        aria-pressed={starredOnly}
-        title={starredOnly ? "Showing starred topics only" : "Show starred topics only"}
-        onClick={() => setStarredOnly((v) => !v)}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="15"
-          height="15"
-          fill={starredOnly ? "currentColor" : "none"}
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-        </svg>
-      </button>
-    </div>
+    </>
   );
 
   if (isLoading) {
     return (
-      <aside className="sidebar" id="sidebar">
+      <aside
+        className={`sidebar${selectedTags.length > 0 ? " has-tag-filter" : ""}`}
+        id="sidebar"
+      >
         {searchBox}
         <div className="sidebar-empty">Loading…</div>
       </aside>
@@ -645,7 +779,10 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   }
   if (matched.length === 0) {
     return (
-      <aside className="sidebar" id="sidebar">
+      <aside
+        className={`sidebar${selectedTags.length > 0 ? " has-tag-filter" : ""}`}
+        id="sidebar"
+      >
         {searchBox}
         <div className="sidebar-empty">
           {items.length === 0 ? (
@@ -657,6 +794,8 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
             </>
           ) : filterText ? (
             `No matches for "${filterText}"`
+          ) : selectedTags.length > 0 ? (
+            "No topics match the selected tags"
           ) : archivedOnly ? (
             "No archived pages"
           ) : starredOnly ? (
@@ -685,7 +824,10 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   })();
 
   return (
-    <aside className="sidebar" id="sidebar">
+    <aside
+      className={`sidebar${selectedTags.length > 0 ? " has-tag-filter" : ""}`}
+      id="sidebar"
+    >
       {searchBox}
       <DndContext
         sensors={sensors}

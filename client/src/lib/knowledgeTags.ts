@@ -26,6 +26,21 @@ export function dedupeKnowledgeTags(tags: string[]): string[] {
 }
 
 /**
+ * Return true when a knowledge has at least one of the selected tags.
+ *
+ * Comparisons are case-insensitive. An empty selection means the tag filter
+ * is inactive, so every knowledge matches.
+ */
+export function matchesAnyKnowledgeTag(
+  knowledgeTags: string[],
+  selectedTags: string[],
+): boolean {
+  if (selectedTags.length === 0) return true;
+  const selected = new Set(selectedTags.map(keyForTag));
+  return knowledgeTags.some((tag) => selected.has(keyForTag(tag)));
+}
+
+/**
  * Merge comma/newline-separated input into a tag list.
  *
  * Tags are case-insensitively unique while preserving the first spelling.
@@ -60,4 +75,3 @@ export function mergeKnowledgeTagInput(
 
   return { tags, invalid, overflow };
 }
-
