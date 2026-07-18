@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import type React from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import {
   useGetKnowledgeQuery,
@@ -18,6 +19,7 @@ export function KnowledgeTagsModal(): JSX.Element | null {
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: !open });
   const { data: knowledges = [] } = useListKnowledgeQuery();
   const [updateKnowledge, updateState] = useUpdateKnowledgeMutation();
+  const downOnBackdropRef = useRef(false);
 
   const suggestions = useMemo(
     () =>
@@ -44,12 +46,25 @@ export function KnowledgeTagsModal(): JSX.Element | null {
 
   const meta = knowledge.data;
   const close = () => dispatch(closeKnowledgeTagsModal());
+  const onBackdropMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    downOnBackdropRef.current = event.target === event.currentTarget;
+  };
+  const onBackdropMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (downOnBackdropRef.current && event.target === event.currentTarget) {
+      close();
+    }
+    downOnBackdropRef.current = false;
+  };
 
   return (
-    <div className="modal-backdrop show" onClick={close}>
+    <div
+      className="modal-backdrop show"
+      onMouseDown={onBackdropMouseDown}
+      onMouseUp={onBackdropMouseUp}
+    >
       <div
         className="modal knowledge-tags-modal"
-        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="knowledge-tags-modal-title"
