@@ -184,12 +184,6 @@ export function KnowledgeTagEditor({
             if (event.key === "Enter" || event.key === ",") {
               event.preventDefault();
               addPendingInput();
-            } else if (
-              event.key === "Backspace" &&
-              input === "" &&
-              draft.length > 0
-            ) {
-              setDraft((current) => current.slice(0, -1));
             }
           }}
           onPaste={(event) => {
