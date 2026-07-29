@@ -228,6 +228,8 @@ When asked to **update** a block by `@N`:
 
 (Direct FTS search `search({ query: "{@N}" })` still works — `get_block` is just the convenience wrapper.)
 
+**Captions** — the annotation can carry a quoted caption: `{@123 "Architecture: API → DB"}` (renders like a `<figcaption>` under the block). Set / update / clear it with `set_block_caption({ id, caption })` — pass `null` or `""` to remove. Captions surface in `read_page` summary placeholders and `get_block({ summary: true })` probes, so a good caption makes future reads cheap.
+
 ### Converting a block to a different type — keep the `@N`
 
 When the user asks "convert @123 from a markdown table to an html-embed" (or stats card → mermaid, etc.), **carry the `{@123}` annotation into the new source** so the id stays stable and every `@123` reference the user already has keeps working:
@@ -255,6 +257,7 @@ The renderer attaches it as `data-block-id` on the `<table>`. `injectBlockIds` a
 |---|---|
 | "What columns does @123 have? How many rows?" | `get_block({ id: 123, summary: true })` → `{ kind:"table", columns:[...], row_count, line_start, line_end, ... }` — no body, cheap. |
 | "Give me row N" (you know the index) | `get_table_row({ block_id: 123, index: N })`. `index` is 0-based; negative wraps from end (`-1` = last row). |
+| "Give me rows N..M" / paginate a big table | `get_table_rows({ block_id, start, end?, offset?, limit? })` — contiguous range (`end` inclusive XOR `offset` count), 0-based, negative wraps from end. `limit` default 100 / max 500, `truncated: true` when capped. |
 | "Find rows where col=value" / "rows mentioning X" / "first N rows" | `find_table_rows({ block_id, q?, where?, columns?, limit? })`. `q` = substring search (case-insensitive), `where` = exact column match (AND across keys), `columns` = restrict `q` to these column names, `limit` default 50 / max 500. Returns `{ matches: [{row_index, columns, source_line, url}], total_matched, truncated }`. |
 | "Which rows have a checkbox? Toggle one of them" | `get_table_rows_with_checkbox({ block_id, checked? })`. Each match carries `checkboxes: [{ task_index, checked }]` — `task_index` is the **page-global** toggle index, pass it straight to `toggle_task({ page_id, index })`. It already accounts for any GFM tasks / html-embed checkboxes earlier on the page, so it is NOT the same as `row_index`. |
 | "Show me the whole table" / "I'm about to edit it" | `get_block({ id: 123 })` (full source + inner). Use sparingly for tables > ~100 rows. |

@@ -9,7 +9,7 @@
 ```
 ┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
 │                               │  HTTP   │  /mcp        ← MCP tools         │
-│  25 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
+│  38 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
 │  read_page, edit_section,     │         │  /           ← React SPA         │
 │  add_image, toggle_task,      │         │  /mermaid/.. ← fullscreen viewer │
 │  get_prompt_log, search, …    │         │  /chart/..   ← fullscreen viewer │
@@ -83,15 +83,17 @@ Knowledge (&N)  ──┬── Page (#N) ──┬── Markdown content
 
 URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, near line 42.
 
-### MCP tool surface (25 tools)
+### MCP tool surface (38 tools)
 
 **Knowledge** — `add_knowledge` · `edit_knowledge` · `list_knowledge` · `get_knowledge` · `delete_knowledge` · `get_outline`
 
-**Pages** — `add_page` · `edit_page` · `append_page` · `delete_page` · `list_pages` · `reorder_pages`
+**Pages** — `add_page` · `edit_page` · `append_page` · `delete_page` · `list_pages` · `reorder_pages` · `move_page` (relative) · `move_page_to` (absolute position) · `move_page_to_knowledge` (across documents, keeps id + history + images)
 
-**Surgical edits** — `read_page` (with hash) · `edit_lines` · `edit_section` (heading-anchored, preferred) · `replace_text`
+**Surgical edits** — `read_page` (with hash) · `edit_lines` · `add_lines` (append to end, no prior read needed) · `insert_lines` (insert before a line) · `edit_section` (heading-anchored, preferred) · `replace_text`
 
-**Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `get_example` (templates with `outline_only` + slice modes) · `get_table_row` (one row of a table by `@N` + index) · `find_table_rows` (header-aware filter across a table without reading the whole page)
+**Tables** — `get_table_row` (one row of a table by `@N` + index) · `get_table_rows` (contiguous range) · `get_table_rows_with_checkbox` (only rows carrying `[ ]`/`[x]`) · `find_table_rows` (header-aware filter across a table without reading the whole page) · `append_table_row` / `append_table_rows` (add rows at the end) · `insert_table_row` / `insert_table_rows` (insert before a row) · `update_table_rows` (replace a row range)
+
+**Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `set_block_caption` (set/clear the `{@N "caption"}` figcaption on a block) · `get_example` (templates with `outline_only` + slice modes)
 
 **Images** — `add_image` (base64 in, **or `path` to import a server-local file with zero base64** when `WIKIKAI_IMAGE_IMPORT_ROOTS` is set; content-addressed) · `get_image` (returns inline image content block)
 
@@ -139,7 +141,7 @@ Open <http://localhost:5173> for the dev UI (HMR + proxied API), or <http://loca
 }
 ```
 
-Restart Claude Code; all 25 tools appear automatically. Try:
+Restart Claude Code; all 38 tools appear automatically. Try:
 
 > Save what we just discussed as a knowledge titled "Postgres timeout fix", project "infra-notes".
 
@@ -219,7 +221,7 @@ src/
     images.ts         content-addressed image storage
     promptLog.ts      rolling per-knowledge prompt log (capped at 500 chars)
   mcp/
-    server.ts         registers all 25 tools on the MCP SDK
+    server.ts         registers all 38 tools on the MCP SDK
     handlers.ts       Zod schemas + tool implementations (single source of truth)
     examples/         markdown reference content served via get_example
   web/

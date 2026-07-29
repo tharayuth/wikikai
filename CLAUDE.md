@@ -26,7 +26,7 @@ src/
   store/knowledge.ts   knowledge metadata CRUD
   store/pages.ts       page CRUD + line-range ops + FTS sync
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
-  mcp/server.ts        registers 18 tools on McpServer
+  mcp/server.ts        registers 38 tools on McpServer
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
   mcp/examples/*.md    markdown reference content
