@@ -131,10 +131,10 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
         </button>
       </div>
       <div className="topbar-right">
+        <ToolActivity />
         <KnowledgeInfo
           kid={activeKid}
           pid={activePid}
-          idleSuffix={<ToolActivity />}
           titleSuffix={
             <>
               <SseStatus />
@@ -156,7 +156,6 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
             >
               ↻
             </button>
-              <ToolActivity />
             </>
           }
         />

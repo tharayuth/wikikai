@@ -12,8 +12,8 @@ import { clearToolCall } from "../store/uiSlice";
 const HOLD_MS = 30_000;
 
 /**
- * Live readout of the most recent MCP tool call, sitting next to the
- * Refresh button. Every tool the AI invokes — reads included — arrives
+ * Live readout of the most recent MCP tool call, sitting beside the
+ * WikiKai logo. Every tool the AI invokes — reads included — arrives
  * over SSE as a `tool-called` event; the name shows immediately and
  * holds for HOLD_MS, with each new call restarting the window. Renders
  * nothing when the AI has been idle, so the topbar stays quiet.

@@ -136,7 +136,7 @@ function UserGuideEn() {
           <tr><td>Search within content</td><td>Type ≥ 3 chars in the search box → click result → jumps to that line (Thai, English, mixed — substring match)</td></tr>
           <tr><td>Toggle light/dark</td><td>Click <Kbd>☾</Kbd> / <Kbd>☀</Kbd></td></tr>
           <tr><td>Refresh</td><td>Click <Kbd>↻</Kbd></td></tr>
-          <tr><td>See what the AI is doing</td><td>A pill right after <Kbd>↻</Kbd> shows the name of the <strong>MCP tool the AI called most recently</strong> (e.g. <code>edit_section</code>), live as it happens — reads included, not just edits. It holds the last name for <strong>30 seconds</strong> after the call and then disappears, so an empty topbar means the AI has been idle. Open a tab mid-activity and it catches up on the current name straight away</td></tr>
+          <tr><td>See what the AI is doing</td><td>A pill just right of the <strong>WikiKai logo</strong> shows the name of the <strong>MCP tool the AI called most recently</strong> (e.g. <code>edit_section</code>), live as it happens — reads included, not just edits. It holds the last name for <strong>30 seconds</strong> after the call and then disappears, so an empty topbar means the AI has been idle. Open a tab mid-activity and it catches up on the current name straight away</td></tr>
           <tr><td>Open help (this dialog)</td><td>Click <Kbd>?</Kbd></td></tr>
           <tr><td>Close any dialog</td><td>Press <Kbd>Esc</Kbd> or click outside</td></tr>
         </tbody>
@@ -254,7 +254,7 @@ function UserGuideTh() {
           <tr><td>ค้นในเนื้อหา</td><td>พิมพ์ในกล่อง search ≥ 3 ตัวอักษร → คลิกผลลัพธ์ → เด้งไปบรรทัดนั้น (ไทย/อังกฤษ/ผสม — substring match)</td></tr>
           <tr><td>สลับ light/dark</td><td>คลิก <Kbd>☾</Kbd> / <Kbd>☀</Kbd></td></tr>
           <tr><td>Refresh</td><td>คลิก <Kbd>↻</Kbd></td></tr>
-          <tr><td>ดูว่า AI กำลังทำอะไรอยู่</td><td>ป้ายเล็ก ๆ ถัดจาก <Kbd>↻</Kbd> แสดงชื่อ <strong>MCP tool ที่ AI เรียกล่าสุด</strong> (เช่น <code>edit_section</code>) แบบ realtime — รวม tool ที่แค่อ่านด้วย ไม่ใช่เฉพาะตอนแก้ไข. ชื่อจะค้างไว้ <strong>30 วินาที</strong> หลังการเรียกครั้งสุดท้ายแล้วหายไป ดังนั้นถ้า topbar ว่าง = AI ไม่ได้ทำอะไรอยู่. เปิด tab ใหม่ระหว่างที่ AI ทำงานก็เห็นชื่อล่าสุดทันที</td></tr>
+          <tr><td>ดูว่า AI กำลังทำอะไรอยู่</td><td>ป้ายเล็ก ๆ ถัดจาก <strong>โลโก้ WikiKai</strong> แสดงชื่อ <strong>MCP tool ที่ AI เรียกล่าสุด</strong> (เช่น <code>edit_section</code>) แบบ realtime — รวม tool ที่แค่อ่านด้วย ไม่ใช่เฉพาะตอนแก้ไข. ชื่อจะค้างไว้ <strong>30 วินาที</strong> หลังการเรียกครั้งสุดท้ายแล้วหายไป ดังนั้นถ้า topbar ว่าง = AI ไม่ได้ทำอะไรอยู่. เปิด tab ใหม่ระหว่างที่ AI ทำงานก็เห็นชื่อล่าสุดทันที</td></tr>
           <tr><td>เปิด help (หน้านี้)</td><td>คลิก <Kbd>?</Kbd></td></tr>
           <tr><td>ปิด dialog</td><td>กด <Kbd>Esc</Kbd> หรือคลิกข้างนอก</td></tr>
         </tbody>

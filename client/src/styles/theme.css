@@ -293,10 +293,7 @@ a:hover { text-decoration: underline; }
   padding: 0;
   line-height: 1.25;
 }
-/* Placeholder when no knowledge is selected. Usually empty, but it still
-   hosts the AI tool-activity badge — align it left instead of letting the
-   column stretch it full width. */
-.knowledge-info-empty { align-items: flex-start; }
+.knowledge-info-empty { /* placeholder when no knowledge selected */ }
 .ki-row-1 {
   display: flex;
   align-items: center;
@@ -406,16 +403,18 @@ button.ki-id-badge::after {
   50%      { opacity: 0.35; }
 }
 
-/* Live MCP tool-call badge — sits after the Refresh button, appears on
-   each call and fades itself out 30s after the last one. min-width: 0 +
-   ellipsis so a long tool name never pushes the topbar wider. */
+/* Live MCP tool-call badge — first thing after the logo column, appearing
+   on each call and fading itself out 30s after the last one. It sits
+   outside .knowledge-info so it shows with no document open too. Capped
+   and ellipsised so an unusually long tool name cannot squeeze the title
+   beside it. */
 .tool-activity {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   min-width: 0;
   max-width: 190px;
-  flex-shrink: 0;
+  flex: 0 1 auto;
   padding: 2px 8px;
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 999px;
