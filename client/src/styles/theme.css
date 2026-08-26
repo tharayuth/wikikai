@@ -4472,9 +4472,14 @@ button.ki-id-badge::after {
 .public-main {
   flex: 1;
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 8px;
+  min-width: 0;
+}
+/* The share article uses the same resizable, left-aligned frame as the
+   signed-in one. Only the default differs: the app's formula subtracts its
+   own sidebar width, which is not this layout's. A width the reader drags
+   sets --article-w and wins here exactly as it does there. */
+.public-view .article-frame {
+  width: var(--article-w, min(900px, calc(100% - 32px)));
 }
 
 /* Desktop / landscape tablet: give the document the same shell as the
@@ -4616,8 +4621,13 @@ button.ki-id-badge::after {
   .public-page-select {
     max-width: none;
   }
-  .public-main {
-    padding: 0;
+  .public-view .article-frame {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 0 40px;
+  }
+  .public-view .article-resize-handle {
+    display: none;
   }
   .public-view .markdown-body {
     padding: 16px 14px 32px;

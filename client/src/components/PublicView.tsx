@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { attachInlineImageLightbox } from "../lib/imageLightbox";
+import { ArticleResizeHandle } from "./ArticleResizeHandle";
 
 /**
  * Public, read-only viewer for a single shared knowledge document.
@@ -200,11 +201,17 @@ export function PublicView({ token }: { token: string }): JSX.Element {
         )}
         <div className="public-scroll">
           <main className="public-main">
-            <article
-              className="markdown-body"
-              ref={bodyRef}
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
+            {/* Same `.article-frame` wrapper the signed-in article uses, so
+                the reading column is left-aligned and the right-edge handle
+                resizes it against the same --article-w preference. */}
+            <div className="article-frame">
+              <article
+                className="markdown-body"
+                ref={bodyRef}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+              <ArticleResizeHandle />
+            </div>
           </main>
           <footer className="public-footer">อ่านอย่างเดียว · แชร์ผ่าน WikiKai</footer>
         </div>
