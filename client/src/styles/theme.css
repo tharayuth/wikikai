@@ -2558,6 +2558,14 @@ button.ki-id-badge::after {
 .markdown-body p.img-block {
   text-align: center;
 }
+/* The solo image's caption is a <span> so it stays legal inside the <p>;
+   make it lay out like the <div> every other block's caption uses. The
+   top margin is already carried by the image, so only the gap under it
+   needs adding here. */
+.markdown-body p.img-block > .block-caption {
+  display: block;
+  margin-bottom: 0;
+}
 .markdown-body .image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

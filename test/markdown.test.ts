@@ -226,6 +226,34 @@ describe("renderMarkdown", () => {
     expect(linked).toContain('<p class="img-block">');
   });
 
+  it("shows a solo image's title as a caption under it", async () => {
+    const out = await renderMarkdown('![a](/img/x.png "Overall system")');
+    expect(out).toContain('<span class="block-caption">Overall system</span>');
+    // The title stays put: the lightbox and assistive tech both read it.
+    expect(out).toContain('title="Overall system"');
+  });
+
+  it("keeps the caption when the title also carries a size", async () => {
+    const out = await renderMarkdown('![a](/img/x.png "Overall system w=300")');
+    expect(out).toContain('<span class="block-caption">Overall system</span>');
+    expect(out).toContain("max-width:300px");
+  });
+
+  it("shows no caption when the title is only a size", async () => {
+    const sized = await renderMarkdown('![a](/img/x.png "300x")');
+    expect(sized).not.toContain("block-caption");
+
+    const bare = await renderMarkdown("![a](/img/x.png)");
+    expect(bare).not.toContain("block-caption");
+  });
+
+  it("leaves an inline image's title as a tooltip, not a caption", async () => {
+    // A caption block mid-sentence would break the prose it belongs to.
+    const out = await renderMarkdown('before ![a](/img/x.png "Note") after');
+    expect(out).toContain('title="Note"');
+    expect(out).not.toContain("block-caption");
+  });
+
   it("leaves an image that sits among text flowing inline", async () => {
     const inline = await renderMarkdown("before ![a](/img/x.png) after");
     expect(inline).not.toContain("img-block");
