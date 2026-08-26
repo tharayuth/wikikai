@@ -16,6 +16,7 @@ import {
 } from "../store/api";
 import { useAppDispatch } from "../store";
 import { navigateTo, useHash } from "../hooks/useHash";
+import { SharedBadge } from "./SharedBadge";
 import { openActionMenu, openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import {
   openKnowledgeTagsModal,
@@ -340,6 +341,9 @@ function KnowledgeRow({
             >
               &amp;{item.id}
             </button>
+            {item.shared && (
+              <SharedBadge knowledgeId={item.id} title={item.title} />
+            )}
             <span>{relTime(item.updated_at)}</span>
             {item.version > 1 && <span>v{item.version}</span>}
           </div>

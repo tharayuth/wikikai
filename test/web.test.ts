@@ -1044,6 +1044,56 @@ describe("HTTP routes", () => {
       expect((await request(app).get(`/api/share/${token2}`)).status).toBe(404);
     });
 
+    it("marks shared documents in the knowledge list and detail", async () => {
+      const { kid } = makeDoc();
+      const plain = knowledge.add({ title: "Private", project: "examples" });
+
+      const flags = async () => {
+        const list = (await request(app).get("/api/knowledge")).body as {
+          id: number;
+          shared: boolean;
+        }[];
+        const byId = new Map(list.map((k) => [k.id, k.shared]));
+        const detail = await request(app).get(`/api/knowledge/${kid}`);
+        return {
+          listShared: byId.get(kid),
+          listPlain: byId.get(plain.id),
+          detailShared: detail.body.shared as boolean,
+        };
+      };
+
+      expect(await flags()).toEqual({
+        listShared: false,
+        listPlain: false,
+        detailShared: false,
+      });
+
+      await request(app).post(`/api/knowledge/${kid}/share`);
+      expect(await flags()).toEqual({
+        listShared: true,
+        listPlain: false,
+        detailShared: true,
+      });
+
+      // Rotating keeps it shared; disabling clears the flag again.
+      await request(app).post(`/api/knowledge/${kid}/share/rotate`);
+      expect((await flags()).listShared).toBe(true);
+      await request(app).delete(`/api/knowledge/${kid}/share`);
+      expect(await flags()).toEqual({
+        listShared: false,
+        listPlain: false,
+        detailShared: false,
+      });
+    });
+
+    it("never exposes the share token through the knowledge list", async () => {
+      const { kid } = makeDoc();
+      await request(app).post(`/api/knowledge/${kid}/share`);
+      const body = (await request(app).get("/api/knowledge")).text;
+      expect(body).toContain('"shared":true');
+      expect(body).not.toMatch(/share_token/);
+    });
+
     it("unknown token → 404", async () => {
       expect((await request(app).get(`/api/share/deadbeef`)).status).toBe(404);
     });

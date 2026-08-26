@@ -14,6 +14,9 @@ export interface KnowledgeMeta {
   updated_at: string;
   version: number;
   url: string;
+  /** Whether a public share link is currently enabled. Web-only field —
+   *  the server derives it per request; the token itself is not sent. */
+  shared: boolean;
 }
 
 export interface PageMeta {
@@ -449,15 +452,29 @@ export const portalApi = createApi({
     }),
     enableShare: builder.mutation<ShareStatus, number>({
       query: (id) => ({ url: `knowledge/${id}/share`, method: "POST" }),
-      invalidatesTags: (_r, _e, id) => [{ type: "Share", id }],
+      // KnowledgeList + Knowledge carry the `shared` flag the sidebar and
+      // topbar badges read, so they go stale with the Share status itself.
+      invalidatesTags: (_r, _e, id) => [
+        { type: "Share", id },
+        { type: "Knowledge", id },
+        { type: "KnowledgeList", id: "LIST" },
+      ],
     }),
     rotateShare: builder.mutation<ShareStatus, number>({
       query: (id) => ({ url: `knowledge/${id}/share/rotate`, method: "POST" }),
-      invalidatesTags: (_r, _e, id) => [{ type: "Share", id }],
+      invalidatesTags: (_r, _e, id) => [
+        { type: "Share", id },
+        { type: "Knowledge", id },
+        { type: "KnowledgeList", id: "LIST" },
+      ],
     }),
     disableShare: builder.mutation<ShareStatus, number>({
       query: (id) => ({ url: `knowledge/${id}/share`, method: "DELETE" }),
-      invalidatesTags: (_r, _e, id) => [{ type: "Share", id }],
+      invalidatesTags: (_r, _e, id) => [
+        { type: "Share", id },
+        { type: "Knowledge", id },
+        { type: "KnowledgeList", id: "LIST" },
+      ],
     }),
 
     getPage: builder.query<PageContent, number>({

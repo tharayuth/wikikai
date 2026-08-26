@@ -4513,6 +4513,34 @@ button.ki-id-badge::after {
 .public-view .markdown-body img.img-zoomable {
   cursor: zoom-in;
 }
+/* "This document has a public link" marker, in the sidebar meta line and
+   beside the topbar title. Present only while sharing is on, so it reads as
+   a state flag rather than a share button — cyan keeps it distinct from the
+   accent-coloured id badge sitting next to it. */
+.shared-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--cyan) 35%, transparent);
+  border-radius: 5px;
+  background: var(--cyan-light);
+  color: var(--cyan);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.shared-badge:hover {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  color: var(--surface);
+}
+.ki-row-1 .shared-badge {
+  width: 20px;
+  height: 20px;
+}
 .public-page-list {
   list-style: none;
   margin: 0;

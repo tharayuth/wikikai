@@ -222,6 +222,17 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  /** Tag each row with whether a public share link is currently enabled, so
+   *  the sidebar can flag shared documents. Web-only: the MCP
+   *  `list_knowledge` shape is left alone. One query for the whole page of
+   *  results rather than one per row. */
+  function withSharedFlag<T extends { id: number }>(items: T[]): (T & {
+    shared: boolean;
+  })[] {
+    const sharedIds = opts.knowledge.listSharedIds();
+    return items.map((k) => ({ ...k, shared: sharedIds.has(k.id) }));
+  }
+
   app.get("/api/knowledge", async (req, res, next) => {
     try {
       if (req.user && aclEnabled && !req.user.is_admin) {
@@ -230,9 +241,11 @@ export function buildApp(opts: BuildAppOptions): Express {
         );
         const all = await opts.handlers.list_knowledge({});
         res.json(
-          all.filter(
-            (k: { project: string | null }) =>
-              k.project != null && visible.has(k.project),
+          withSharedFlag(
+            all.filter(
+              (k: { project: string | null }) =>
+                k.project != null && visible.has(k.project),
+            ),
           ),
         );
         return;
@@ -245,7 +258,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         limit: optionalInt(req.query.limit),
         offset: optionalInt(req.query.offset),
       });
-      res.json(items);
+      res.json(withSharedFlag(items));
     } catch (e) {
       next(e);
     }
@@ -277,7 +290,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         assertProjectAccess(req.user, k.project ?? "", "view", opts.permissions, { enabled: aclEnabled });
       }
       const out = await opts.handlers.get_knowledge({ id, include_pages: true });
-      res.json(out);
+      res.json({ ...out, shared: opts.knowledge.getShareToken(id) != null });
     } catch (e) {
       if (isNotFound(e)) {
         res.status(404).json({ error: (e as Error).message });

@@ -371,6 +371,17 @@ export class KnowledgeStore {
     return row?.share_token ?? null;
   }
 
+  /** Ids of every knowledge with sharing enabled, in one query.
+   *  The web list endpoint uses it to mark shared rows without asking per
+   *  row — the token itself never leaves the server here, only the fact
+   *  that one exists. */
+  listSharedIds(): Set<number> {
+    const rows = this.db
+      .prepare(`SELECT id FROM knowledge WHERE share_token IS NOT NULL`)
+      .all() as { id: number }[];
+    return new Set(rows.map((r) => r.id));
+  }
+
   /** Resolve a knowledge by its public share token. Returns null for an
    *  unknown / disabled token. The single entry point the public,
    *  unauthenticated /share endpoints use to scope access to one document. */

@@ -12,6 +12,7 @@ import {
   showToast,
 } from "../store/uiSlice";
 import { InfoPopover } from "./InfoPopover";
+import { SharedBadge } from "./SharedBadge";
 import { openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import { navigateTo } from "../hooks/useHash";
 import {
@@ -167,6 +168,7 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
         >
           &amp;{meta.id}
         </button>
+        {meta.shared && <SharedBadge knowledgeId={meta.id} />}
         <h2 className="ki-title">{meta.title}</h2>
         {titleSuffix}
         {infoOpen && (
