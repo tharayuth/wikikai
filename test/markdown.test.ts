@@ -218,6 +218,34 @@ describe("renderMarkdown", () => {
     expect(out).toContain("hello");
   });
 
+  it("renders a diagram at the width recorded on its annotation", async () => {
+    const out = await renderMarkdown(
+      "```mermaid {@31 640px}\nflowchart LR\n  A-->B\n```",
+    );
+    expect(out).toContain('class="rich-block-mermaid block-sized"');
+    expect(out).toContain('style="width:640px"');
+    expect(out).toContain('data-block-id="31"');
+    // The annotation itself is consumed, never echoed into the page.
+    expect(out).not.toContain("640px}");
+  });
+
+  it("keeps caption and width together on one annotation", async () => {
+    const out = await renderMarkdown(
+      '```mermaid {@32 "API → DB" 480px}\nflowchart LR\n  A-->B\n```',
+    );
+    expect(out).toContain('style="width:480px"');
+    expect(out).toContain("API → DB");
+  });
+
+  it("leaves a diagram with no recorded width unsized", async () => {
+    const out = await renderMarkdown(
+      "```mermaid {@33}\nflowchart LR\n  A-->B\n```",
+    );
+    expect(out).toContain('class="rich-block-mermaid"');
+    expect(out).not.toContain("block-sized");
+    expect(out).not.toContain("style=\"width:");
+  });
+
   it("attaches data-block-id to a table when followed by a {@N} paragraph", async () => {
     const out = await renderMarkdown(
       "| a | b |\n|---|---|\n| 1 | 2 |\n\n{@77}",

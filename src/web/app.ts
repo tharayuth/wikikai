@@ -877,6 +877,45 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
+  // Persist a diagram's dragged display width onto its `{@N}` annotation.
+  // Body: { width: number | null } — null restores the natural size.
+  // ACL: edit-level, same as any other change to the page source.
+  app.post("/api/blocks/:id/width", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      const block = opts.pages.getBlock(id);
+      if (!block) {
+        res.status(404).json({ error: `block @${id} not found` });
+        return;
+      }
+      gateEdit(req, block.knowledge_id);
+      const raw = (req.body ?? {}).width;
+      if (raw !== null && (typeof raw !== "number" || !Number.isFinite(raw))) {
+        res.status(400).json({ error: "width must be a number or null" });
+        return;
+      }
+      // Clamp rather than reject: the value comes from a mouse drag, so an
+      // out-of-range number means the pointer went somewhere odd, not that
+      // the caller is wrong.
+      const width =
+        raw === null ? null : Math.max(120, Math.min(2000, Math.round(raw)));
+      const r = opts.pages.setBlockWidth(id, width);
+      const meta = opts.pages.getMetadata(block.page_id);
+      opts.activityLog.record({
+        action: "resize",
+        target: "block",
+        knowledge_id: block.knowledge_id,
+        knowledge_title: opts.knowledge.get(block.knowledge_id)?.title ?? null,
+        page_id: block.page_id,
+        page_title: meta?.title ?? null,
+        block_id: id,
+      });
+      res.json(r);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.patch("/api/pages/:pid", async (req, res, next) => {
     try {
       const pid = parseId(req.params.pid);

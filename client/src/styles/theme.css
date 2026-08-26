@@ -2428,6 +2428,44 @@ button.ki-id-badge::after {
   box-shadow: var(--shadow-md), 0 4px 16px rgba(0,0,0,.04);
   transition: border-color .15s, box-shadow .15s;
 }
+/* A diagram the reader has dragged to a width: the SVG scales into the box
+   instead of sitting at its natural size with empty space around it, and the
+   default 50vh cap steps aside — the size is now an explicit choice. */
+.markdown-body .rich-block-mermaid.block-sized > pre.mermaid {
+  max-height: none;
+}
+.markdown-body .rich-block-mermaid.block-sized > pre.mermaid > svg {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+/* Right-edge grab strip, mirroring the inline-image handles: invisible until
+   the block is hovered so a page of diagrams stays calm. */
+.markdown-body .block-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  width: 10px;
+  height: 100%;
+  border-radius: 4px;
+  cursor: ew-resize;
+  background: transparent;
+  opacity: 0;
+  transition: opacity .12s, background .12s;
+  z-index: 3;
+}
+.markdown-body .rich-block-mermaid:hover .block-resize-handle {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.markdown-body .block-resize-handle:hover,
+.markdown-body .rich-block-mermaid.block-dragging .block-resize-handle {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.markdown-body .rich-block-mermaid.block-dragging > pre.mermaid {
+  border-color: var(--accent);
+}
 .markdown-body pre.mermaid.mermaid-clickable {
   cursor: zoom-in;
 }

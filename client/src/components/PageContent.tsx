@@ -15,6 +15,7 @@ import { showToast } from "../store/uiSlice";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { useChecklistToggles } from "../hooks/useChecklistToggles";
 import { useImageResize } from "../hooks/useImageResize";
+import { useBlockResize } from "../hooks/useBlockResize";
 import { navigateTo } from "../hooks/useHash";
 import { openBadgeMenu } from "../lib/badgeMenu";
 import { PageEditor, type PageEditorHandle } from "./PageEditor";
@@ -119,6 +120,13 @@ export function PageContent({ pageId, line, block }: Props) {
   );
   useChecklistToggles();
   useImageResize(
+    bodyRef,
+    viewVersion == null && !editing ? pageId : null,
+    rendered.data ?? "",
+  );
+  // Same gate as images: no resize handles while viewing an old revision or
+  // editing, since neither writes back to the live page source.
+  useBlockResize(
     bodyRef,
     viewVersion == null && !editing ? pageId : null,
     rendered.data ?? "",

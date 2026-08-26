@@ -1491,13 +1491,18 @@ export class PageStore {
     const lines = content.split("\n");
     const trimmedCaption =
       caption == null ? null : caption.trim() === "" ? null : caption.trim();
-    const targetText = formatAnnotation(blockId, trimmedCaption);
 
     let changed = false;
     for (let i = 0; i < lines.length; i++) {
       const matches = parseAllAnnotations(lines[i]);
       for (const m of matches) {
         if (m.id !== blockId) continue;
+        // Re-emit the whole annotation, carrying the existing width across —
+        // editing the caption must not silently reset a dragged size.
+        const targetText = formatAnnotation(blockId, {
+          caption: trimmedCaption,
+          width: m.width,
+        });
         lines[i] =
           lines[i].slice(0, m.start) + targetText + lines[i].slice(m.end);
         changed = true;
@@ -1536,6 +1541,84 @@ export class PageStore {
       page_id: b.page_id,
       knowledge_id: b.knowledge_id,
       caption: trimmedCaption,
+      version: r.version,
+    };
+  }
+
+  /**
+   * Record a display width on a block's `{@N}` annotation, or clear it with
+   * `null` so the block goes back to its natural size. Presentation only —
+   * the block's content is untouched.
+   *
+   * Mirrors `setBlockCaption`, including carrying the other half of the
+   * annotation across, so a resize never drops a caption.
+   */
+  setBlockWidth(
+    blockId: number,
+    width: number | null,
+  ): {
+    block_id: number;
+    page_id: number;
+    knowledge_id: number;
+    width: number | null;
+    version: number;
+  } {
+    const b = this.getBlock(blockId);
+    if (!b) throw new Error(`block @${blockId} not found`);
+    const nextWidth =
+      width == null || !Number.isFinite(width) || width <= 0
+        ? null
+        : Math.round(width);
+    const content = this.readContent(b.knowledge_id, b.page_id);
+    const lines = content.split("\n");
+
+    let changed = false;
+    for (let i = 0; i < lines.length; i++) {
+      const matches = parseAllAnnotations(lines[i]);
+      for (const m of matches) {
+        if (m.id !== blockId) continue;
+        const targetText = formatAnnotation(blockId, {
+          caption: m.caption,
+          width: nextWidth,
+        });
+        lines[i] =
+          lines[i].slice(0, m.start) + targetText + lines[i].slice(m.end);
+        changed = true;
+        break;
+      }
+      if (changed) break;
+    }
+    if (!changed) {
+      throw new Error(
+        `annotation {@${blockId}} not found in page source — out of sync`,
+      );
+    }
+
+    const meta = this.getMetadata(b.page_id);
+    if (!meta) throw new Error(`page #${b.page_id} not found`);
+    const finalContent = this.writeContent(
+      b.knowledge_id,
+      b.page_id,
+      lines.join("\n"),
+    );
+    const r = this.bumpVersion(b.page_id);
+    const now = new Date().toISOString();
+    this.syncFts(b.page_id, meta.title, meta.keywords, finalContent);
+    this.saveRevision(
+      b.page_id,
+      r.version,
+      meta.title,
+      finalContent,
+      meta.summary,
+      joinKeywords(meta.keywords),
+      now,
+    );
+    this.bumpKnowledge(b.knowledge_id, b.page_id);
+    return {
+      block_id: blockId,
+      page_id: b.page_id,
+      knowledge_id: b.knowledge_id,
+      width: nextWidth,
       version: r.version,
     };
   }
@@ -1666,7 +1749,7 @@ export class PageStore {
           fenceMarker = marker;
           if (!/\{@\d+/.test(rest)) {
             const { id, caption } = missing.shift()!;
-            lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} ${formatAnnotation(id, caption)}`;
+            lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} ${formatAnnotation(id, { caption })}`;
           }
           i++;
           continue;
@@ -1690,7 +1773,7 @@ export class PageStore {
             annRe.test(peek1) || (peek1.trim() === "" && annRe.test(peek2));
           if (!alreadyAnnotated) {
             const { id, caption } = missing.shift()!;
-            lines.splice(end + 1, 0, "", formatAnnotation(id, caption));
+            lines.splice(end + 1, 0, "", formatAnnotation(id, { caption }));
             i = end + 3;
           } else {
             i = peek1.trim() === "" ? end + 3 : end + 2;

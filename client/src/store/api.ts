@@ -638,6 +638,30 @@ export const portalApi = createApi({
       ],
     }),
 
+    resizeBlock: builder.mutation<
+      {
+        block_id: number;
+        page_id: number;
+        knowledge_id: number;
+        width: number | null;
+        version: number;
+      },
+      { blockId: number; pageId: number; width: number | null }
+    >({
+      query: ({ blockId, width }) => ({
+        url: `blocks/${blockId}/width`,
+        method: "POST",
+        body: { width },
+      }),
+      // Same reasoning as resizeInlineImage: the drag already applied the new
+      // size on screen, so refetching PageRendered would only cost a
+      // scroll-jump. Page + Revisions still move because the source changed.
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Page", id: arg.pageId },
+        { type: "Revisions", id: arg.pageId },
+      ],
+    }),
+
     search: builder.query<
       SearchResponse,
       { q: string; limit?: number; projects?: string[]; includeArchived?: boolean }
@@ -774,6 +798,7 @@ export const {
   useUpdateUserPermissionsMutation,
   useToggleTaskAtIndexMutation,
   useResizeInlineImageMutation,
+  useResizeBlockMutation,
   useReorderPagesMutation,
   useMovePageToKnowledgeMutation,
   useGetShareStatusQuery,
