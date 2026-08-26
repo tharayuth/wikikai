@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
 import {
   TOOL_CALL_TTL_MS,
   emitToolCall,
@@ -21,6 +22,7 @@ import { PermissionStore } from "../src/store/permissions.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { createMcpServer } from "../src/mcp/server.js";
 import { buildApp } from "../src/web/app.js";
+import { createMcpHandler } from "../src/web/mcpRoute.js";
 
 describe("tool-call activity signal", () => {
   beforeEach(() => {
@@ -115,9 +117,10 @@ function makeStack() {
     sessions,
     permissions,
     handlers,
+    mcpHandler: createMcpHandler(() => createMcpServer(handlers)),
     publicBaseUrl: "http://test",
   });
-  return { tmpDir, handlers, app };
+  return { tmpDir, knowledge, pages, handlers, app };
 }
 
 describe("tool-call activity over MCP + SSE", () => {
@@ -131,32 +134,89 @@ describe("tool-call activity over MCP + SSE", () => {
     fs.rmSync(stack.tmpDir, { recursive: true, force: true });
   });
 
-  it("emits a tool-called event when a client invokes an MCP tool", async () => {
+  /** Boot the app on an ephemeral port and connect a real MCP client to it,
+   *  so calls travel the same HTTP transport a live agent uses. */
+  async function connectClient(server: Server) {
+    const { port } = server.address() as AddressInfo;
     const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-    const { InMemoryTransport } = await import(
-      "@modelcontextprotocol/sdk/inMemory.js"
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
     );
-
-    const server = createMcpServer(stack.handlers);
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "test", version: "0" });
-    await Promise.all([
-      server.connect(serverTransport),
-      client.connect(clientTransport),
-    ]);
+    await client.connect(
+      new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${port}/mcp`),
+      ),
+    );
+    return client;
+  }
 
-    const seen: WikikaiEvent[] = [];
+  it("reports a tool call that succeeds", async () => {
+    const server = stack.app.listen(0);
+    await new Promise((r) => server.once("listening", r));
+    const client = await connectClient(server);
+
+    const seen: string[] = [];
     const off = onEvent((e) => {
-      if (e.type === "tool-called") seen.push(e);
+      if (e.type === "tool-called") seen.push(e.tool_name);
     });
-    await client.callTool({ name: "list_knowledge", arguments: {} });
+    const res = await client.callTool({
+      name: "list_knowledge",
+      arguments: {},
+    });
     off();
     await client.close();
+    await new Promise((r) => server.close(r));
 
-    expect(seen).toEqual([
-      { type: "tool-called", tool_name: "list_knowledge", age_ms: 0 },
-    ]);
+    expect(res.isError ?? false).toBe(false);
+    expect(seen).toEqual(["list_knowledge"]);
+  });
+
+  it("reports a tool call whose arguments fail schema validation", async () => {
+    // The regression this guards: the SDK rejects bad arguments before any
+    // handler runs, so reporting from around the handlers left exactly these
+    // calls invisible — the case where seeing the tool name matters most.
+    const server = stack.app.listen(0);
+    await new Promise((r) => server.once("listening", r));
+    const client = await connectClient(server);
+
+    const seen: string[] = [];
+    const off = onEvent((e) => {
+      if (e.type === "tool-called") seen.push(e.tool_name);
+    });
+    // get_block takes `id`; `block_id` is the plausible wrong guess.
+    await client
+      .callTool({ name: "get_block", arguments: { block_id: 1 } })
+      .catch(() => undefined);
+    off();
+    await client.close();
+    await new Promise((r) => server.close(r));
+
+    expect(seen).toEqual(["get_block"]);
+  });
+
+  it("reports every tool in the catalogue, not a subset", async () => {
+    const server = stack.app.listen(0);
+    await new Promise((r) => server.once("listening", r));
+    const client = await connectClient(server);
+
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names.length).toBeGreaterThan(30);
+
+    const seen: string[] = [];
+    const off = onEvent((e) => {
+      if (e.type === "tool-called") seen.push(e.tool_name);
+    });
+    // Empty arguments — most of these fail validation, which is the point:
+    // reporting must not depend on the call being well-formed.
+    for (const name of names) {
+      await client.callTool({ name, arguments: {} }).catch(() => undefined);
+    }
+    off();
+    await client.close();
+    await new Promise((r) => server.close(r));
+
+    expect(seen).toEqual(names);
   });
 
   it("replays the recent tool call to a newly connected SSE client", async () => {
