@@ -542,6 +542,36 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
       : self.renderToken(tokens, idx, options);
   };
 
+  // ─── Standalone image paragraphs ───
+  // `![alt](src)` alone on its own line is a figure, not a run of text, so
+  // it should sit centred like every other block (mermaid, chart, a
+  // single-image gallery). Marked here rather than with a CSS `:has()`
+  // because the drag-resize hook wraps the <img> at runtime, which would
+  // break any selector written against the img being an only child.
+  //
+  // Only a genuinely solo image counts: a paragraph mixing text with an
+  // image is prose and keeps flowing left.
+  md.core.ruler.after("inline", "solo-image-paragraph", (state) => {
+    const tokens = state.tokens;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].type !== "paragraph_open") continue;
+      const inline = tokens[i + 1];
+      if (!inline || inline.type !== "inline" || !inline.children) continue;
+      const meaningful = inline.children.filter(
+        (c) =>
+          !(c.type === "text" && c.content.trim() === "") &&
+          c.type !== "softbreak",
+      );
+      const isSolo =
+        (meaningful.length === 1 && meaningful[0].type === "image") ||
+        (meaningful.length === 3 &&
+          meaningful[0].type === "link_open" &&
+          meaningful[1].type === "image" &&
+          meaningful[2].type === "link_close");
+      if (isSolo) tokens[i].attrJoin("class", "img-block");
+    }
+  });
+
   // ─── GFM task lists ───
   // Walk tokens in source order and assign a single page-wide 0-based
   // index to every clickable checkbox the page can produce. Two sources:

@@ -218,6 +218,23 @@ describe("renderMarkdown", () => {
     expect(out).toContain("hello");
   });
 
+  it("centres a paragraph that holds nothing but one image", async () => {
+    const solo = await renderMarkdown("![a](/img/x.png)");
+    expect(solo).toContain('<p class="img-block">');
+
+    const linked = await renderMarkdown("[![a](/img/x.png)](https://e.com)");
+    expect(linked).toContain('<p class="img-block">');
+  });
+
+  it("leaves an image that sits among text flowing inline", async () => {
+    const inline = await renderMarkdown("before ![a](/img/x.png) after");
+    expect(inline).not.toContain("img-block");
+
+    // Two images side by side is a row, not the solo figure case.
+    const pair = await renderMarkdown("![a](/img/x.png) ![b](/img/y.png)");
+    expect(pair).not.toContain("img-block");
+  });
+
   it("renders a diagram at the height recorded on its annotation", async () => {
     const out = await renderMarkdown(
       "```mermaid {@31 h=320}\nflowchart LR\n  A-->B\n```",

@@ -2551,6 +2551,13 @@ button.ki-id-badge::after {
 
 /* Image gallery — `images` fence renders a responsive thumbnail grid.
    Click a thumbnail to open the lightbox (handled by useMermaidCharts). */
+/* A paragraph holding nothing but one image is a figure, so centre it the
+   way every other block sits — mermaid, chart, and a one-image gallery all
+   use `margin: auto`. Centring via text-align rather than a width rule
+   keeps working after the drag-resize hook wraps the <img> in a span. */
+.markdown-body p.img-block {
+  text-align: center;
+}
 .markdown-body .image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
