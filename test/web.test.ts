@@ -1063,6 +1063,53 @@ describe("HTTP routes", () => {
       );
       expect(r.status).toBe(404);
     });
+
+    it("serves the mermaid + chart viewers for a shared page", async () => {
+      const k = knowledge.add({ title: "Diagrams", project: "examples" });
+      const page = pages.add({
+        knowledge_id: k.id,
+        title: "Page 1",
+        content:
+          "# D\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+          '```chart\n{"type":"bar","data":{"labels":["a"],"datasets":[{"label":"n","data":[1]}]}}\n```\n',
+      });
+      const token = (await request(app).post(`/api/knowledge/${k.id}/share`))
+        .body.share_token as string;
+
+      const m = await request(app).get(`/share/${token}/mermaid/${page.id}/0`);
+      expect(m.status).toBe(200);
+      expect(m.text).toContain("flowchart LR");
+
+      const c = await request(app).get(`/share/${token}/chart/${page.id}/0`);
+      expect(c.status).toBe(200);
+      expect(c.text).toContain("Chart");
+    });
+
+    it("the viewers refuse a page outside the shared knowledge", async () => {
+      // Without this guard a share link would double as a reader for the
+      // diagrams on every private page, by editing the id in the URL.
+      const { kid } = makeDoc();
+      const other = knowledge.add({ title: "Other", project: "examples" });
+      const secret = pages.add({
+        knowledge_id: other.id,
+        title: "Secret",
+        content: "# S\n\n```mermaid\nflowchart LR\n  X-->Y\n```\n",
+      });
+      const token = (await request(app).post(`/api/knowledge/${kid}/share`))
+        .body.share_token as string;
+
+      expect(
+        (await request(app).get(`/share/${token}/mermaid/${secret.id}/0`))
+          .status,
+      ).toBe(404);
+      expect(
+        (await request(app).get(`/share/${token}/chart/${secret.id}/0`)).status,
+      ).toBe(404);
+      expect(
+        (await request(app).get(`/share/nosuchtoken/mermaid/${secret.id}/0`))
+          .status,
+      ).toBe(404);
+    });
   });
 
   it("share routes bypass the login wall when web auth is on", async () => {
@@ -1092,7 +1139,11 @@ describe("HTTP routes", () => {
     });
 
     const k = k2.add({ title: "Doc", project: "examples" });
-    p2.add({ knowledge_id: k.id, title: "P", content: "hi" });
+    const page = p2.add({
+      knowledge_id: k.id,
+      title: "P",
+      content: "hi\n\n```mermaid\nflowchart LR\n  A-->B\n```\n",
+    });
     const token = k2.enableShare(k.id);
 
     // a normal gated route without a session → bounced (401 for /api/*)
@@ -1103,5 +1154,18 @@ describe("HTTP routes", () => {
     const r = await request(authedApp).get(`/api/share/${token}`);
     expect(r.status).toBe(200);
     expect(r.body.knowledge.id).toBe(k.id);
+
+    // so is the share-scoped diagram viewer — a public reader clicking a
+    // diagram must get the diagram, not a redirect to the login page.
+    const viewer = await request(authedApp).get(
+      `/share/${token}/mermaid/${page.id}/0`,
+    );
+    expect(viewer.status).toBe(200);
+    expect(viewer.text).toContain("flowchart LR");
+
+    // the un-scoped viewer stays behind the wall
+    expect(
+      (await request(authedApp).get(`/mermaid/${page.id}/0`)).status,
+    ).toBe(302);
   });
 });

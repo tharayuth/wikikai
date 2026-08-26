@@ -2,6 +2,7 @@ import { useEffect, type RefObject } from "react";
 import mermaid from "mermaid";
 import Chart from "chart.js/auto";
 import { openBadgeMenu } from "../lib/badgeMenu.js";
+import { openImageLightbox } from "../lib/imageLightbox.js";
 
 /**
  * Open the shared badge menu for an `@N` block badge. The "Edit" path
@@ -137,7 +138,14 @@ export function useMermaidCharts(
   deps: ReadonlyArray<unknown>,
   theme: "light" | "dark",
   pageId?: number,
-  opts?: { readOnly?: boolean },
+  opts?: {
+    readOnly?: boolean;
+    /** Prefix for the standalone mermaid / chart viewer windows. The public
+     *  share view passes `/share/<token>` so those windows resolve through
+     *  the token instead of the signed-in routes, which an anonymous visitor
+     *  would only get bounced from to /login. Defaults to the app's own. */
+    viewerBase?: string;
+  },
 ): void {
   useEffect(() => {
     const root = containerRef.current;
@@ -168,7 +176,11 @@ export function useMermaidCharts(
           node.classList.add("mermaid-clickable");
           node.setAttribute("title", "Click to open fullscreen viewer (zoom + pan)");
           const onClick = () => {
-            window.open(`/mermaid/${pageId}/${idx}`, "_blank", "noopener");
+            window.open(
+        `${opts?.viewerBase ?? ""}/mermaid/${pageId}/${idx}`,
+        "_blank",
+        "noopener",
+      );
           };
           node.addEventListener("click", onClick);
           // Store so we can remove on cleanup
@@ -211,7 +223,11 @@ export function useMermaidCharts(
             wrap.classList.add("chart-clickable");
             wrap.title = "Click to open fullscreen viewer";
             const handler = () => {
-              window.open(`/chart/${pageId}/${idx}`, "_blank", "noopener");
+              window.open(
+        `${opts?.viewerBase ?? ""}/chart/${pageId}/${idx}`,
+        "_blank",
+        "noopener",
+      );
             };
             wrap.addEventListener("click", handler);
             chartClickTargets.push({ el: wrap, handler });
@@ -228,43 +244,18 @@ export function useMermaidCharts(
       root.querySelectorAll<HTMLElement>("figure.image-thumb"),
     );
     const imageHandlers: { el: HTMLElement; handler: (e: Event) => void }[] = [];
-    let activeLightbox: HTMLDivElement | null = null;
-    const closeLightbox = () => {
-      if (activeLightbox && activeLightbox.parentNode) {
-        activeLightbox.parentNode.removeChild(activeLightbox);
-      }
-      activeLightbox = null;
-      document.removeEventListener("keydown", onEsc);
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
-    };
+    let closeLightbox: (() => void) | null = null;
     for (const fig of imageThumbs) {
       const src = fig.getAttribute("data-src");
       if (!src) continue;
       const handler = (e: Event) => {
         e.preventDefault();
-        const alt = fig.getAttribute("data-alt") ?? "";
-        const cap = fig.querySelector("figcaption")?.textContent ?? "";
-        const overlay = document.createElement("div");
-        overlay.className = "image-lightbox";
-        overlay.innerHTML =
-          `<img src="${src.replace(/"/g, "&quot;")}" alt="${alt.replace(/"/g, "&quot;")}" />` +
-          (cap
-            ? `<div class="lb-caption">${cap.replace(/</g, "&lt;")}</div>`
-            : "") +
-          `<button type="button" class="lb-close" aria-label="close">×</button>`;
-        overlay.addEventListener("click", (ev) => {
-          if (
-            ev.target === overlay ||
-            (ev.target as HTMLElement).classList.contains("lb-close")
-          ) {
-            closeLightbox();
-          }
+        closeLightbox?.();
+        closeLightbox = openImageLightbox({
+          src,
+          alt: fig.getAttribute("data-alt") ?? "",
+          caption: fig.querySelector("figcaption")?.textContent ?? "",
         });
-        document.body.appendChild(overlay);
-        activeLightbox = overlay;
-        document.addEventListener("keydown", onEsc);
       };
       fig.addEventListener("click", handler);
       imageHandlers.push({ el: fig, handler });
@@ -274,8 +265,9 @@ export function useMermaidCharts(
     // Skipped in read-only mode (public share view): the menu's Copy-content
     // and Edit/Delete actions hit auth-gated /api/blocks endpoints that an
     // unauthenticated visitor can't use, so we don't wire them. Mermaid /
-    // chart click-to-open and the image lightbox stay — those use public
-    // routes (/mermaid, /chart, /img).
+    // chart click-to-open and the image lightbox stay — images come from the
+    // public /img route, and the viewers go through `viewerBase` so the share
+    // view reaches its token-scoped copies.
     const badgeHandlers: { el: HTMLButtonElement; handler: (e: Event) => void }[] = [];
     if (!opts?.readOnly) {
       const badgeNodes = Array.from(root.querySelectorAll<HTMLButtonElement>("button.block-badge"));
@@ -320,7 +312,7 @@ export function useMermaidCharts(
       for (const { el, handler } of imageHandlers) {
         el.removeEventListener("click", handler);
       }
-      closeLightbox();
+      closeLightbox?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

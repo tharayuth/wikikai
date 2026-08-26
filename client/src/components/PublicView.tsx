@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
+import { attachInlineImageLightbox } from "../lib/imageLightbox";
 
 /**
  * Public, read-only viewer for a single shared knowledge document.
@@ -110,8 +111,17 @@ export function PublicView({ token }: { token: string }): JSX.Element {
     [html, theme, activePid],
     theme,
     activePid ?? undefined,
-    { readOnly: true },
+    { readOnly: true, viewerBase: `/share/${encodeURIComponent(token)}` },
   );
+
+  // Inline images get click-to-enlarge here too. The signed-in article gets
+  // it from useImageResize, which a public reader cannot use — it needs the
+  // Redux store for the resize mutation, and resizing is an edit anyway.
+  useEffect(() => {
+    const root = bodyRef.current;
+    if (!root || !html) return undefined;
+    return attachInlineImageLightbox(root);
+  }, [html, activePid]);
 
   if (error === "not-found") {
     return (
@@ -149,6 +159,10 @@ export function PublicView({ token }: { token: string }): JSX.Element {
           {theme === "dark" ? "☀" : "☾"}
         </button>
       </header>
+      {/* Two page pickers, one shown at a time by CSS: a dropdown where
+          width is scarce, a persistent list once there is room for one.
+          Both are rendered so switching is a pure media-query concern with
+          no resize listener or layout-measuring state. */}
       {data.pages.length > 1 && (
         <nav className="public-pagenav" aria-label="Pages">
           <select
@@ -165,14 +179,36 @@ export function PublicView({ token }: { token: string }): JSX.Element {
           </select>
         </nav>
       )}
-      <main className="public-main">
-        <article
-          className="markdown-body"
-          ref={bodyRef}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      </main>
-      <footer className="public-footer">อ่านอย่างเดียว · แชร์ผ่าน WikiKai</footer>
+      <div className="public-body">
+        {data.pages.length > 1 && (
+          <aside className="public-sidebar" aria-label="Pages">
+            <ul className="public-page-list">
+              {data.pages.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className={`public-page-item${p.id === activePid ? " active" : ""}`}
+                    aria-current={p.id === activePid ? "page" : undefined}
+                    onClick={() => setActivePid(p.id)}
+                  >
+                    {p.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
+        <div className="public-scroll">
+          <main className="public-main">
+            <article
+              className="markdown-body"
+              ref={bodyRef}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </main>
+          <footer className="public-footer">อ่านอย่างเดียว · แชร์ผ่าน WikiKai</footer>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1134,8 +1134,15 @@ export function buildApp(opts: BuildAppOptions): Express {
   });
 
   // ─── Standalone mermaid viewer (opens in a new tab from rendered pages) ───
-  app.get("/mermaid/:pid/:idx", (req, res, next) => {
-    try {
+  /** Render the standalone mermaid viewer for one fence of one page.
+   *  `scopeKnowledgeId`, when given, restricts the page to that knowledge —
+   *  the share-token routes pass it so a public link cannot be edited into a
+   *  peek at diagrams on pages that were never shared. */
+  function sendMermaidViewer(
+    req: Request,
+    res: Response,
+    scopeKnowledgeId?: number,
+  ): void {
       const pid = parseId(req.params.pid);
       const idx = Number(req.params.idx);
       if (!Number.isInteger(idx) || idx < 0) {
@@ -1143,7 +1150,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const meta = opts.pages.getMetadata(pid);
-      if (!meta) {
+      if (!meta || (scopeKnowledgeId != null && meta.knowledge_id !== scopeKnowledgeId)) {
         res.status(404).type("text/html").send("<p>page not found</p>");
         return;
       }
@@ -1166,14 +1173,23 @@ export function buildApp(opts: BuildAppOptions): Express {
           source: fences[idx],
         }),
       );
+  }
+
+  app.get("/mermaid/:pid/:idx", (req, res, next) => {
+    try {
+      sendMermaidViewer(req, res);
     } catch (e) {
       next(e);
     }
   });
 
   // ─── Standalone chart viewer ───
-  app.get("/chart/:pid/:idx", (req, res, next) => {
-    try {
+  /** Chart counterpart of `sendMermaidViewer` — same scoping contract. */
+  function sendChartViewer(
+    req: Request,
+    res: Response,
+    scopeKnowledgeId?: number,
+  ): void {
       const pid = parseId(req.params.pid);
       const idx = Number(req.params.idx);
       if (!Number.isInteger(idx) || idx < 0) {
@@ -1181,7 +1197,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const meta = opts.pages.getMetadata(pid);
-      if (!meta) {
+      if (!meta || (scopeKnowledgeId != null && meta.knowledge_id !== scopeKnowledgeId)) {
         res.status(404).type("text/html").send("<p>page not found</p>");
         return;
       }
@@ -1206,6 +1222,42 @@ export function buildApp(opts: BuildAppOptions): Express {
           chartTitle: c.title,
         }),
       );
+  }
+
+  app.get("/chart/:pid/:idx", (req, res, next) => {
+    try {
+      sendChartViewer(req, res);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ─── Share-scoped viewers ───
+  // Same fullscreen mermaid / chart windows the signed-in app opens, reachable
+  // by a public share visitor. They live under /share/ so requireAuth already
+  // lets them through, and each resolves the token first so the page must
+  // belong to the knowledge that token shares.
+  app.get("/share/:token/mermaid/:pid/:idx", (req, res, next) => {
+    try {
+      const k = opts.knowledge.findByShareToken(String(req.params.token));
+      if (!k) {
+        res.status(404).type("text/html").send("<p>not found</p>");
+        return;
+      }
+      sendMermaidViewer(req, res, k.id);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get("/share/:token/chart/:pid/:idx", (req, res, next) => {
+    try {
+      const k = opts.knowledge.findByShareToken(String(req.params.token));
+      if (!k) {
+        res.status(404).type("text/html").send("<p>not found</p>");
+        return;
+      }
+      sendChartViewer(req, res, k.id);
     } catch (e) {
       next(e);
     }

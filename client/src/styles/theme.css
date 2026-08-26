@@ -4459,12 +4459,84 @@ button.ki-id-badge::after {
   color: var(--text);
   cursor: pointer;
 }
+.public-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Narrow screens use the dropdown above; the list is desktop-only. */
+.public-sidebar {
+  display: none;
+}
 .public-main {
   flex: 1;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
   padding: 0 8px;
+}
+
+/* Desktop / landscape tablet: give the document the same shell as the
+   signed-in app — a persistent page list on the left, the article scrolling
+   beside it. 900px clears landscape tablets (1024pt and up) while leaving
+   portrait tablets and phones on the dropdown. */
+@media (min-width: 900px) {
+  .public-view {
+    overflow: hidden;
+  }
+  .public-pagenav {
+    display: none;
+  }
+  .public-body {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+  }
+  .public-sidebar {
+    display: block;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 10px 0;
+  }
+  .public-scroll {
+    overflow-y: auto;
+  }
+}
+/* Signals that a share-view image opens full size on click. The signed-in
+   article gets this affordance from its resize wrapper instead. */
+.public-view .markdown-body img.img-zoomable {
+  cursor: zoom-in;
+}
+.public-page-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.public-page-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.45;
+  padding: 8px 14px 8px 13px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.public-page-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.public-page-item.active {
+  background: var(--accent-light);
+  border-left-color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 600;
 }
 /* The shared article reuses .markdown-body. Hide the @N block badges — an
    editing affordance with no meaning for a public read-only reader. */

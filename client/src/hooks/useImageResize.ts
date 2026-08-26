@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { useResizeInlineImageMutation } from "../store/api";
+import { openImageLightbox } from "../lib/imageLightbox";
 
 /**
  * Wire up drag-to-resize handles + click-to-lightbox on every inline
@@ -202,17 +203,7 @@ export function useImageResize(
     }
 
     // ─── Click-to-lightbox on any inline image we wrapped ───
-    let activeLightbox: HTMLDivElement | null = null;
-    const closeLightbox = () => {
-      if (activeLightbox?.parentNode) {
-        activeLightbox.parentNode.removeChild(activeLightbox);
-      }
-      activeLightbox = null;
-      document.removeEventListener("keydown", onEsc);
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
-    };
+    let closeLightbox: (() => void) | null = null;
     const clickHandlers: {
       el: HTMLImageElement;
       handler: (e: MouseEvent) => void;
@@ -225,28 +216,12 @@ export function useImageResize(
         const t = e.target as HTMLElement;
         if (t.classList.contains("img-resize-handle")) return;
         e.preventDefault();
-        const src = img.getAttribute("src") ?? "";
-        const alt = img.getAttribute("alt") ?? "";
-        const title = img.getAttribute("title") ?? "";
-        const overlay = document.createElement("div");
-        overlay.className = "image-lightbox";
-        overlay.innerHTML =
-          `<img src="${src.replace(/"/g, "&quot;")}" alt="${alt.replace(/"/g, "&quot;")}" />` +
-          (title
-            ? `<div class="lb-caption">${title.replace(/</g, "&lt;")}</div>`
-            : "") +
-          `<button type="button" class="lb-close" aria-label="close">×</button>`;
-        overlay.addEventListener("click", (ev) => {
-          if (
-            ev.target === overlay ||
-            (ev.target as HTMLElement).classList.contains("lb-close")
-          ) {
-            closeLightbox();
-          }
+        closeLightbox?.();
+        closeLightbox = openImageLightbox({
+          src: img.getAttribute("src") ?? "",
+          alt: img.getAttribute("alt") ?? "",
+          caption: img.getAttribute("title") ?? "",
         });
-        document.body.appendChild(overlay);
-        activeLightbox = overlay;
-        document.addEventListener("keydown", onEsc);
       };
       img.addEventListener("click", handler);
       clickHandlers.push({ el: img, handler });
@@ -261,7 +236,7 @@ export function useImageResize(
       for (const { el, handler } of clickHandlers) {
         el.removeEventListener("click", handler);
       }
-      closeLightbox();
+      closeLightbox?.();
       // Unwrap so a subsequent render doesn't see a stale wrapper.
       for (const { wrap, img } of wraps) {
         if (wrap.parentNode) {
