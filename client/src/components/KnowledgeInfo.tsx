@@ -26,9 +26,13 @@ interface Props {
   /** Rendered immediately after the title text (inside .ki-row-1).
    *  Used by Topbar to pin Refresh right next to the topic name. */
   titleSuffix?: ReactNode;
+  /** Rendered in the no-knowledge-selected placeholder. Lets Topbar keep
+   *  showing global indicators (the AI tool-activity badge) on the home
+   *  screen, where there is no title to hang `titleSuffix` off. */
+  idleSuffix?: ReactNode;
 }
 
-export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
+export function KnowledgeInfo({ kid, pid, titleSuffix, idleSuffix }: Props) {
   const dispatch = useAppDispatch();
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: kid === null });
   const [deleteKnowledge] = useDeleteKnowledgeMutation();
@@ -53,7 +57,9 @@ export function KnowledgeInfo({ kid, pid, titleSuffix }: Props) {
   }, [kid]);
 
   if (kid === null) {
-    return <div className="knowledge-info knowledge-info-empty" />;
+    return (
+      <div className="knowledge-info knowledge-info-empty">{idleSuffix}</div>
+    );
   }
   if (knowledge.isLoading) {
     return (

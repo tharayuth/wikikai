@@ -3,6 +3,7 @@ import { z } from "zod";
 import { EXAMPLE_KINDS } from "./examples.js";
 import type { ToolHandlers } from "./handlers.js";
 import { getCallContext, withCallContext } from "../lib/callContext.js";
+import { emitToolCall } from "../lib/events.js";
 
 const SESSION_NOTE =
   "Claude Code chat session UUID (the value used by `claude --resume <id>`). " +
@@ -654,6 +655,11 @@ export function createMcpServer(
       ];
       if (typeof orig !== "function") return orig;
       return (input: unknown) => {
+        // Push the tool name to every open browser so the topbar can
+        // show what the AI is doing. Fired before the handler runs, and
+        // for read-only tools too — this is a liveness signal, not an
+        // audit record (activity_log covers mutations).
+        emitToolCall(String(prop));
         // Prefer the user_id resolved by the /mcp route (per-user
         // Bearer token); fall back to the configured default when the
         // legacy `WIKIKAI_TOKEN` env var was used.

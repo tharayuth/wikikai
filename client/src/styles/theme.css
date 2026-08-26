@@ -293,7 +293,10 @@ a:hover { text-decoration: underline; }
   padding: 0;
   line-height: 1.25;
 }
-.knowledge-info-empty { /* placeholder when no knowledge selected */ }
+/* Placeholder when no knowledge is selected. Usually empty, but it still
+   hosts the AI tool-activity badge — align it left instead of letting the
+   column stretch it full width. */
+.knowledge-info-empty { align-items: flex-start; }
 .ki-row-1 {
   display: flex;
   align-items: center;
@@ -401,6 +404,54 @@ button.ki-id-badge::after {
 @keyframes sse-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.35; }
+}
+
+/* Live MCP tool-call badge — sits after the Refresh button, appears on
+   each call and fades itself out 30s after the last one. min-width: 0 +
+   ellipsis so a long tool name never pushes the topbar wider. */
+.tool-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 190px;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent-strong);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  animation: tool-activity-in .18s ease-out;
+}
+.tool-activity-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  animation: tool-activity-pulse 1.4s ease-in-out infinite;
+}
+.tool-activity-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes tool-activity-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes tool-activity-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-activity,
+  .tool-activity-dot {
+    animation: none;
+  }
 }
 .ki-actions {
   display: flex;

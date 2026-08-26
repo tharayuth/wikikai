@@ -24,6 +24,12 @@ export interface UiState {
   projectFilterOpen: boolean;
   /** Live state of the /api/events SSE channel. */
   sseStatus: SseStatus;
+  /** Newest MCP tool call pushed over SSE, shown next to Refresh so the
+   *  AI's activity is visible. `at` is the client-clock time of the call
+   *  (server age subtracted), so the badge expires on schedule even when
+   *  the event was replayed to a tab that connected late. Null when
+   *  nothing has been called recently. */
+  lastTool: { name: string; at: number } | null;
 }
 
 function initialTheme(): Theme {
@@ -62,6 +68,7 @@ const initialState: UiState = {
   toast: null,
   projectFilterOpen: false,
   sseStatus: "connecting",
+  lastTool: null,
 };
 
 export const uiSlice = createSlice({
@@ -155,6 +162,12 @@ export const uiSlice = createSlice({
     setSseStatus(state, action: PayloadAction<SseStatus>) {
       state.sseStatus = action.payload;
     },
+    noteToolCall(state, action: PayloadAction<{ name: string; at: number }>) {
+      state.lastTool = action.payload;
+    },
+    clearToolCall(state) {
+      state.lastTool = null;
+    },
   },
 });
 
@@ -180,4 +193,6 @@ export const {
   openProjectFilter,
   closeProjectFilter,
   setSseStatus,
+  noteToolCall,
+  clearToolCall,
 } = uiSlice.actions;

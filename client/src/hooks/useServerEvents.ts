@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAppDispatch } from "../store";
 import { portalApi } from "../store/api";
-import { setSseStatus } from "../store/uiSlice";
+import { noteToolCall, setSseStatus } from "../store/uiSlice";
 
 /**
  * Subscribe to the server's `/api/events` SSE stream.
@@ -22,7 +22,8 @@ type ServerEvent =
   | { type: "page-changed"; page_id: number; knowledge_id: number }
   | { type: "page-deleted"; page_id: number; knowledge_id: number }
   | { type: "knowledge-changed"; knowledge_id?: number }
-  | { type: "activity-logged"; knowledge_id: number | null };
+  | { type: "activity-logged"; knowledge_id: number | null }
+  | { type: "tool-called"; tool_name: string; age_ms: number };
 
 const REFRESH_TAGS = [
   { type: "KnowledgeList", id: "LIST" },
@@ -120,6 +121,21 @@ export function useServerEvents(): void {
             portalApi.util.invalidateTags([
               { type: "ActivityLog", id: "LIST" },
             ]),
+          );
+          break;
+        }
+        case "tool-called": {
+          // Presence signal only — no cache invalidation. Mutating tools
+          // already emit their own page/knowledge events; this fires for
+          // read-only tools too so the badge tracks all AI activity.
+          // Rebase the server-reported age onto the local clock so a
+          // replayed event expires at the right moment without needing
+          // the two clocks to agree.
+          dispatch(
+            noteToolCall({
+              name: e.tool_name,
+              at: Date.now() - e.age_ms,
+            }),
           );
           break;
         }

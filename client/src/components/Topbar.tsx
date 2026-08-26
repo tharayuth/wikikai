@@ -19,6 +19,7 @@ import { useHash } from "../hooks/useHash";
 import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
 import { SseStatus } from "./SseStatus";
+import { ToolActivity } from "./ToolActivity";
 
 interface TopbarProps {
   searchText: string;
@@ -133,6 +134,7 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
         <KnowledgeInfo
           kid={activeKid}
           pid={activePid}
+          idleSuffix={<ToolActivity />}
           titleSuffix={
             <>
               <SseStatus />
@@ -154,6 +156,7 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
             >
               ↻
             </button>
+              <ToolActivity />
             </>
           }
         />

@@ -17,7 +17,7 @@ import type { PermissionStore } from "../store/permissions.js";
 import type { ToolHandlers } from "../mcp/handlers.js";
 import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
-import { onEvent } from "../lib/events.js";
+import { getRecentToolCall, onEvent } from "../lib/events.js";
 import { withCallContext } from "../lib/callContext.js";
 import {
   attachAuthRoutes,
@@ -182,6 +182,15 @@ export function buildApp(opts: BuildAppOptions): Express {
     });
     res.flushHeaders();
     res.write(`: connected\n\n`);
+    // Catch this tab up on the tool badge. Without the replay, a tab
+    // opened moments after a tool call would show nothing while every
+    // tab already open shows the name.
+    const recentTool = getRecentToolCall();
+    if (recentTool) {
+      res.write(
+        `data: ${JSON.stringify({ type: "tool-called", ...recentTool })}\n\n`,
+      );
+    }
     const ping = setInterval(() => {
       try {
         res.write(`: ping\n\n`);
