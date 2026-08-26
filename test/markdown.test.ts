@@ -218,32 +218,45 @@ describe("renderMarkdown", () => {
     expect(out).toContain("hello");
   });
 
-  it("renders a diagram at the width recorded on its annotation", async () => {
+  it("renders a diagram at the height recorded on its annotation", async () => {
     const out = await renderMarkdown(
-      "```mermaid {@31 640px}\nflowchart LR\n  A-->B\n```",
+      "```mermaid {@31 h=320}\nflowchart LR\n  A-->B\n```",
     );
     expect(out).toContain('class="rich-block-mermaid block-sized"');
-    expect(out).toContain('style="width:640px"');
+    expect(out).toContain('style="--block-h:320px"');
     expect(out).toContain('data-block-id="31"');
     // The annotation itself is consumed, never echoed into the page.
-    expect(out).not.toContain("640px}");
+    expect(out).not.toContain("h=320}");
   });
 
-  it("keeps caption and width together on one annotation", async () => {
+  it("keeps caption and height together on one annotation", async () => {
     const out = await renderMarkdown(
-      '```mermaid {@32 "API → DB" 480px}\nflowchart LR\n  A-->B\n```',
+      '```mermaid {@32 "API → DB" h=240}\nflowchart LR\n  A-->B\n```',
     );
-    expect(out).toContain('style="width:480px"');
+    expect(out).toContain('style="--block-h:240px"');
     expect(out).toContain("API → DB");
   });
 
-  it("leaves a diagram with no recorded width unsized", async () => {
+  it("leaves a diagram with no recorded height unsized", async () => {
     const out = await renderMarkdown(
       "```mermaid {@33}\nflowchart LR\n  A-->B\n```",
     );
     expect(out).toContain('class="rich-block-mermaid"');
     expect(out).not.toContain("block-sized");
-    expect(out).not.toContain("style=\"width:");
+    expect(out).not.toContain("--block-h");
+  });
+
+  it("still recognises a block carrying the retired width token", async () => {
+    // A short-lived build wrote display widths as a bare `NNNpx`. The id has
+    // to keep resolving — a token the parser choked on would take the whole
+    // annotation with it — while the width itself goes unused.
+    const out = await renderMarkdown(
+      '```mermaid {@34 "Kept" 640px}\nflowchart LR\n  A-->B\n```',
+    );
+    expect(out).toContain('data-block-id="34"');
+    expect(out).toContain("Kept");
+    expect(out).not.toContain("block-sized");
+    expect(out).not.toContain("640px");
   });
 
   it("attaches data-block-id to a table when followed by a {@N} paragraph", async () => {

@@ -2428,27 +2428,35 @@ button.ki-id-badge::after {
   box-shadow: var(--shadow-md), 0 4px 16px rgba(0,0,0,.04);
   transition: border-color .15s, box-shadow .15s;
 }
-/* A diagram the reader has dragged to a width: the SVG scales into the box
-   instead of sitting at its natural size with empty space around it, and the
-   default 50vh cap steps aside — the size is now an explicit choice. */
+/* A diagram the reader has dragged to a height: the box takes that height
+   and the drawing scales to fill it, width following the SVG's own aspect
+   ratio. The default 50vh cap steps aside — the size is now an explicit
+   choice, and that cap is exactly what clips a tall diagram. */
 .markdown-body .rich-block-mermaid.block-sized > pre.mermaid {
+  height: var(--block-h);
   max-height: none;
 }
+/* !important to out-rank the base `pre.mermaid svg` rule below, which uses
+   it to beat the width/height attributes mermaid stamps on the SVG. Its
+   48vh cap is the default that a dragged height is explicitly replacing. */
 .markdown-body .rich-block-mermaid.block-sized > pre.mermaid > svg {
-  width: 100%;
-  max-width: 100%;
-  height: auto;
+  height: 100% !important;
+  width: auto !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
 }
-/* Right-edge grab strip, mirroring the inline-image handles: invisible until
-   the block is hovered so a page of diagrams stays calm. */
+/* Bottom-edge grab strip, mirroring the inline-image handles: invisible
+   until the block is hovered so a page of diagrams stays calm. It spans the
+   wrapper's bottom edge — below the caption when there is one, so dragging
+   never fights with selecting caption text. */
 .markdown-body .block-resize-handle {
   position: absolute;
-  top: 0;
-  right: -5px;
-  width: 10px;
-  height: 100%;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 10px;
   border-radius: 4px;
-  cursor: ew-resize;
+  cursor: ns-resize;
   background: transparent;
   opacity: 0;
   transition: opacity .12s, background .12s;

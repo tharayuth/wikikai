@@ -877,10 +877,10 @@ export function buildApp(opts: BuildAppOptions): Express {
     }
   });
 
-  // Persist a diagram's dragged display width onto its `{@N}` annotation.
-  // Body: { width: number | null } — null restores the natural size.
+  // Persist a diagram's dragged display height onto its `{@N}` annotation.
+  // Body: { height: number | null } — null restores the natural size.
   // ACL: edit-level, same as any other change to the page source.
-  app.post("/api/blocks/:id/width", async (req, res, next) => {
+  app.post("/api/blocks/:id/height", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
       const block = opts.pages.getBlock(id);
@@ -889,17 +889,17 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       gateEdit(req, block.knowledge_id);
-      const raw = (req.body ?? {}).width;
+      const raw = (req.body ?? {}).height;
       if (raw !== null && (typeof raw !== "number" || !Number.isFinite(raw))) {
-        res.status(400).json({ error: "width must be a number or null" });
+        res.status(400).json({ error: "height must be a number or null" });
         return;
       }
       // Clamp rather than reject: the value comes from a mouse drag, so an
       // out-of-range number means the pointer went somewhere odd, not that
       // the caller is wrong.
-      const width =
-        raw === null ? null : Math.max(120, Math.min(2000, Math.round(raw)));
-      const r = opts.pages.setBlockWidth(id, width);
+      const height =
+        raw === null ? null : Math.max(80, Math.min(1600, Math.round(raw)));
+      const r = opts.pages.setBlockHeight(id, height);
       const meta = opts.pages.getMetadata(block.page_id);
       opts.activityLog.record({
         action: "resize",

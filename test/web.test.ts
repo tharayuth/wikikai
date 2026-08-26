@@ -987,7 +987,7 @@ describe("HTTP routes", () => {
     }
   });
 
-  describe("block width endpoint", () => {
+  describe("block height endpoint", () => {
     function makeDiagram() {
       const k = knowledge.add({ title: "D", project: "examples" });
       const p = pages.add({
@@ -998,48 +998,51 @@ describe("HTTP routes", () => {
       return { kid: k.id, pid: p.id };
     }
 
-    it("saves a width, then clears it with null", async () => {
+    it("saves a height, then clears it with null", async () => {
       const { pid } = makeDiagram();
 
       let r = await request(app)
-        .post("/api/blocks/7001/width")
-        .send({ width: 520 });
+        .post("/api/blocks/7001/height")
+        .send({ height: 320 });
       expect(r.status).toBe(200);
-      expect(r.body.width).toBe(520);
-      expect(pages.get(pid)!.content).toContain("{@7001 520px}");
+      expect(r.body.height).toBe(320);
+      expect(pages.get(pid)!.content).toContain("{@7001 h=320}");
 
       r = await request(app)
-        .post("/api/blocks/7001/width")
-        .send({ width: null });
+        .post("/api/blocks/7001/height")
+        .send({ height: null });
       expect(r.status).toBe(200);
-      expect(r.body.width).toBeNull();
+      expect(r.body.height).toBeNull();
       expect(pages.get(pid)!.content).toContain("{@7001}");
     });
 
-    it("clamps a width from a wild drag instead of rejecting it", async () => {
+    it("clamps a height from a wild drag instead of rejecting it", async () => {
       makeDiagram();
       const tiny = await request(app)
-        .post("/api/blocks/7001/width")
-        .send({ width: 5 });
-      expect(tiny.body.width).toBe(120);
+        .post("/api/blocks/7001/height")
+        .send({ height: 5 });
+      expect(tiny.body.height).toBe(80);
       const huge = await request(app)
-        .post("/api/blocks/7001/width")
-        .send({ width: 99999 });
-      expect(huge.body.width).toBe(2000);
+        .post("/api/blocks/7001/height")
+        .send({ height: 99999 });
+      expect(huge.body.height).toBe(1600);
     });
 
-    it("rejects a non-numeric width and an unknown block", async () => {
+    it("rejects a non-numeric height and an unknown block", async () => {
       makeDiagram();
       expect(
         (
           await request(app)
-            .post("/api/blocks/7001/width")
-            .send({ width: "wide" })
+            .post("/api/blocks/7001/height")
+            .send({ height: "tall" })
         ).status,
       ).toBe(400);
       expect(
-        (await request(app).post("/api/blocks/999999/width").send({ width: 300 }))
-          .status,
+        (
+          await request(app)
+            .post("/api/blocks/999999/height")
+            .send({ height: 300 })
+        ).status,
       ).toBe(404);
     });
   });

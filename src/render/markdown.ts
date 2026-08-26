@@ -120,26 +120,27 @@ export const CODE_FENCE_BLOCK_LANGS = new Set<string>([
 function extractBlockId(info: string): {
   id: number | null;
   caption: string | null;
-  width: number | null;
+  height: number | null;
   rest: string;
 } {
   const p = parseAnnotation(info);
-  if (!p) return { id: null, caption: null, width: null, rest: info };
+  if (!p) return { id: null, caption: null, height: null, rest: info };
   const rest = (info.slice(0, p.start) + info.slice(p.end))
     .replace(/\s+/g, " ")
     .trim();
-  return { id: p.id, caption: p.caption, width: p.width, rest };
+  return { id: p.id, caption: p.caption, height: p.height, rest };
 }
 
-/** Inline width for a block the reader has resized, plus a marker class the
- *  stylesheet keys off to make the diagram scale into the box. Both are
+/** Inline height for a diagram the reader has resized, plus a marker class
+ *  the stylesheet keys off to scale the drawing to that height. Width is
+ *  never set — it follows from the diagram's own aspect ratio. Both are
  *  absent when the block has never been dragged, so untouched blocks keep
  *  their natural layout exactly as before. */
-function blockWidthStyle(width: number | null): string {
-  return width == null ? "" : ` style="width:${width}px"`;
+function blockHeightStyle(height: number | null): string {
+  return height == null ? "" : ` style="--block-h:${height}px"`;
 }
-function blockSizedClass(width: number | null): string {
-  return width == null ? "" : " block-sized";
+function blockSizedClass(height: number | null): string {
+  return height == null ? "" : " block-sized";
 }
 
 function blockCaption(caption: string | null): string {
@@ -408,12 +409,12 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     const rawInfo = (token.info || "").trim();
-    const { id: blockId, caption, width, rest } = extractBlockId(rawInfo);
+    const { id: blockId, caption, height, rest } = extractBlockId(rawInfo);
     const info = rest.split(/\s+/)[0].toLowerCase();
     if (info === "mermaid") {
       // Mermaid wipes its host's innerHTML when rendering, so the badge has
       // to live in a wrapper sibling rather than inside <pre class="mermaid">.
-      return `<div class="rich-block-mermaid${blockSizedClass(width)}"${blockIdAttr(blockId)}${blockWidthStyle(width)}><pre class="mermaid">${escapeHtml(token.content)}</pre>${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
+      return `<div class="rich-block-mermaid${blockSizedClass(height)}"${blockIdAttr(blockId)}${blockHeightStyle(height)}><pre class="mermaid">${escapeHtml(token.content)}</pre>${blockCaption(caption)}${blockBadge(blockId)}</div>\n`;
     }
     if (info === "chart") {
       return renderChart(token.content, blockId, caption) + "\n";

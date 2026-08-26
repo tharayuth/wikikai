@@ -2,22 +2,23 @@ import { useEffect, type RefObject } from "react";
 import { useResizeBlockMutation } from "../store/api";
 
 /** Matches the clamp the server applies, so the live preview never shows a
- *  width the save would reject. */
-const MIN_W = 120;
-const MAX_W = 2000;
+ *  height the save would reject. */
+const MIN_H = 80;
+const MAX_H = 1600;
 
 /**
  * Drag-to-resize for diagram blocks, the counterpart of `useImageResize`.
  *
- * A right-edge handle sets the block's width and the diagram scales into
+ * A bottom-edge handle sets the block's height and the diagram scales to
  * it; double-clicking the handle restores the natural size. The chosen
- * width is written to the block's `{@N}` annotation, so it survives a
+ * height is written to the block's `{@N}` annotation, so it survives a
  * reload and travels with the document — unlike the article width, which is
  * a per-reader browser preference.
  *
- * Width only, deliberately: a mermaid SVG has a fixed aspect ratio, so
- * height follows from width. A second axis would letterbox rather than
- * resize.
+ * Height only, deliberately: a mermaid SVG has a fixed aspect ratio, so
+ * width follows from height and is left to the diagram. Dragging height is
+ * what "zoom the diagram" means here, and it also lifts the default cap
+ * that otherwise clips tall diagrams.
  */
 export function useBlockResize(
   bodyRef: RefObject<HTMLElement | null>,
@@ -51,21 +52,22 @@ export function useBlockResize(
     type Drag = {
       block: HTMLElement;
       blockId: number;
-      startX: number;
-      startW: number;
-      finalW: number;
+      startY: number;
+      startH: number;
+      finalH: number;
     };
     let drag: Drag | null = null;
 
     const onMove = (e: MouseEvent): void => {
       if (!drag) return;
       e.preventDefault();
-      const w = Math.max(
-        MIN_W,
-        Math.min(MAX_W, Math.round(drag.startW + (e.clientX - drag.startX))),
+      const h = Math.max(
+        MIN_H,
+        Math.min(MAX_H, Math.round(drag.startH + (e.clientY - drag.startY))),
       );
-      drag.block.style.width = `${w}px`;
-      drag.finalW = w;
+      drag.block.style.setProperty("--block-h", `${h}px`);
+      drag.block.classList.add("block-sized");
+      drag.finalH = h;
     };
 
     const onUp = async (): Promise<void> => {
@@ -79,15 +81,15 @@ export function useBlockResize(
       document.body.style.cursor = "";
       // A click without movement is not a resize — leave it to the click
       // handler that opens the fullscreen viewer.
-      if (Math.abs(d.finalW - d.startW) < 2) return;
+      if (Math.abs(d.finalH - d.startH) < 2) return;
       try {
         await resizeBlock({
           blockId: d.blockId,
           pageId,
-          width: d.finalW,
+          height: d.finalH,
         }).unwrap();
       } catch (err) {
-        d.block.style.width = `${d.startW}px`;
+        d.block.style.setProperty("--block-h", `${d.startH}px`);
         // eslint-disable-next-line no-console
         console.error("block resize failed", err);
       }
@@ -108,11 +110,14 @@ export function useBlockResize(
         // The wrapper opens the fullscreen viewer on click; the handle must
         // not count as one.
         e.stopPropagation();
-        const w = Math.round(block.getBoundingClientRect().width);
-        drag = { block, blockId, startX: e.clientX, startW: w, finalW: w };
+        // Measure the diagram box, not the wrapper — the wrapper also holds
+        // the caption, which must not creep into the height on every drag.
+        const box = block.querySelector("pre.mermaid") ?? block;
+        const h = Math.round(box.getBoundingClientRect().height);
+        drag = { block, blockId, startY: e.clientY, startH: h, finalH: h };
         block.classList.add("block-dragging");
         document.body.style.userSelect = "none";
-        document.body.style.cursor = "ew-resize";
+        document.body.style.cursor = "ns-resize";
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
       };
@@ -122,12 +127,14 @@ export function useBlockResize(
       const onDbl = (e: MouseEvent): void => {
         e.preventDefault();
         e.stopPropagation();
-        const previous = block.style.width;
-        block.style.width = "";
-        resizeBlock({ blockId, pageId, width: null })
+        const previous = block.style.getPropertyValue("--block-h");
+        block.style.removeProperty("--block-h");
+        block.classList.remove("block-sized");
+        resizeBlock({ blockId, pageId, height: null })
           .unwrap()
           .catch((err: unknown) => {
-            block.style.width = previous;
+            block.style.setProperty("--block-h", previous);
+            block.classList.add("block-sized");
             // eslint-disable-next-line no-console
             console.error("block resize reset failed", err);
           });

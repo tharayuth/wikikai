@@ -1752,25 +1752,25 @@ describe("PageStore", () => {
   });
 
   describe("block captions", () => {
-    it("setBlockWidth records, changes and clears a display width", () => {
+    it("setBlockHeight records, changes and clears a display height", () => {
       const { id: pid } = pages.add({
         knowledge_id: kid,
         title: "T",
         content: "```mermaid {@6001}\nflowchart LR\n  A-->B\n```",
       });
 
-      pages.setBlockWidth(6001, 640);
-      expect(pages.get(pid)!.content).toContain("{@6001 640px}");
+      pages.setBlockHeight(6001, 320);
+      expect(pages.get(pid)!.content).toContain("{@6001 h=320}");
 
-      pages.setBlockWidth(6001, 420);
-      expect(pages.get(pid)!.content).toContain("{@6001 420px}");
+      pages.setBlockHeight(6001, 420);
+      expect(pages.get(pid)!.content).toContain("{@6001 h=420}");
 
-      pages.setBlockWidth(6001, null);
+      pages.setBlockHeight(6001, null);
       expect(pages.get(pid)!.content).toContain("{@6001}");
-      expect(pages.get(pid)!.content).not.toContain("px}");
+      expect(pages.get(pid)!.content).not.toContain("h=");
     });
 
-    it("width and caption survive each other's edits", () => {
+    it("height and caption survive each other's edits", () => {
       // Both live in one annotation, so each setter has to re-emit the other
       // half; getting this wrong silently erases the reader's work.
       const { id: pid } = pages.add({
@@ -1779,26 +1779,26 @@ describe("PageStore", () => {
         content: '```mermaid {@6002 "API to DB"}\nflowchart LR\n  A-->B\n```',
       });
 
-      pages.setBlockWidth(6002, 500);
-      expect(pages.get(pid)!.content).toContain('{@6002 "API to DB" 500px}');
+      pages.setBlockHeight(6002, 500);
+      expect(pages.get(pid)!.content).toContain('{@6002 "API to DB" h=500}');
       expect(pages.getBlock(6002)!.caption).toBe("API to DB");
 
       pages.setBlockCaption(6002, "Renamed");
-      expect(pages.get(pid)!.content).toContain('{@6002 "Renamed" 500px}');
+      expect(pages.get(pid)!.content).toContain('{@6002 "Renamed" h=500}');
 
       pages.setBlockCaption(6002, null);
-      expect(pages.get(pid)!.content).toContain("{@6002 500px}");
+      expect(pages.get(pid)!.content).toContain("{@6002 h=500}");
     });
 
-    it("setBlockWidth bumps the page version", () => {
+    it("setBlockHeight bumps the page version", () => {
       pages.add({
         knowledge_id: kid,
         title: "T",
         content: "```mermaid {@6003}\nflowchart LR\n  A-->B\n```",
       });
       const before = pages.getBlock(6003)!;
-      const r = pages.setBlockWidth(6003, 300);
-      expect(r.width).toBe(300);
+      const r = pages.setBlockHeight(6003, 300);
+      expect(r.height).toBe(300);
       expect(r.version).toBeGreaterThan(1);
       expect(r.page_id).toBe(before.page_id);
     });

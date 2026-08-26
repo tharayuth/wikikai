@@ -643,15 +643,15 @@ export const portalApi = createApi({
         block_id: number;
         page_id: number;
         knowledge_id: number;
-        width: number | null;
+        height: number | null;
         version: number;
       },
-      { blockId: number; pageId: number; width: number | null }
+      { blockId: number; pageId: number; height: number | null }
     >({
-      query: ({ blockId, width }) => ({
-        url: `blocks/${blockId}/width`,
+      query: ({ blockId, height }) => ({
+        url: `blocks/${blockId}/height`,
         method: "POST",
-        body: { width },
+        body: { height },
       }),
       // Same reasoning as resizeInlineImage: the drag already applied the new
       // size on screen, so refetching PageRendered would only cost a

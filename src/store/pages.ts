@@ -1501,7 +1501,7 @@ export class PageStore {
         // editing the caption must not silently reset a dragged size.
         const targetText = formatAnnotation(blockId, {
           caption: trimmedCaption,
-          width: m.width,
+          height: m.height,
         });
         lines[i] =
           lines[i].slice(0, m.start) + targetText + lines[i].slice(m.end);
@@ -1546,29 +1546,29 @@ export class PageStore {
   }
 
   /**
-   * Record a display width on a block's `{@N}` annotation, or clear it with
+   * Record a display height on a block's `{@N}` annotation, or clear it with
    * `null` so the block goes back to its natural size. Presentation only —
    * the block's content is untouched.
    *
    * Mirrors `setBlockCaption`, including carrying the other half of the
    * annotation across, so a resize never drops a caption.
    */
-  setBlockWidth(
+  setBlockHeight(
     blockId: number,
-    width: number | null,
+    height: number | null,
   ): {
     block_id: number;
     page_id: number;
     knowledge_id: number;
-    width: number | null;
+    height: number | null;
     version: number;
   } {
     const b = this.getBlock(blockId);
     if (!b) throw new Error(`block @${blockId} not found`);
-    const nextWidth =
-      width == null || !Number.isFinite(width) || width <= 0
+    const nextHeight =
+      height == null || !Number.isFinite(height) || height <= 0
         ? null
-        : Math.round(width);
+        : Math.round(height);
     const content = this.readContent(b.knowledge_id, b.page_id);
     const lines = content.split("\n");
 
@@ -1579,7 +1579,7 @@ export class PageStore {
         if (m.id !== blockId) continue;
         const targetText = formatAnnotation(blockId, {
           caption: m.caption,
-          width: nextWidth,
+          height: nextHeight,
         });
         lines[i] =
           lines[i].slice(0, m.start) + targetText + lines[i].slice(m.end);
@@ -1618,7 +1618,7 @@ export class PageStore {
       block_id: blockId,
       page_id: b.page_id,
       knowledge_id: b.knowledge_id,
-      width: nextWidth,
+      height: nextHeight,
       version: r.version,
     };
   }
