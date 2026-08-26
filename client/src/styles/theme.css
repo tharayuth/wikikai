@@ -908,6 +908,14 @@ button.ki-id-badge::after {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent) inset;
 }
+/* The filter stack is sticky at the top of the scroller, so a row scrolled
+   flush to the top lands underneath it. scroll-margin keeps scrollIntoView
+   (used to reveal the active topic / page) clear of both edges. */
+.sidebar-item,
+.sidebar-page {
+  scroll-margin-top: calc(var(--search-h) + 8px);
+  scroll-margin-bottom: 8px;
+}
 .sidebar-item {
   display: flex;
   align-items: center;

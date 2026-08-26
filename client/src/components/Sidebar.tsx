@@ -125,6 +125,24 @@ function SortablePageItem({
     opacity: isDragging ? 0.5 : undefined,
   };
 
+  // Bring the active page into view. A deep link or a search hit can land on
+  // a page sitting far below the fold of a long sidebar, and an off-screen
+  // highlight is the same as no highlight. `block: "nearest"` scrolls the
+  // minimum needed and does nothing when the row is already visible, so it
+  // never yanks the sidebar away from someone scrolling it by hand.
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (!isActive) return undefined;
+    // Settle on the next frame: on a deep link this row can mount while its
+    // project group is still `hidden`, and scrolling a display:none element
+    // silently does nothing. By the next frame the group's own effect has
+    // opened it and the row has a real box to scroll to.
+    const raf = requestAnimationFrame(() => {
+      linkRef.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isActive]);
+
   return (
     <li
       ref={setNodeRef}
@@ -158,6 +176,7 @@ function SortablePageItem({
         </button>
       )}
       <a
+        ref={linkRef}
         className={`sidebar-page${isActive ? " active" : ""}`}
         href={`/&${kid}/#${page.id}`}
         title={page.summary ?? page.title}
@@ -233,6 +252,15 @@ function KnowledgeRow({
     if (isActive) setOpen(true);
   }, [isActive]);
 
+  // Bring the row itself into view only when no page inside it is active
+  // (a `/&N` link with no `#`). When there is an active page, PageRow does
+  // the scrolling — letting both run would fight over the scroll position.
+  const rowLinkRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (!isActive || activePid != null) return;
+    rowLinkRef.current?.scrollIntoView({ block: "nearest" });
+  }, [isActive, activePid]);
+
   // A search page-filter or the archived-only view both force the row open.
   const effectiveOpen = pageFilter != null || archivedOnly ? true : open;
   const { data } = useGetKnowledgeQuery(item.id, { skip: !effectiveOpen });
@@ -266,6 +294,7 @@ function KnowledgeRow({
       }`}
     >
       <a
+        ref={rowLinkRef}
         className={`sidebar-item${isActive ? " active" : ""}`}
         href={`/&${item.id}`}
         aria-expanded={effectiveOpen}
@@ -835,14 +864,16 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
         onDragEnd={handleDragEnd}
       >
         {projectGroups.map(([project, list]) => {
-          const containsActive =
-            activeKid != null && list.some((it) => it.id === activeKid);
+          const activeKidInGroup =
+            activeKid != null && list.some((it) => it.id === activeKid)
+              ? activeKid
+              : null;
           return (
           <ProjectGroup
             key={project}
             project={project}
             projectId={nameToId.get(project) ?? null}
-            containsActive={containsActive}
+            activeKidInGroup={activeKidInGroup}
           >
             {list.map((it) => {
               // Only narrow pages list when the knowledge appeared *because* a
@@ -903,37 +934,37 @@ function writeStoredOpen(project: string, open: boolean): void {
 function ProjectGroup({
   project,
   projectId,
-  containsActive,
+  activeKidInGroup,
   children,
 }: {
   project: string;
   /** Registry id, or null for unregistered names like "(no project)". */
   projectId: number | null;
-  /** True when the currently-active knowledge belongs to this project.
-   *  Used as the default initial state and to auto-open when the user
-   *  navigates into the group — but NEVER as a hard force-open, so the
-   *  toggle button always works. */
-  containsActive: boolean;
+  /** Id of the currently-active knowledge when it belongs to this project,
+   *  else null. Drives the initial state and the auto-open below — carrying
+   *  the id rather than a boolean is what lets the group react to moving
+   *  between two topics that both live in it. */
+  activeKidInGroup: number | null;
   children: React.ReactNode;
 }) {
-  // Default is COLLAPSED unless this group contains the active knowledge.
+  // Default is COLLAPSED unless this group holds the active knowledge.
   // localStorage remembers the user's explicit toggle per project and
-  // always wins over the default.
+  // decides the resting state of every other group.
   const [open, setOpen] = useState<boolean>(() => {
-    const stored = readStoredOpen(project);
-    if (stored != null) return stored;
-    return containsActive;
+    if (activeKidInGroup != null) return true;
+    return readStoredOpen(project) ?? false;
   });
 
-  // When `containsActive` flips false → true (user navigates into this
-  // project), auto-open the group so the active row is visible — but
-  // only when the user hasn't explicitly stored a preference, so a
-  // manually-collapsed group stays collapsed on navigation.
+  // Navigating to a knowledge in this group opens it, even when the user
+  // collapsed it earlier: arriving from a search hit or a pasted /&N/#M
+  // link should show where you landed, and a stored preference that hides
+  // your own current location reads as the sidebar being broken. Keyed on
+  // the id, so hopping between two topics in the same group re-opens it
+  // too. A manual collapse changes neither dep, so it still sticks while
+  // you stay put.
   useEffect(() => {
-    if (containsActive && readStoredOpen(project) == null) {
-      setOpen(true);
-    }
-  }, [containsActive, project]);
+    if (activeKidInGroup != null) setOpen(true);
+  }, [activeKidInGroup]);
 
   const toggle = () => {
     setOpen((o) => {
