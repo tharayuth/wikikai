@@ -13,6 +13,35 @@ import { SessionStore, UserStore } from "../src/store/users.js";
 import { PermissionStore } from "../src/store/permissions.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
+import type { Express } from "express";
+import type { Server } from "node:http";
+
+/**
+ * supertest opens a fresh ephemeral server for every `req(app)` call.
+ * This file makes well over a hundred of them, and once the suite grew
+ * past a certain size that churn started losing the occasional socket
+ * under parallel load — surfacing as "Parse Error: Expected HTTP/" or a
+ * stray 404 on whichever test happened to be unlucky.
+ *
+ * Bind one server per app and reuse it. Servers are closed after each
+ * test, since the apps themselves are rebuilt in `beforeEach`.
+ */
+const servers = new Map<Express, Server>();
+function req(app: Express) {
+  let server = servers.get(app);
+  if (!server) {
+    server = app.listen(0);
+    servers.set(app, server);
+  }
+  return request(server);
+}
+async function closeServers(): Promise<void> {
+  const open = [...servers.values()];
+  servers.clear();
+  await Promise.all(
+    open.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
+  );
+}
 
 describe("HTTP routes", () => {
   let tmpDir: string;
@@ -35,13 +64,14 @@ describe("HTTP routes", () => {
     app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, handlers, publicBaseUrl: "http://test" });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeServers();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   describe("auth (opt-in)", () => {
     it("/api/auth/me returns null user when no session", async () => {
-      const res = await request(app).get("/api/auth/me");
+      const res = await req(app).get("/api/auth/me");
       expect(res.status).toBe(200);
       expect(res.body.user).toBeNull();
       expect(res.body.auth_enabled).toBe(false);
@@ -89,13 +119,13 @@ describe("HTTP routes", () => {
       });
 
       // Log in as admin
-      let res = await request(adminApp)
+      let res = await req(adminApp)
         .post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
 
       // List → just admin
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get("/api/admin/users")
         .set("Cookie", cookie);
       expect(res.status).toBe(200);
@@ -104,7 +134,7 @@ describe("HTTP routes", () => {
       expect(res.body.users[0].mcp_token).toBeTruthy();
 
       // Create a member
-      res = await request(adminApp)
+      res = await req(adminApp)
         .post("/api/admin/users")
         .set("Cookie", cookie)
         .send({
@@ -118,7 +148,7 @@ describe("HTTP routes", () => {
       expect(res.body.user.mcp_token).toBeTruthy();
 
       // Update Alice's name + password
-      res = await request(adminApp)
+      res = await req(adminApp)
         .patch(`/api/admin/users/${aliceId}`)
         .set("Cookie", cookie)
         .send({ display_name: "Alice in WL", password: "newpw" });
@@ -126,14 +156,14 @@ describe("HTTP routes", () => {
 
       // Regenerate Alice's MCP token
       const oldTok = res.body.user.mcp_token;
-      res = await request(adminApp)
+      res = await req(adminApp)
         .post(`/api/admin/users/${aliceId}/regenerate-mcp-token`)
         .set("Cookie", cookie);
       expect(res.body.mcp_token).toBeTruthy();
       expect(res.body.mcp_token).not.toBe(oldTok);
 
       // Last-admin guard: try to demote admin → 400
-      res = await request(adminApp)
+      res = await req(adminApp)
         .patch("/api/admin/users/1")
         .set("Cookie", cookie)
         .send({ is_admin: false });
@@ -141,29 +171,29 @@ describe("HTTP routes", () => {
       expect(res.body.error).toMatch(/last admin/);
 
       // Last-admin guard: try to delete admin → 400
-      res = await request(adminApp)
+      res = await req(adminApp)
         .delete("/api/admin/users/1")
         .set("Cookie", cookie);
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/yourself|last admin/);
 
       // Non-admin gating: alice logs in, /api/admin/users → 403
-      res = await request(adminApp)
+      res = await req(adminApp)
         .post("/api/auth/login")
         .send({ email: "alice", password: "newpw" });
       const aliceCookie = res.headers["set-cookie"][0];
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get("/api/admin/users")
         .set("Cookie", aliceCookie);
       expect(res.status).toBe(403);
 
       // Delete Alice via admin
-      res = await request(adminApp)
+      res = await req(adminApp)
         .delete(`/api/admin/users/${aliceId}`)
         .set("Cookie", cookie);
       expect(res.status).toBe(200);
       // Alice's session should be gone now (FK CASCADE on sessions)
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get("/api/auth/me")
         .set("Cookie", aliceCookie);
       expect(res.body.user).toBeNull();
@@ -211,33 +241,33 @@ describe("HTTP routes", () => {
       });
 
       // Log in as admin
-      let res = await request(adminApp)
+      let res = await req(adminApp)
         .post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
 
       // Create alice
-      res = await request(adminApp)
+      res = await req(adminApp)
         .post("/api/admin/users")
         .set("Cookie", cookie)
         .send({ email: "alice", password: "pw", display_name: "Alice" });
       const aliceId = res.body.user.id;
 
       // Register two projects
-      await request(adminApp)
+      await req(adminApp)
         .post("/api/projects").set("Cookie", cookie).send({ name: "examples" });
-      await request(adminApp)
+      await req(adminApp)
         .post("/api/projects").set("Cookie", cookie).send({ name: "secret" });
 
       // GET → empty
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie);
       expect(res.status).toBe(200);
       expect(res.body.permissions).toEqual([]);
 
       // PUT replaces
-      res = await request(adminApp)
+      res = await req(adminApp)
         .put(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie)
         .send({
@@ -248,7 +278,7 @@ describe("HTTP routes", () => {
         });
       expect(res.status).toBe(200);
 
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie);
       expect(res.body.permissions).toEqual([
@@ -257,34 +287,34 @@ describe("HTTP routes", () => {
       ]);
 
       // PUT with smaller list revokes the missing one
-      await request(adminApp)
+      await req(adminApp)
         .put(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie)
         .send({ permissions: [{ project: "examples", level: "edit" }] });
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie);
       expect(res.body.permissions).toEqual([{ project: "examples", level: "edit" }]);
 
       // Non-admin (alice) cannot touch the endpoint
-      res = await request(adminApp)
+      res = await req(adminApp)
         .post("/api/auth/login")
         .send({ email: "alice", password: "pw" });
       const aliceCookie = res.headers["set-cookie"][0];
-      res = await request(adminApp)
+      res = await req(adminApp)
         .get(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", aliceCookie);
       expect(res.status).toBe(403);
 
       // Invalid level → 400
-      res = await request(adminApp)
+      res = await req(adminApp)
         .put(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie)
         .send({ permissions: [{ project: "examples", level: "bogus" }] });
       expect(res.status).toBe(400);
 
       // Unknown project → 400 (FK violation)
-      res = await request(adminApp)
+      res = await req(adminApp)
         .put(`/api/admin/users/${aliceId}/permissions`)
         .set("Cookie", cookie)
         .send({ permissions: [{ project: "nope", level: "view" }] });
@@ -333,13 +363,13 @@ describe("HTTP routes", () => {
       });
 
       // Wrong password → 401
-      let res = await request(authApp)
+      let res = await req(authApp)
         .post("/api/auth/login")
         .send({ email: "alice@example.com", password: "wrong" });
       expect(res.status).toBe(401);
 
       // Correct → 200 + Set-Cookie
-      res = await request(authApp)
+      res = await req(authApp)
         .post("/api/auth/login")
         .send({ email: "alice@example.com", password: "correct-horse-battery-staple" });
       expect(res.status).toBe(200);
@@ -348,20 +378,20 @@ describe("HTTP routes", () => {
       expect(cookie).toMatch(/wikikai_session=/);
 
       // /api/auth/me with cookie → user info
-      res = await request(authApp).get("/api/auth/me").set("Cookie", cookie);
+      res = await req(authApp).get("/api/auth/me").set("Cookie", cookie);
       expect(res.body.user.email).toBe("alice@example.com");
       expect(res.body.auth_enabled).toBe(true);
 
       // Anonymous /api/knowledge → 401
-      res = await request(authApp).get("/api/knowledge");
+      res = await req(authApp).get("/api/knowledge");
       expect(res.status).toBe(401);
 
       // With cookie → 200
-      res = await request(authApp).get("/api/knowledge").set("Cookie", cookie);
+      res = await req(authApp).get("/api/knowledge").set("Cookie", cookie);
       expect(res.status).toBe(200);
 
       // Logout clears cookie + session
-      res = await request(authApp)
+      res = await req(authApp)
         .post("/api/auth/logout")
         .set("Cookie", cookie);
       expect(res.status).toBe(200);
@@ -395,44 +425,44 @@ describe("HTTP routes", () => {
       });
 
       // Admin login
-      let res = await request(authApp).post("/api/auth/login")
+      let res = await req(authApp).post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
 
       // Register projects
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
 
       // Two knowledge docs in different projects
       const kA = knowledge.add({ title: "A", project: "alpha" });
       const kB = knowledge.add({ title: "B", project: "beta" });
 
       // Create alice and grant view on alpha only
-      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+      res = await req(authApp).post("/api/admin/users").set("Cookie", cookie)
         .send({ email: "alice", password: "pw", display_name: "Alice" });
       const aliceId = res.body.user.id;
-      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+      await req(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
         .send({ permissions: [{ project: "alpha", level: "view" }] });
 
       // Alice login
-      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      res = await req(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
       const aliceCookie = res.headers["set-cookie"][0];
 
       // /api/knowledge → only A
-      res = await request(authApp).get("/api/knowledge").set("Cookie", aliceCookie);
+      res = await req(authApp).get("/api/knowledge").set("Cookie", aliceCookie);
       expect(res.body.map((k: { title: string }) => k.title)).toEqual(["A"]);
 
       // GET /api/knowledge/:kA → 200
-      res = await request(authApp).get(`/api/knowledge/${kA.id}`).set("Cookie", aliceCookie);
+      res = await req(authApp).get(`/api/knowledge/${kA.id}`).set("Cookie", aliceCookie);
       expect(res.status).toBe(200);
 
       // GET /api/knowledge/:kB → 403
-      res = await request(authApp).get(`/api/knowledge/${kB.id}`).set("Cookie", aliceCookie);
+      res = await req(authApp).get(`/api/knowledge/${kB.id}`).set("Cookie", aliceCookie);
       expect(res.status).toBe(403);
 
       // GET /api/pages/:pid for a page inside kB → 403
       const pB = pages.add({ knowledge_id: kB.id, title: "P", content: "x" });
-      res = await request(authApp).get(`/api/pages/${pB.id}`).set("Cookie", aliceCookie);
+      res = await req(authApp).get(`/api/pages/${pB.id}`).set("Cookie", aliceCookie);
       expect(res.status).toBe(403);
     });
 
@@ -462,43 +492,43 @@ describe("HTTP routes", () => {
       });
 
       // Admin login
-      let res = await request(authApp).post("/api/auth/login")
+      let res = await req(authApp).post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
 
       // Projects
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
 
       // Knowledge + page in alpha
       const k = knowledge.add({ title: "K", project: "alpha" });
       const p = pages.add({ knowledge_id: k.id, title: "P", content: "x" });
 
       // Alice
-      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+      res = await req(authApp).post("/api/admin/users").set("Cookie", cookie)
         .send({ email: "alice", password: "pw", display_name: "Alice" });
       const aliceId = res.body.user.id;
-      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+      await req(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
         .send({ permissions: [{ project: "alpha", level: "view" }] });
 
-      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      res = await req(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
       const aliceCookie = res.headers["set-cookie"][0];
 
       // View-only Alice → PATCH page = 403
-      res = await request(authApp).patch(`/api/pages/${p.id}`).set("Cookie", aliceCookie)
+      res = await req(authApp).patch(`/api/pages/${p.id}`).set("Cookie", aliceCookie)
         .send({ content: "haha" });
       expect(res.status).toBe(403);
 
       // Upgrade to edit
-      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+      await req(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
         .send({ permissions: [{ project: "alpha", level: "edit" }] });
 
       // Now PATCH succeeds
-      res = await request(authApp).patch(`/api/pages/${p.id}`).set("Cookie", aliceCookie)
+      res = await req(authApp).patch(`/api/pages/${p.id}`).set("Cookie", aliceCookie)
         .send({ content: "ok" });
       expect(res.status).toBe(200);
 
       // Alice DELETE knowledge → 200 with edit
-      res = await request(authApp).delete(`/api/knowledge/${k.id}`).set("Cookie", aliceCookie);
+      res = await req(authApp).delete(`/api/knowledge/${k.id}`).set("Cookie", aliceCookie);
       expect(res.status).toBe(200);
     });
 
@@ -529,33 +559,33 @@ describe("HTTP routes", () => {
       });
 
       // Admin login
-      let res = await request(authApp).post("/api/auth/login")
+      let res = await req(authApp).post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
 
       // Register two projects
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
 
       // Create alice and grant view on alpha only
-      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+      res = await req(authApp).post("/api/admin/users").set("Cookie", cookie)
         .send({ email: "alice", password: "pw", display_name: "Alice" });
       const aliceId = res.body.user.id;
-      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+      await req(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
         .send({ permissions: [{ project: "alpha", level: "view" }] });
 
       // Admin sees both
-      res = await request(authApp).get("/api/projects").set("Cookie", cookie);
+      res = await req(authApp).get("/api/projects").set("Cookie", cookie);
       expect(res.status).toBe(200);
       expect(res.body.projects.map((p: { name: string }) => p.name).sort())
         .toEqual(["alpha", "beta"]);
 
       // Alice login
-      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      res = await req(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
       const aliceCookie = res.headers["set-cookie"][0];
 
       // Alice sees only alpha
-      res = await request(authApp).get("/api/projects").set("Cookie", aliceCookie);
+      res = await req(authApp).get("/api/projects").set("Cookie", aliceCookie);
       expect(res.status).toBe(200);
       expect(res.body.projects.map((p: { name: string }) => p.name)).toEqual(["alpha"]);
     });
@@ -587,28 +617,28 @@ describe("HTTP routes", () => {
       });
 
       // Admin login + register alpha
-      let res = await request(authApp).post("/api/auth/login")
+      let res = await req(authApp).post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
 
       // Create alice + grant view on alpha
-      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+      res = await req(authApp).post("/api/admin/users").set("Cookie", cookie)
         .send({ email: "alice", password: "pw", display_name: "Alice" });
       const aliceId = res.body.user.id;
-      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+      await req(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
         .send({ permissions: [{ project: "alpha", level: "view" }] });
 
       // Alice login
-      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      res = await req(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
       const aliceCookie = res.headers["set-cookie"][0];
 
       // Alice POST /api/projects → 403
-      res = await request(authApp).post("/api/projects").set("Cookie", aliceCookie).send({ name: "x" });
+      res = await req(authApp).post("/api/projects").set("Cookie", aliceCookie).send({ name: "x" });
       expect(res.status).toBe(403);
 
       // Alice DELETE /api/projects/alpha → 403
-      res = await request(authApp).delete("/api/projects/alpha").set("Cookie", aliceCookie);
+      res = await req(authApp).delete("/api/projects/alpha").set("Cookie", aliceCookie);
       expect(res.status).toBe(403);
     });
 
@@ -639,13 +669,13 @@ describe("HTTP routes", () => {
       });
 
       // Admin login
-      let res = await request(authApp).post("/api/auth/login")
+      let res = await req(authApp).post("/api/auth/login")
         .send({ email: "admin", password: "12345" });
       const cookie = res.headers["set-cookie"][0];
 
       // Register projects
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
-      await request(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "alpha" });
+      await req(authApp).post("/api/projects").set("Cookie", cookie).send({ name: "beta" });
 
       // Knowledge + page in each project
       const kA = knowledge.add({ title: "A", project: "alpha" });
@@ -654,26 +684,26 @@ describe("HTTP routes", () => {
       const pB = pages.add({ knowledge_id: kB.id, title: "PB", content: "y" });
 
       // Make an edit through the API in each so activity_log rows are written
-      res = await request(authApp).patch(`/api/pages/${pA.id}`).set("Cookie", cookie)
+      res = await req(authApp).patch(`/api/pages/${pA.id}`).set("Cookie", cookie)
         .send({ content: "x2" });
       expect(res.status).toBe(200);
-      res = await request(authApp).patch(`/api/pages/${pB.id}`).set("Cookie", cookie)
+      res = await req(authApp).patch(`/api/pages/${pB.id}`).set("Cookie", cookie)
         .send({ content: "y2" });
       expect(res.status).toBe(200);
 
       // Create alice + grant view on alpha only
-      res = await request(authApp).post("/api/admin/users").set("Cookie", cookie)
+      res = await req(authApp).post("/api/admin/users").set("Cookie", cookie)
         .send({ email: "alice", password: "pw", display_name: "Alice" });
       const aliceId = res.body.user.id;
-      await request(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
+      await req(authApp).put(`/api/admin/users/${aliceId}/permissions`).set("Cookie", cookie)
         .send({ permissions: [{ project: "alpha", level: "view" }] });
 
       // Alice login
-      res = await request(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
+      res = await req(authApp).post("/api/auth/login").send({ email: "alice", password: "pw" });
       const aliceCookie = res.headers["set-cookie"][0];
 
       // Alice /api/activity → no rows with knowledge_id === kB.id
-      res = await request(authApp).get("/api/activity").set("Cookie", aliceCookie);
+      res = await req(authApp).get("/api/activity").set("Cookie", aliceCookie);
       expect(res.status).toBe(200);
       const entries = res.body.entries as { knowledge_id: number | null }[];
       expect(entries.some((e) => e.knowledge_id === kB.id)).toBe(false);
@@ -683,13 +713,13 @@ describe("HTTP routes", () => {
   });
 
   it("GET / responds (built dist OR backend-only placeholder)", async () => {
-    const res = await request(app).get("/");
+    const res = await req(app).get("/");
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toMatch(/text\/html/);
   });
 
   it("GET /api/knowledge returns []", async () => {
-    const res = await request(app).get("/api/knowledge");
+    const res = await req(app).get("/api/knowledge");
     expect(res.body).toEqual([]);
   });
 
@@ -697,61 +727,61 @@ describe("HTTP routes", () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P1", content: "a" });
     pages.add({ knowledge_id: k.id, title: "P2", content: "b" });
-    const res = await request(app).get(`/api/knowledge/${k.id}`);
+    const res = await req(app).get(`/api/knowledge/${k.id}`);
     expect(res.status).toBe(200);
     expect(res.body.pages).toHaveLength(2);
     expect(res.body.pages[0]).toHaveProperty("url");
   });
 
   it("GET /api/knowledge/:id returns 404 for missing", async () => {
-    const res = await request(app).get(`/api/knowledge/9999`);
+    const res = await req(app).get(`/api/knowledge/9999`);
     expect(res.status).toBe(404);
   });
 
   it("PATCH /api/knowledge/:id updates tags and tag filter finds it", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
-    const updated = await request(app)
+    const updated = await req(app)
       .patch(`/api/knowledge/${k.id}`)
       .send({ tags: ["roadmap", "urgent"] });
     expect(updated.status).toBe(200);
 
-    const detail = await request(app).get(`/api/knowledge/${k.id}`);
+    const detail = await req(app).get(`/api/knowledge/${k.id}`);
     expect(detail.status).toBe(200);
     expect(detail.body.tags).toEqual(["roadmap", "urgent"]);
 
-    const matching = await request(app).get("/api/knowledge?tag=urgent");
+    const matching = await req(app).get("/api/knowledge?tag=urgent");
     expect(matching.status).toBe(200);
     expect(matching.body.map((item: { id: number }) => item.id)).toEqual([k.id]);
 
-    const missing = await request(app).get("/api/knowledge?tag=backlog");
+    const missing = await req(app).get("/api/knowledge?tag=backlog");
     expect(missing.status).toBe(200);
     expect(missing.body).toEqual([]);
   });
 
   it("POST /api/knowledge/:id/pages adds an empty page", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
-    const res = await request(app)
+    const res = await req(app)
       .post(`/api/knowledge/${k.id}/pages`)
       .send({ title: "New page" });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ knowledge_id: k.id, position: 1 });
     expect(res.body).toHaveProperty("url");
     // The page now shows up in the knowledge's page list.
-    const list = await request(app).get(`/api/knowledge/${k.id}`);
+    const list = await req(app).get(`/api/knowledge/${k.id}`);
     expect(list.body.pages).toHaveLength(1);
     expect(list.body.pages[0].title).toBe("New page");
   });
 
   it("POST /api/knowledge/:id/pages requires a title", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
-    const res = await request(app)
+    const res = await req(app)
       .post(`/api/knowledge/${k.id}/pages`)
       .send({ title: "   " });
     expect(res.status).toBe(400);
   });
 
   it("POST /api/knowledge/:id/pages returns 404 for missing knowledge", async () => {
-    const res = await request(app)
+    const res = await req(app)
       .post(`/api/knowledge/9999/pages`)
       .send({ title: "X" });
     expect(res.status).toBe(404);
@@ -763,7 +793,7 @@ describe("HTTP routes", () => {
     const p = pages.add({ knowledge_id: k1.id, title: "P", content: "body" });
     pages.add({ knowledge_id: k2.id, title: "X", content: "" });
 
-    const res = await request(app)
+    const res = await req(app)
       .post(`/api/pages/${p.id}/move`)
       .send({ knowledge_id: k2.id });
     expect(res.status).toBe(200);
@@ -773,9 +803,9 @@ describe("HTTP routes", () => {
       position: 2,
     });
 
-    const src = await request(app).get(`/api/knowledge/${k1.id}`);
+    const src = await req(app).get(`/api/knowledge/${k1.id}`);
     expect(src.body.pages).toHaveLength(0);
-    const dst = await request(app).get(`/api/knowledge/${k2.id}`);
+    const dst = await req(app).get(`/api/knowledge/${k2.id}`);
     expect(dst.body.pages.map((pg: { title: string }) => pg.title)).toEqual([
       "X",
       "P",
@@ -786,20 +816,20 @@ describe("HTTP routes", () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "" });
 
-    const same = await request(app)
+    const same = await req(app)
       .post(`/api/pages/${p.id}/move`)
       .send({ knowledge_id: k.id });
     expect(same.status).toBe(400);
 
-    const noKid = await request(app).post(`/api/pages/${p.id}/move`).send({});
+    const noKid = await req(app).post(`/api/pages/${p.id}/move`).send({});
     expect(noKid.status).toBe(400);
 
-    const missingTarget = await request(app)
+    const missingTarget = await req(app)
       .post(`/api/pages/${p.id}/move`)
       .send({ knowledge_id: 9999 });
     expect(missingTarget.status).toBe(404);
 
-    const missingPage = await request(app)
+    const missingPage = await req(app)
       .post(`/api/pages/9999/move`)
       .send({ knowledge_id: k.id });
     expect(missingPage.status).toBe(404);
@@ -808,7 +838,7 @@ describe("HTTP routes", () => {
   it("GET /api/knowledge/:id/outline returns heading tree", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "# T\n\n## A\n\n## B" });
-    const res = await request(app).get(`/api/knowledge/${k.id}/outline`);
+    const res = await req(app).get(`/api/knowledge/${k.id}/outline`);
     expect(res.status).toBe(200);
     expect(res.body.pages[0].headings).toHaveLength(3);
   });
@@ -817,15 +847,15 @@ describe("HTTP routes", () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "# H\n\ntext" });
 
-    const meta = await request(app).get(`/api/pages/${p.id}`);
+    const meta = await req(app).get(`/api/pages/${p.id}`);
     expect(meta.body.title).toBe("P");
     expect(meta.body.content).toContain("text");
     expect(meta.body.total_lines).toBe(3);
 
-    const rendered = await request(app).get(`/api/pages/${p.id}/rendered`);
+    const rendered = await req(app).get(`/api/pages/${p.id}/rendered`);
     expect(rendered.text).toContain("<h1");
 
-    const raw = await request(app).get(`/api/pages/${p.id}/raw`);
+    const raw = await req(app).get(`/api/pages/${p.id}/raw`);
     expect(raw.text).toBe("# H\n\ntext");
   });
 
@@ -839,13 +869,13 @@ describe("HTTP routes", () => {
     // Re-read after injectBlockIds stamps the {@N}.
     const md = pages.get(p.id)!.content;
     const id = Number(/\{@(\d+)\}/.exec(md)![1]);
-    const res = await request(app).get(`/api/blocks/${id}/content`);
+    const res = await req(app).get(`/api/blocks/${id}/content`);
     expect(res.status).toBe(200);
     expect(res.text).toBe("const x = 1;");
   });
 
   it("GET /api/blocks/:id/content returns 404 for unknown id", async () => {
-    const res = await request(app).get(`/api/blocks/9999999/content`);
+    const res = await req(app).get(`/api/blocks/9999999/content`);
     expect(res.status).toBe(404);
   });
 
@@ -859,7 +889,7 @@ describe("HTTP routes", () => {
     const md = pages.get(p.id)!.content;
     const id = Number(/\{@(\d+)\}/.exec(md)![1]);
 
-    const res = await request(app).delete(`/api/blocks/${id}`);
+    const res = await req(app).delete(`/api/blocks/${id}`);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       block_id: id,
@@ -875,7 +905,7 @@ describe("HTTP routes", () => {
   });
 
   it("DELETE /api/blocks/:id returns 404 for unknown id", async () => {
-    const res = await request(app).delete(`/api/blocks/9999999`);
+    const res = await req(app).delete(`/api/blocks/9999999`);
     expect(res.status).toBe(404);
   });
 
@@ -883,7 +913,7 @@ describe("HTTP routes", () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "First", content: "hello first" });
     pages.add({ knowledge_id: k.id, title: "Second", content: "hello second" });
-    const res = await request(app).get(`/api/knowledge/${k.id}/content`);
+    const res = await req(app).get(`/api/knowledge/${k.id}/content`);
     expect(res.status).toBe(200);
     expect(res.text).toContain("## First");
     expect(res.text).toContain("hello first");
@@ -894,14 +924,14 @@ describe("HTTP routes", () => {
   });
 
   it("GET /api/knowledge/:id/content returns 404 for unknown knowledge", async () => {
-    const res = await request(app).get(`/api/knowledge/9999999/content`);
+    const res = await req(app).get(`/api/knowledge/9999999/content`);
     expect(res.status).toBe(404);
   });
 
   it("PATCH /api/pages/:pid updates content", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "old" });
-    const res = await request(app)
+    const res = await req(app)
       .patch(`/api/pages/${p.id}`)
       .send({ content: "new" });
     expect(res.status).toBe(200);
@@ -912,7 +942,7 @@ describe("HTTP routes", () => {
   it("DELETE /api/pages/:pid", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({ knowledge_id: k.id, title: "P", content: "x" });
-    const res = await request(app).delete(`/api/pages/${p.id}`);
+    const res = await req(app).delete(`/api/pages/${p.id}`);
     expect(res.status).toBe(200);
     expect(pages.list(k.id)).toHaveLength(0);
   });
@@ -920,26 +950,26 @@ describe("HTTP routes", () => {
   it("GET /api/search returns hits", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "Postgres is great" });
-    const res = await request(app).get(`/api/search?q=Postgres`);
+    const res = await req(app).get(`/api/search?q=Postgres`);
     expect(res.status).toBe(200);
     expect(res.body.total).toBeGreaterThan(0);
     expect(res.body.hits[0].url).toMatch(/\/&\d+\/#\d+:\d+$/);
   });
 
   it("GET /api/search returns empty when q missing", async () => {
-    const res = await request(app).get(`/api/search`);
+    const res = await req(app).get(`/api/search`);
     expect(res.body).toEqual({ hits: [], total: 0 });
   });
 
   it("DELETE /api/knowledge/:id cascades pages", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     pages.add({ knowledge_id: k.id, title: "P", content: "x" });
-    await request(app).delete(`/api/knowledge/${k.id}`);
+    await req(app).delete(`/api/knowledge/${k.id}`);
     expect(pages.list(k.id)).toEqual([]);
   });
 
   it("POST /api/knowledge rejects empty project", async () => {
-    const res = await request(app).post("/api/knowledge").send({ title: "X" });
+    const res = await req(app).post("/api/knowledge").send({ title: "X" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/project/);
   });
@@ -1001,14 +1031,14 @@ describe("HTTP routes", () => {
     it("saves a height, then clears it with null", async () => {
       const { pid } = makeDiagram();
 
-      let r = await request(app)
+      let r = await req(app)
         .post("/api/blocks/7001/height")
         .send({ height: 320 });
       expect(r.status).toBe(200);
       expect(r.body.height).toBe(320);
       expect(pages.get(pid)!.content).toContain("{@7001 h=320}");
 
-      r = await request(app)
+      r = await req(app)
         .post("/api/blocks/7001/height")
         .send({ height: null });
       expect(r.status).toBe(200);
@@ -1018,11 +1048,11 @@ describe("HTTP routes", () => {
 
     it("clamps a height from a wild drag instead of rejecting it", async () => {
       makeDiagram();
-      const tiny = await request(app)
+      const tiny = await req(app)
         .post("/api/blocks/7001/height")
         .send({ height: 5 });
       expect(tiny.body.height).toBe(80);
-      const huge = await request(app)
+      const huge = await req(app)
         .post("/api/blocks/7001/height")
         .send({ height: 99999 });
       expect(huge.body.height).toBe(1600);
@@ -1032,14 +1062,14 @@ describe("HTTP routes", () => {
       makeDiagram();
       expect(
         (
-          await request(app)
+          await req(app)
             .post("/api/blocks/7001/height")
             .send({ height: "tall" })
         ).status,
       ).toBe(400);
       expect(
         (
-          await request(app)
+          await req(app)
             .post("/api/blocks/999999/height")
             .send({ height: 300 })
         ).status,
@@ -1062,46 +1092,46 @@ describe("HTTP routes", () => {
       const { kid, pid } = makeDoc();
 
       // off by default
-      let r = await request(app).get(`/api/knowledge/${kid}/share`);
+      let r = await req(app).get(`/api/knowledge/${kid}/share`);
       expect(r.status).toBe(200);
       expect(r.body.shared).toBe(false);
       expect(r.body.share_token).toBeNull();
 
       // enable
-      r = await request(app).post(`/api/knowledge/${kid}/share`);
+      r = await req(app).post(`/api/knowledge/${kid}/share`);
       expect(r.body.shared).toBe(true);
       const token = r.body.share_token as string;
       expect(token).toMatch(/^[a-f0-9]{48}$/);
       expect(r.body.url).toBe(`http://test/share/${token}`);
 
       // enable is idempotent — same token
-      r = await request(app).post(`/api/knowledge/${kid}/share`);
+      r = await req(app).post(`/api/knowledge/${kid}/share`);
       expect(r.body.share_token).toBe(token);
 
       // public read — scoped to this doc, no auth
-      r = await request(app).get(`/api/share/${token}`);
+      r = await req(app).get(`/api/share/${token}`);
       expect(r.status).toBe(200);
       expect(r.body.knowledge.id).toBe(kid);
       expect(r.body.knowledge.title).toBe("Shared Doc");
       expect(r.body.pages.map((p: { id: number }) => p.id)).toContain(pid);
 
       // public rendered page
-      r = await request(app).get(`/api/share/${token}/pages/${pid}/rendered`);
+      r = await req(app).get(`/api/share/${token}/pages/${pid}/rendered`);
       expect(r.status).toBe(200);
       expect(r.text).toContain("<h1");
 
       // rotate → new token, old one dies
-      const rot = await request(app).post(`/api/knowledge/${kid}/share/rotate`);
+      const rot = await req(app).post(`/api/knowledge/${kid}/share/rotate`);
       const token2 = rot.body.share_token as string;
       expect(token2).not.toBe(token);
-      expect((await request(app).get(`/api/share/${token}`)).status).toBe(404);
-      expect((await request(app).get(`/api/share/${token2}`)).status).toBe(200);
+      expect((await req(app).get(`/api/share/${token}`)).status).toBe(404);
+      expect((await req(app).get(`/api/share/${token2}`)).status).toBe(200);
 
       // disable → public link 404s
       expect(
-        (await request(app).delete(`/api/knowledge/${kid}/share`)).status,
+        (await req(app).delete(`/api/knowledge/${kid}/share`)).status,
       ).toBe(200);
-      expect((await request(app).get(`/api/share/${token2}`)).status).toBe(404);
+      expect((await req(app).get(`/api/share/${token2}`)).status).toBe(404);
     });
 
     it("marks shared documents in the knowledge list and detail", async () => {
@@ -1109,12 +1139,12 @@ describe("HTTP routes", () => {
       const plain = knowledge.add({ title: "Private", project: "examples" });
 
       const flags = async () => {
-        const list = (await request(app).get("/api/knowledge")).body as {
+        const list = (await req(app).get("/api/knowledge")).body as {
           id: number;
           shared: boolean;
         }[];
         const byId = new Map(list.map((k) => [k.id, k.shared]));
-        const detail = await request(app).get(`/api/knowledge/${kid}`);
+        const detail = await req(app).get(`/api/knowledge/${kid}`);
         return {
           listShared: byId.get(kid),
           listPlain: byId.get(plain.id),
@@ -1128,7 +1158,7 @@ describe("HTTP routes", () => {
         detailShared: false,
       });
 
-      await request(app).post(`/api/knowledge/${kid}/share`);
+      await req(app).post(`/api/knowledge/${kid}/share`);
       expect(await flags()).toEqual({
         listShared: true,
         listPlain: false,
@@ -1136,9 +1166,9 @@ describe("HTTP routes", () => {
       });
 
       // Rotating keeps it shared; disabling clears the flag again.
-      await request(app).post(`/api/knowledge/${kid}/share/rotate`);
+      await req(app).post(`/api/knowledge/${kid}/share/rotate`);
       expect((await flags()).listShared).toBe(true);
-      await request(app).delete(`/api/knowledge/${kid}/share`);
+      await req(app).delete(`/api/knowledge/${kid}/share`);
       expect(await flags()).toEqual({
         listShared: false,
         listPlain: false,
@@ -1148,14 +1178,14 @@ describe("HTTP routes", () => {
 
     it("never exposes the share token through the knowledge list", async () => {
       const { kid } = makeDoc();
-      await request(app).post(`/api/knowledge/${kid}/share`);
-      const body = (await request(app).get("/api/knowledge")).text;
+      await req(app).post(`/api/knowledge/${kid}/share`);
+      const body = (await req(app).get("/api/knowledge")).text;
       expect(body).toContain('"shared":true');
       expect(body).not.toMatch(/share_token/);
     });
 
     it("unknown token → 404", async () => {
-      expect((await request(app).get(`/api/share/deadbeef`)).status).toBe(404);
+      expect((await req(app).get(`/api/share/deadbeef`)).status).toBe(404);
     });
 
     it("a page id from another knowledge is rejected (scope guard)", async () => {
@@ -1166,9 +1196,9 @@ describe("HTTP routes", () => {
         title: "Secret",
         content: "secret",
       });
-      const token = (await request(app).post(`/api/knowledge/${kid}/share`))
+      const token = (await req(app).post(`/api/knowledge/${kid}/share`))
         .body.share_token as string;
-      const r = await request(app).get(
+      const r = await req(app).get(
         `/api/share/${token}/pages/${otherPage.id}/rendered`,
       );
       expect(r.status).toBe(404);
@@ -1183,14 +1213,14 @@ describe("HTTP routes", () => {
           "# D\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
           '```chart\n{"type":"bar","data":{"labels":["a"],"datasets":[{"label":"n","data":[1]}]}}\n```\n',
       });
-      const token = (await request(app).post(`/api/knowledge/${k.id}/share`))
+      const token = (await req(app).post(`/api/knowledge/${k.id}/share`))
         .body.share_token as string;
 
-      const m = await request(app).get(`/share/${token}/mermaid/${page.id}/0`);
+      const m = await req(app).get(`/share/${token}/mermaid/${page.id}/0`);
       expect(m.status).toBe(200);
       expect(m.text).toContain("flowchart LR");
 
-      const c = await request(app).get(`/share/${token}/chart/${page.id}/0`);
+      const c = await req(app).get(`/share/${token}/chart/${page.id}/0`);
       expect(c.status).toBe(200);
       expect(c.text).toContain("Chart");
     });
@@ -1205,18 +1235,18 @@ describe("HTTP routes", () => {
         title: "Secret",
         content: "# S\n\n```mermaid\nflowchart LR\n  X-->Y\n```\n",
       });
-      const token = (await request(app).post(`/api/knowledge/${kid}/share`))
+      const token = (await req(app).post(`/api/knowledge/${kid}/share`))
         .body.share_token as string;
 
       expect(
-        (await request(app).get(`/share/${token}/mermaid/${secret.id}/0`))
+        (await req(app).get(`/share/${token}/mermaid/${secret.id}/0`))
           .status,
       ).toBe(404);
       expect(
-        (await request(app).get(`/share/${token}/chart/${secret.id}/0`)).status,
+        (await req(app).get(`/share/${token}/chart/${secret.id}/0`)).status,
       ).toBe(404);
       expect(
-        (await request(app).get(`/share/nosuchtoken/mermaid/${secret.id}/0`))
+        (await req(app).get(`/share/nosuchtoken/mermaid/${secret.id}/0`))
           .status,
       ).toBe(404);
     });
@@ -1257,17 +1287,17 @@ describe("HTTP routes", () => {
     const token = k2.enableShare(k.id);
 
     // a normal gated route without a session → bounced (401 for /api/*)
-    expect((await request(authedApp).get(`/api/knowledge/${k.id}`)).status).toBe(
+    expect((await req(authedApp).get(`/api/knowledge/${k.id}`)).status).toBe(
       401,
     );
     // the share route is reachable without a session
-    const r = await request(authedApp).get(`/api/share/${token}`);
+    const r = await req(authedApp).get(`/api/share/${token}`);
     expect(r.status).toBe(200);
     expect(r.body.knowledge.id).toBe(k.id);
 
     // so is the share-scoped diagram viewer — a public reader clicking a
     // diagram must get the diagram, not a redirect to the login page.
-    const viewer = await request(authedApp).get(
+    const viewer = await req(authedApp).get(
       `/share/${token}/mermaid/${page.id}/0`,
     );
     expect(viewer.status).toBe(200);
@@ -1275,7 +1305,7 @@ describe("HTTP routes", () => {
 
     // the un-scoped viewer stays behind the wall
     expect(
-      (await request(authedApp).get(`/mermaid/${page.id}/0`)).status,
+      (await req(authedApp).get(`/mermaid/${page.id}/0`)).status,
     ).toBe(302);
   });
 });

@@ -2560,11 +2560,14 @@ button.ki-id-badge::after {
 }
 /* The solo image's caption is a <span> so it stays legal inside the <p>;
    make it lay out like the <div> every other block's caption uses. The
-   top margin is already carried by the image, so only the gap under it
-   needs adding here. */
+   top margin is already carried by the image.
+   Padding rather than margin for the gap underneath: as the paragraph's
+   last child its bottom margin would collapse into the paragraph's own,
+   leaving the caption sitting almost on top of whatever follows. */
 .markdown-body p.img-block > .block-caption {
   display: block;
   margin-bottom: 0;
+  padding-bottom: 14px;
 }
 .markdown-body .image-grid {
   display: grid;

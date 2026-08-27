@@ -540,16 +540,23 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     const html = defaultImage
       ? defaultImage(tokens, idx, options, env, self)
       : self.renderToken(tokens, idx, options);
-    // A picture on its own line is a figure, so its title slot is a caption
-    // and belongs under the image — the same `.block-caption` a diagram or
-    // chart gets, instead of a tooltip nobody hovers to find. `title` stays
-    // on the <img> so the lightbox and assistive tech still see it.
+    // A picture on its own line is a figure, so it gets the same
+    // `.block-caption` a diagram or chart does, instead of hiding its label
+    // in a tooltip nobody hovers to find.
+    //
+    // The caption is the **alt** text: the short name of what the picture
+    // is, which is what a figure caption says. The title slot stays a
+    // tooltip — it holds the longer "what am I looking at" description, and
+    // spelling that out under every image would bury the page in prose.
+    //
+    // Read after rendering because markdown-it fills the alt attribute in
+    // its own image renderer, from the parsed inline children.
     //
     // A <span> rather than a <div>: this sits inside markdown-it's <p>, and
     // a block-level child there would split the paragraph in the parser's
     // wake. CSS gives it `display: block`.
     if (!tok.meta?.soloImage) return html;
-    const caption = (tok.attrGet("title") ?? "").trim();
+    const caption = (tok.attrGet("alt") ?? "").trim();
     if (!caption) return html;
     return `${html}<span class="block-caption">${escapeHtml(caption)}</span>`;
   };

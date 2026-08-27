@@ -226,31 +226,42 @@ describe("renderMarkdown", () => {
     expect(linked).toContain('<p class="img-block">');
   });
 
-  it("shows a solo image's title as a caption under it", async () => {
-    const out = await renderMarkdown('![a](/img/x.png "Overall system")');
-    expect(out).toContain('<span class="block-caption">Overall system</span>');
-    // The title stays put: the lightbox and assistive tech both read it.
-    expect(out).toContain('title="Overall system"');
+  it("captions a solo image with its alt text, not its title", async () => {
+    // alt is the figure's name; the title slot is the longer hover
+    // description and must stay a tooltip.
+    const out = await renderMarkdown(
+      '![Raw API fetch screen](/img/x.png "Pick source, period and scope, then Preview w=720")',
+    );
+    expect(out).toContain(
+      '<span class="block-caption">Raw API fetch screen</span>',
+    );
+    expect(out).toContain('title="Pick source, period and scope, then Preview"');
+    expect(out).toContain("max-width:720px");
+    // The long description must not also appear as a caption.
+    expect(out).not.toContain('<span class="block-caption">Pick source');
   });
 
-  it("keeps the caption when the title also carries a size", async () => {
-    const out = await renderMarkdown('![a](/img/x.png "Overall system w=300")');
-    expect(out).toContain('<span class="block-caption">Overall system</span>');
-    expect(out).toContain("max-width:300px");
+  it("captions a solo image that has alt text and no title", async () => {
+    const out = await renderMarkdown("![Raw API fetch screen](/img/x.png)");
+    expect(out).toContain(
+      '<span class="block-caption">Raw API fetch screen</span>',
+    );
   });
 
-  it("shows no caption when the title is only a size", async () => {
-    const sized = await renderMarkdown('![a](/img/x.png "300x")');
-    expect(sized).not.toContain("block-caption");
+  it("shows no caption when there is no alt text", async () => {
+    const titled = await renderMarkdown('![](/img/x.png "Just a tooltip")');
+    expect(titled).not.toContain("block-caption");
+    expect(titled).toContain('title="Just a tooltip"');
 
-    const bare = await renderMarkdown("![a](/img/x.png)");
+    const bare = await renderMarkdown("![](/img/x.png)");
     expect(bare).not.toContain("block-caption");
   });
 
-  it("leaves an inline image's title as a tooltip, not a caption", async () => {
+  it("leaves an inline image uncaptioned however it is labelled", async () => {
     // A caption block mid-sentence would break the prose it belongs to.
-    const out = await renderMarkdown('before ![a](/img/x.png "Note") after');
+    const out = await renderMarkdown('before ![Label](/img/x.png "Note") after');
     expect(out).toContain('title="Note"');
+    expect(out).toContain('alt="Label"');
     expect(out).not.toContain("block-caption");
   });
 
