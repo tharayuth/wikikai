@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from "react";
 import { useResizeInlineImageMutation } from "../store/api";
 import { openImageLightbox } from "../lib/imageLightbox";
+import { showSizeReadout, type SizeReadout } from "../lib/sizeReadout";
 
 /**
  * Wire up drag-to-resize handles + click-to-lightbox on every inline
@@ -90,6 +91,7 @@ export function useImageResize(
       finalH?: number;
     };
     let drag: DragState | null = null;
+    let readout: SizeReadout | null = null;
 
     const onMove = (e: MouseEvent) => {
       if (!drag) return;
@@ -109,6 +111,7 @@ export function useImageResize(
         drag.finalH = h;
       }
       drag.img.classList.add("img-dragging");
+      readout?.update();
     };
 
     const onUp = async () => {
@@ -118,6 +121,8 @@ export function useImageResize(
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       d.img.classList.remove("img-dragging");
+      readout?.remove();
+      readout = null;
       // If neither dimension changed (a click without drag), skip the
       // API call — the click handler below opens the lightbox.
       const changedW =
@@ -194,6 +199,12 @@ export function useImageResize(
             startW: Math.round(rect.width),
             startH: Math.round(rect.height),
           };
+          // Report the axis being dragged; the corner moves both.
+          readout = showSizeReadout(
+            img.parentElement ?? img,
+            img,
+            kind === "right" ? "width" : kind === "bottom" ? "height" : "both",
+          );
           window.addEventListener("mousemove", onMove);
           window.addEventListener("mouseup", onUp);
         };
@@ -230,6 +241,7 @@ export function useImageResize(
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      readout?.remove();
       for (const { el, handler } of handleDownHandlers) {
         el.removeEventListener("mousedown", handler);
       }

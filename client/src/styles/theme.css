@@ -2569,6 +2569,26 @@ button.ki-id-badge::after {
   margin-bottom: 0;
   padding-bottom: 14px;
 }
+/* Live size chip shown while a diagram or an image is being dragged.
+   Pinned to the bottom-right of the box being resized, where the corner /
+   edge handles are, so the number sits next to the hand doing the work.
+   pointer-events: none keeps it from ever swallowing the drag. */
+.markdown-body .size-readout {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 5;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+}
 .markdown-body .image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

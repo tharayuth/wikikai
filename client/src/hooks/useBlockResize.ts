@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { useResizeBlockMutation } from "../store/api";
+import { showSizeReadout, type SizeReadout } from "../lib/sizeReadout";
 
 /** Matches the clamp the server applies, so the live preview never shows a
  *  height the save would reject. */
@@ -57,6 +58,7 @@ export function useBlockResize(
       finalH: number;
     };
     let drag: Drag | null = null;
+    let readout: SizeReadout | null = null;
 
     const onMove = (e: MouseEvent): void => {
       if (!drag) return;
@@ -68,6 +70,7 @@ export function useBlockResize(
       drag.block.style.setProperty("--block-h", `${h}px`);
       drag.block.classList.add("block-sized");
       drag.finalH = h;
+      readout?.update();
     };
 
     const onUp = async (): Promise<void> => {
@@ -77,6 +80,8 @@ export function useBlockResize(
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       d.block.classList.remove("block-dragging");
+      readout?.remove();
+      readout = null;
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
       // A click without movement is not a resize — leave it to the click
@@ -115,6 +120,9 @@ export function useBlockResize(
         const box = block.querySelector("pre.mermaid") ?? block;
         const h = Math.round(box.getBoundingClientRect().height);
         drag = { block, blockId, startY: e.clientY, startH: h, finalH: h };
+        // Height is the only axis here, and it is the diagram box that
+        // carries it — the wrapper would fold the caption into the number.
+        readout = showSizeReadout(block, box, "height");
         block.classList.add("block-dragging");
         document.body.style.userSelect = "none";
         document.body.style.cursor = "ns-resize";
@@ -146,6 +154,7 @@ export function useBlockResize(
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      readout?.remove();
       for (const { el, handler } of downHandlers) {
         el.removeEventListener("mousedown", handler);
       }
