@@ -55,7 +55,7 @@ Every fine-grained edit (`edit_lines`, `edit_section`, `insert_lines`, `add_line
 - **`affected`** — `{ headings, blocks }` that intersect the changed range, including any block/table **ids the server just stamped** (so you learn new `@N` ids without a re-read). Tables carry `row_count`. Scoped to the edit, never the whole page.
 
 ### Search + helper
-- `search({ query, project?, knowledge_id?, limit? })` — SQLite FTS5 across content/title/keywords. Returns hits with `url`.
+- `search({ query, project?, knowledge_id?, limit? })` — ranked search across content/title/keywords. Terms are weighted by rarity, so a natural-language question outperforms a bag of keywords. Returns hits with `url`, `snippet`, `heading`, `matched_terms`, `match_ratio`, plus a true `total`.
 - `get_example({ kind?, outline_only?, line_start?, line_end? })` — markdown reference. **Use `outline_only: true` first** (10× cheaper). `kind` = `full` / `minimal` / `mermaid` / `chart` / `stats` / `steps` / `er` / `html`.
 - `get_prompt_log({ knowledge_id, limit?, offset? })` — read the rolling audit trail of `user_prompt` values per knowledge. Each entry: `{ page_id?, page_version?, tool_name, prompt, created_at }`. Use to answer "why did revision N happen?"
 - `toggle_task({ page_id, index, expected_version? })` — flip the Nth interactive checkbox on a page (0-based, document order, skipping non-html-embed code fences). Counts three sources in source order: GFM `- [ ]`/`- [x]` task items, `[ ]`/`[x]` **anywhere inside a markdown-table cell** (start, middle, multiple per cell), and `<input type="checkbox">` inside `html-embed`. Same path the web checkbox uses.
@@ -109,7 +109,26 @@ Non-admin users authenticated by their personal MCP token (`mcp_token`) only see
 ```
 search({ query, project? })
 ```
-Returns hits with `url`, `line`, `snippet`, `page_title`, `knowledge_title`. Open the URL or `read_page` to dig in.
+
+**Ask the way you would ask a colleague.** Every term is weighted by how rare it
+is across the corpus, so the words naming your subject decide the ranking and
+filler words cost nothing. `"ทำไมเราเลือก better-sqlite3 แทน ORM"` works better
+than `"sqlite ORM"`. Words shorter than three characters cannot be indexed and
+are ignored. Thai needs no word segmentation, and asking in one language finds
+pages written in the other.
+
+Each hit returns `url`, `line`, `heading`, `snippet`, `page_title`,
+`knowledge_title`, `matched_terms` and `match_ratio`.
+
+**Read the hit before you read the page.** The snippet is quoted around the
+rarest term you matched and the heading says where it sits — together they
+usually answer the question, and every `read_page` you skip is a page of tokens
+you did not spend. Call `read_page` when you need the surrounding lines, not to
+find out whether the hit was relevant.
+
+`match_ratio` below 1 means the page matched only part of your query; `total`
+is the real number of matches, so `hits.length < total` means there is more
+behind the `limit` you asked for.
 
 ## Best practices
 

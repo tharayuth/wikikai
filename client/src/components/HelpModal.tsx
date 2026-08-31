@@ -91,7 +91,7 @@ function UserGuideEn() {
           <strong>Right content area</strong> — tab strip for pages, rendered markdown body
         </li>
         <li>
-          <strong>Search box (top)</strong> — filters sidebar by title/tag (single char works); use the tag button before the archive button to select exact tag filters. Full-text content search across all pages starts when you type ≥ 3 characters (Thai/CJK supported via trigram index)
+          <strong>Search box (top)</strong> — filters sidebar by title/tag (single char works); use the tag button before the archive button to select exact tag filters. Full-text content search across all pages starts when you type ≥ 3 characters. Ask in whole sentences — results are ranked by how rare each word is, so the words that identify your subject decide the order and filler words cost nothing. Thai, English or a mix, and asking in one language finds pages written in the other
         </li>
       </ul>
 
@@ -136,7 +136,7 @@ function UserGuideEn() {
           <tr><td>Caption a picture or a block</td><td>A diagram, chart or card carries its caption in the <code>{'{'}@N "…"{'}'}</code> annotation; a picture uses its <strong>alt text</strong> — the <code>![…]</code> part. In <code>![Raw API fetch screen](src "Pick source and period, then Preview w=520")</code> the caption under the image is <em>Raw API fetch screen</em>, while the title slot stays a hover tooltip for the longer description. A picture only gets the visible caption when it stands alone in its paragraph; one inside a sentence shows none, so the prose is not cut in half</td></tr>
           <tr><td>Resize a diagram</td><td>Hover a Mermaid diagram and drag the handle on its <strong>bottom edge</strong>; the diagram scales to the height you pick and its width follows, so the drawing grows or shrinks as a whole. This also lifts the default height cap that otherwise crops a tall diagram. A chip next to the handle shows the size in pixels while you drag — pictures show one too, reporting whichever side you grabbed (or both from the corner). Double-click the handle to go back to the natural size. Unlike the reading column, this is saved into the document — everyone who opens it, including via a share link, sees the size you chose</td></tr>
           <tr><td>Resize the reading column</td><td>Drag the handle on the <strong>right edge of the article</strong> to widen or narrow it; double-click the handle to reset. The width is remembered in this browser and applies to both the normal view and public share links</td></tr>
-          <tr><td>Search within content</td><td>Type ≥ 3 chars in the search box → click result → jumps to that line (Thai, English, mixed — substring match)</td></tr>
+          <tr><td>Search within content</td><td>Type ≥ 3 chars in the search box → click result → jumps to that line. Whole questions work better than keywords. Matched words are highlighted in each snippet; a hit tagged <strong>partial</strong> matched only part of what you asked (hover to see which part). The header shows how many of the total matches you are looking at</td></tr>
           <tr><td>Toggle light/dark</td><td>Click <Kbd>☾</Kbd> / <Kbd>☀</Kbd></td></tr>
           <tr><td>Refresh</td><td>Click <Kbd>↻</Kbd></td></tr>
           <tr><td>See what the AI is doing</td><td>A pill just right of the <strong>WikiKai logo</strong> shows the name of the <strong>MCP tool the AI called most recently</strong> (e.g. <code>edit_section</code>), live as it happens — reads included, not just edits, and calls the AI gets wrong (bad argument, unknown tool) show up too instead of passing silently. It holds the last name for <strong>30 seconds</strong> after the call and then disappears, so an empty topbar means the AI has been idle. Open a tab mid-activity and it catches up on the current name straight away</td></tr>
@@ -220,7 +220,7 @@ function UserGuideTh() {
       <ul>
         <li><strong>Sidebar ซ้าย</strong> — รายการ knowledge ทั้งหมด, group ตาม project, เรียงตามล่าสุดอัปเดต</li>
         <li><strong>Content ขวา</strong> — tab strip ของ page + เนื้อหา markdown</li>
-        <li><strong>Search box</strong> ด้านบน — กรอง sidebar ด้วย title/tag (ตัวอักษรเดียวก็ได้), หรือ full-text search เนื้อหาทุก page เมื่อพิมพ์ ≥ 3 ตัวอักษร (รองรับภาษาไทย/CJK ผ่าน trigram index)</li>
+        <li><strong>Search box</strong> ด้านบน — กรอง sidebar ด้วย title/tag (ตัวอักษรเดียวก็ได้), หรือ full-text search เนื้อหาทุก page เมื่อพิมพ์ ≥ 3 ตัวอักษร. พิมพ์เป็นประโยคได้เลย — ระบบให้น้ำหนักคำตามความหายาก คำที่บอกว่าคุณหาอะไรจึงเป็นตัวตัดสินอันดับ ส่วนคำเชื่อมไม่กินที่. ไทย/อังกฤษ/ผสมได้ และถามไทยก็เจอเอกสารที่เขียนเป็นอังกฤษ</li>
       </ul>
 
       <h3>สัญลักษณ์ id — &amp; กับ #</h3>
@@ -257,7 +257,7 @@ function UserGuideTh() {
           <tr><td>ใส่ caption ให้ภาพหรือ block</td><td>diagram / chart / card เก็บ caption ไว้ใน annotation <code>{'{'}@N "…"{'}'}</code> ส่วนภาพใช้ <strong>ข้อความ alt</strong> คือส่วน <code>![…]</code> นั่นเอง. เช่น <code>![หน้าดึงข้อมูล Raw API](src "แท็บดึงข้อมูล — เลือก source / งวด แล้วกด Preview w=520")</code> caption ใต้ภาพคือ <em>หน้าดึงข้อมูล Raw API</em> ส่วน title slot ยังเป็น tooltip ตอนเอาเมาส์ชี้ ไว้ใส่คำอธิบายยาว ๆ. ภาพจะขึ้น caption ก็ต่อเมื่อ <strong>อยู่ลำพังในย่อหน้าของตัวเอง</strong> ภาพที่แทรกกลางประโยคไม่ขึ้น เพื่อไม่ให้ตัดเนื้อความขาดกลางย่อหน้า</td></tr>
           <tr><td>ย่อ/ขยาย diagram</td><td>เอาเมาส์ชี้ที่ diagram (Mermaid) แล้วลากที่ <strong>ขอบล่าง</strong> — diagram จะขยาย/ย่อตามความสูงที่เลือก ส่วนความกว้างไปตามสัดส่วนเอง ภาพจึงใหญ่/เล็กทั้งอัน. วิธีนี้ยังปลดเพดานความสูงเริ่มต้นที่ปกติจะตัด diagram สูง ๆ ทิ้งด้วย. ระหว่างลากจะมีป้ายเลขขนาด (px) ขึ้นข้างจุดที่ลาก — ภาพก็มีเหมือนกัน โดยบอกด้านที่กำลังลาก (ลากมุมจะบอกทั้งกว้าง × สูง). ดับเบิลคลิกที่ขอบเพื่อคืนขนาดปกติ. ต่างจากความกว้างคอลัมน์อ่านตรงที่ค่านี้ <strong>บันทึกลงในเอกสาร</strong> — ทุกคนที่เปิด รวมถึงคนที่เปิดผ่านลิงก์แชร์ จะเห็นขนาดเดียวกับที่คุณตั้ง</td></tr>
           <tr><td>ปรับความกว้างคอลัมน์อ่าน</td><td>ลากที่ <strong>ขอบขวาของบทความ</strong> เพื่อขยาย/ย่อ, ดับเบิลคลิกที่ขอบเพื่อคืนค่าเริ่มต้น. ค่าที่ปรับถูกจำไว้ใน browser นี้ และใช้ทั้งในโหมดปกติและลิงก์แชร์ public</td></tr>
-          <tr><td>ค้นในเนื้อหา</td><td>พิมพ์ในกล่อง search ≥ 3 ตัวอักษร → คลิกผลลัพธ์ → เด้งไปบรรทัดนั้น (ไทย/อังกฤษ/ผสม — substring match)</td></tr>
+          <tr><td>ค้นในเนื้อหา</td><td>พิมพ์ในกล่อง search ≥ 3 ตัวอักษร → คลิกผลลัพธ์ → เด้งไปบรรทัดนั้น. ถามเป็นประโยคได้ผลดีกว่าพิมพ์คีย์เวิร์ด. คำที่ตรงจะถูกไฮไลต์ในตัวอย่างข้อความ; ผลที่ติดป้าย <strong>partial</strong> คือตรงแค่บางส่วนของที่ถาม (ชี้เมาส์ดูว่าตรงคำไหน). หัวตารางบอกว่ากำลังดูกี่รายการจากทั้งหมดเท่าไหร่</td></tr>
           <tr><td>สลับ light/dark</td><td>คลิก <Kbd>☾</Kbd> / <Kbd>☀</Kbd></td></tr>
           <tr><td>Refresh</td><td>คลิก <Kbd>↻</Kbd></td></tr>
           <tr><td>ดูว่า AI กำลังทำอะไรอยู่</td><td>ป้ายเล็ก ๆ ถัดจาก <strong>โลโก้ WikiKai</strong> แสดงชื่อ <strong>MCP tool ที่ AI เรียกล่าสุด</strong> (เช่น <code>edit_section</code>) แบบ realtime — รวม tool ที่แค่อ่านด้วย ไม่ใช่เฉพาะตอนแก้ไข และถ้า AI เรียกผิด (ใส่ argument ผิด หรือเรียก tool ที่ไม่มี) ก็ยังขึ้นให้เห็น ไม่เงียบหายไป. ชื่อจะค้างไว้ <strong>30 วินาที</strong> หลังการเรียกครั้งสุดท้ายแล้วหายไป ดังนั้นถ้า topbar ว่าง = AI ไม่ได้ทำอะไรอยู่. เปิด tab ใหม่ระหว่างที่ AI ทำงานก็เห็นชื่อล่าสุดทันที</td></tr>
@@ -394,7 +394,7 @@ function McpGuideEn() {
       <table>
         <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>search</code></td><td>SQLite FTS5 across content / title / keywords. Returns <code>{`{ kid, pid, line, snippet, url }`}</code> for every hit</td></tr>
+          <tr><td><code>search</code></td><td>Ranked search across content / title / keywords — terms weighted by rarity, so a natural-language question beats a keyword. Returns <code>{`{ kid, pid, line, heading, snippet, matched_terms, match_ratio, url }`}</code> per hit plus a true <code>total</code>. The snippet + heading usually answer without a <code>read_page</code>; a low <code>match_ratio</code> marks a hit worth skipping</td></tr>
           <tr><td><code>get_block</code></td><td>Fetch a rich block by its <code>@N</code> id in one call. Returns <code>{`{ kind, caption, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. Works for fenced rich blocks <em>and</em> markdown tables. <code>summary: true</code> → skip body; for tables you get <code>columns</code> + <code>row_count</code> + caption instead — cheap probe of large tables. <code>include_styles: true</code> → keep inline <code>style</code> attrs (html-embed kind only; default strips them, saves 50–70%)</td></tr>
           <tr><td><code>set_block_caption</code></td><td>Set / update / clear the caption on a block's annotation (rewrites <code>{`{@N "caption"}`}</code> in source). Args: <code>{`{ id, caption }`}</code> — pass <code>null</code> or empty string to remove. Caption is the same idea as an HTML <code>&lt;figcaption&gt;</code> — short text describing what the block IS, so future <code>get_block({"{ summary: true }"})</code> probes answer "what is @47?" cheaply</td></tr>
           <tr><td><code>get_table_row</code></td><td>Get a single data row of a markdown-table block as a <code>{`{ columnName: cellText }`}</code> object. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> is 0-based; negative wraps from end (<code>-1</code> = last row). When you don't know the index, use <code>find_table_rows</code> instead</td></tr>
@@ -449,7 +449,7 @@ function McpGuideEn() {
         <li><strong>user_prompt</strong> — the user's verbatim message that triggered the change. Accepted by <em>every</em> mutation tool (add_knowledge / add_page / edit_page / append_page / edit_lines / edit_section / replace_text / edit_knowledge). When provided, the server appends a row to the <strong>prompt log</strong> linked to the knowledge + (optionally) page. Capped at 500 chars on insert. Read back with <code>get_prompt_log</code>; the info popover shows the same timeline.</li>
         <li><strong>tokens_used</strong> — optional, total tokens the client consumed (input + output) — surfaced in the info popover for cost tracking</li>
         <li><strong>project</strong> — group key (e.g. repo name) used to group entries in the sidebar</li>
-        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags classify knowledge entries and can be edited from the portal's <Kbd>i</Kbd> popover; keywords add weight to FTS search on a page</li>
+        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags classify knowledge entries and can be edited from the portal's <Kbd>i</Kbd> popover; keywords give a page extra words to be found by, which is how you make it findable under a term its body never uses (a synonym, an abbreviation, the other language)</li>
       </ul>
 
       <h3>Block-choice guidance — pick a prepared block FIRST</h3>
@@ -602,7 +602,7 @@ function McpGuideTh() {
       <table>
         <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
         <tbody>
-          <tr><td><code>search</code></td><td>SQLite FTS5 ค้นข้าม content/title/keywords. คืน <code>{`{ kid, pid, line, snippet, url }`}</code> ทุก hit</td></tr>
+          <tr><td><code>search</code></td><td>ค้นแบบจัดอันดับข้าม content/title/keywords — ถ่วงน้ำหนักคำตามความหายาก ถามเป็นประโยคจึงได้ผลดีกว่าคีย์เวิร์ด. คืน <code>{`{ kid, pid, line, heading, snippet, matched_terms, match_ratio, url }`}</code> ต่อ hit พร้อม <code>total</code> จำนวนจริง. snippet + heading มักพอตอบได้โดยไม่ต้อง <code>read_page</code>; <code>match_ratio</code> ต่ำ = hit อ่อน ข้ามได้</td></tr>
           <tr><td><code>get_block</code></td><td>ดึง rich block ด้วย <code>@N</code> id ใน 1 call. คืน <code>{`{ kind, caption, source, inner, line_start, line_end, page_id, page_title, knowledge_id, url }`}</code>. ใช้ได้ทั้ง fenced rich block <em>และ</em> markdown table. <code>summary: true</code> → ข้าม body; สำหรับตารางได้ <code>columns</code> + <code>row_count</code> + caption — probe ตารางใหญ่แบบประหยัด token. <code>include_styles: true</code> → เก็บ inline <code>style</code> ไว้ (เฉพาะ html-embed; default ตัด ประหยัด 50–70%)</td></tr>
           <tr><td><code>set_block_caption</code></td><td>ตั้ง / อัปเดต / ล้าง caption ของ block (เขียน <code>{`{@N "caption"}`}</code> ใน source). Args: <code>{`{ id, caption }`}</code> — ส่ง <code>null</code> หรือ empty string เพื่อล้าง. Caption คือคำบรรยายภาพ (เหมือน HTML <code>&lt;figcaption&gt;</code>) — สั้น ๆ บอกว่า block นี้คืออะไร เพื่อ <code>get_block({"{ summary: true }"})</code> ในอนาคตตอบ "@47 คืออะไร" ได้ราคาถูก ๆ</td></tr>
           <tr><td><code>get_table_row</code></td><td>ดึง 1 แถวข้อมูลของ markdown-table block เป็น <code>{`{ columnName: cellText }`}</code>. Args: <code>{`{ block_id, index }`}</code> — <code>index</code> เริ่มที่ 0; เลขลบนับจากท้าย (<code>-1</code> = แถวสุดท้าย). ถ้าไม่รู้ index ใช้ <code>find_table_rows</code> แทน</td></tr>
@@ -657,7 +657,7 @@ function McpGuideTh() {
         <li><strong>user_prompt</strong> — ข้อความผู้ใช้ verbatim ที่กระตุ้นให้เกิดการแก้. <em>ทุก mutation tool</em> รับ field นี้ (add_knowledge / add_page / edit_page / append_page / edit_lines / edit_section / replace_text / edit_knowledge). เมื่อใส่มา server เก็บลง <strong>prompt log</strong> ผูกกับ knowledge + (ถ้ามี) page นั้น ๆ. ตัดที่ 500 ตัวอักษรตอน insert. ดู log ผ่าน <code>get_prompt_log</code> หรือใน info popover (แสดงเป็น timeline)</li>
         <li><strong>tokens_used</strong> — optional, token ที่ client ใช้ทั้งหมด (input + output รวมกัน) สำหรับ track cost</li>
         <li><strong>project</strong> — group key เช่น repo name → ใช้ group ใน sidebar</li>
-        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags ใช้จัดหมวด knowledge และแก้ได้จาก info popover <Kbd>i</Kbd> ใน portal; keywords ใช้เพิ่มน้ำหนัก FTS search ของ page</li>
+        <li><strong>tags</strong> (knowledge) vs <strong>keywords</strong> (page) — tags ใช้จัดหมวด knowledge และแก้ได้จาก info popover <Kbd>i</Kbd> ใน portal; keywords คือคำค้นเพิ่มให้ page ใช้ทำให้หน้าถูกค้นเจอด้วยคำที่ไม่มีในเนื้อหา (คำพ้อง ตัวย่อ หรืออีกภาษาหนึ่ง)</li>
       </ul>
 
       <h3>เลือก block ให้ถูก — ใช้ prepared block ก่อน</h3>
