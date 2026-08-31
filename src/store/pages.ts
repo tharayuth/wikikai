@@ -9,6 +9,11 @@ import {
   parseAllAnnotations,
   parseAnnotation,
 } from "../lib/blockAnnotation.js";
+import { DEFAULT_PARAMS, type SearchParams } from "./search/params.js";
+import { fuse, selectTerms, type TermHits } from "./search/rank.js";
+import { buildExcerpt } from "./search/snippet.js";
+import { SearchStats, quote } from "./search/stats.js";
+import { planTerms } from "./search/terms.js";
 
 export interface PageMetadata {
   id: number;
@@ -70,8 +75,34 @@ export interface SearchHit {
   } | null;
   snippet: string;
   score: number;
+  /** Query terms this page actually matched, rarest first. */
+  matched_terms: string[];
+  /** Share of the query's terms this page matched, 0–1. Lets a caller — an
+   *  agent especially — recognise a partial match without opening the page. */
+  match_ratio: number;
   /** Set when the hit came from an `@N` block-id lookup. */
   block_id?: number;
+}
+
+/** Everything a search can be narrowed by. Shared by the ranked search and
+ *  the total count so the two always agree on scope. */
+export interface SearchFilters {
+  project?: string;
+  projects?: string[];
+  knowledge_id?: number;
+  limit?: number;
+  /** Include soft-archived pages in results. Default false. */
+  includeArchived?: boolean;
+}
+
+/** Page + parent columns every hit is built from. */
+interface SearchRow {
+  page_id: number;
+  knowledge_id: number;
+  page_position: number;
+  page_title: string;
+  knowledge_title: string;
+  project: string | null;
 }
 
 interface PageRow {
@@ -338,11 +369,20 @@ function updateImgStyleAttr(
 }
 
 export class PageStore {
-  constructor(private db: Db, private itemsDir: string) {
+  private readonly stats: SearchStats;
+
+  /** `searchParams` is injectable so `scripts/eval-search.ts` can sweep values
+   *  against the real corpus — the defaults are measurements, not opinions. */
+  constructor(
+    private db: Db,
+    private itemsDir: string,
+    private readonly searchParams: SearchParams = DEFAULT_PARAMS,
+  ) {
     fs.mkdirSync(itemsDir, { recursive: true });
     this.migrateFtsTokenizer("trigram");
     this.backfillRevisions();
     this.backfillBlockIds();
+    this.stats = new SearchStats(db);
   }
 
   /**
@@ -2986,17 +3026,7 @@ export class PageStore {
 
   // ─────────── Search (FTS5) ───────────
 
-  search(
-    query: string,
-    opts: {
-      project?: string;
-      projects?: string[];
-      knowledge_id?: number;
-      limit?: number;
-      /** Include soft-archived pages in results. Default false. */
-      includeArchived?: boolean;
-    } = {},
-  ): SearchHit[] {
+  search(query: string, opts: SearchFilters = {}): SearchHit[] {
     const trimmed = query.trim();
     if (!trimmed) return [];
     // ─── Special case: id lookup ────────────────────────────────────
@@ -3013,11 +3043,99 @@ export class PageStore {
     if (blockMatch) {
       return this.lookupByBlockId(Number(blockMatch[1]));
     }
-    const ftsQuery = sanitizeFtsQuery(query);
-    if (!ftsQuery) return []; // all tokens too short for the trigram tokenizer
+    const p = this.searchParams;
+    const planned = planTerms(query, p);
+    if (planned.length === 0) return []; // nothing long enough to index
     const limit = Math.min(opts.limit ?? 50, 200);
+    const { where, params } = this.searchFilterClause(opts);
+
+    // One query per term rather than one query for the whole phrase. FTS5 can
+    // rank a query but it cannot weight the terms inside one, and that is
+    // exactly the decision that matters: a page matching `better-sqlite3`
+    // should beat a page matching three fragments of "ทำไมถึงเลือก". Asking
+    // per term lets `fuse` apply idf itself.
+    const terms = selectTerms(
+      planned,
+      (t) => this.stats.documentFrequency(t),
+      this.stats.corpusSize(),
+      p,
+    );
+    if (terms.length === 0) return [];
+
+    const { content: wc, title: wt, keywords: wk } = p.fieldWeights;
+    const perTermQuery = this.db.prepare(
+      `SELECT pages_fts.rowid AS page_id, bm25(pages_fts, ${wc}, ${wt}, ${wk}) AS score
+       FROM pages_fts
+       JOIN pages p ON p.id = pages_fts.rowid
+       JOIN knowledge k ON k.id = p.knowledge_id
+       WHERE pages_fts MATCH @term ${where}
+       ORDER BY score
+       LIMIT @cap`,
+    );
+
+    const perTerm: TermHits[] = [];
+    for (const term of terms) {
+      let rows: Array<{ page_id: number; score: number }>;
+      try {
+        rows = perTermQuery.all({
+          ...params,
+          term: quote(term.text),
+          cap: p.perTermCap,
+        }) as Array<{ page_id: number; score: number }>;
+      } catch {
+        continue; // a term the index refuses to parse contributes nothing
+      }
+      // bm25 is negative and more negative is better; flip it so the fuser
+      // works in "bigger is better" throughout.
+      perTerm.push({
+        term,
+        hits: rows.map((r) => ({ pageId: r.page_id, score: -r.score })),
+      });
+    }
+
+    const ranked = fuse(perTerm, terms.length, p);
+    if (ranked.length === 0) return [];
+    // Trim the tail before reading any files: everything below a fraction of
+    // the best score matched something incidental, and each one costs the
+    // caller a read.
+    const floor = ranked[0].score * p.minScoreRatio;
+    const fused = ranked.filter((f) => f.score >= floor).slice(0, limit);
+
+    const meta = this.searchRowMeta(fused.map((f) => f.pageId));
+    const hits: SearchHit[] = [];
+    for (const f of fused) {
+      const row = meta.get(f.pageId);
+      if (!row) continue; // deleted between the two queries
+      const content = this.readContent(row.knowledge_id, row.page_id);
+      // Terms come out of `selectTerms` rarest first, and the excerpt should
+      // quote the most telling one, so the order carries straight through.
+      const excerpt = buildExcerpt(content, f.matched, p);
+      hits.push({
+        knowledge_id: row.knowledge_id,
+        knowledge_title: row.knowledge_title,
+        project: row.project,
+        page_id: row.page_id,
+        page_position: row.page_position,
+        page_title: row.page_title,
+        line: excerpt.line,
+        heading: findHeadingForLine(content, excerpt.line),
+        snippet: excerpt.text,
+        score: f.score,
+        matched_terms: f.matched,
+        match_ratio: f.matchRatio,
+      });
+    }
+    return hits;
+  }
+
+  /** Build the shared `AND …` tail every search query appends, so the ranked
+   *  path and the count path can never drift apart on what they exclude. */
+  private searchFilterClause(opts: SearchFilters): {
+    where: string;
+    params: Record<string, unknown>;
+  } {
     const filters: string[] = [];
-    const params: Record<string, unknown> = { q: ftsQuery, limit };
+    const params: Record<string, unknown> = {};
     if (!opts.includeArchived) {
       filters.push("p.archived_at IS NULL");
     }
@@ -3036,76 +3154,76 @@ export class PageStore {
       filters.push("k.project = @project");
       params.project = projectList[0];
     } else if (projectList.length > 1) {
-      const placeholders = projectList
-        .map((_, i) => `@proj${i}`)
-        .join(", ");
+      const placeholders = projectList.map((_, i) => `@proj${i}`).join(", ");
       filters.push(`k.project IN (${placeholders})`);
       projectList.forEach((p, i) => {
         params[`proj${i}`] = p;
       });
     }
-    const where = filters.length ? `AND ${filters.join(" AND ")}` : "";
+    return {
+      where: filters.length ? `AND ${filters.join(" AND ")}` : "",
+      params,
+    };
+  }
+
+  /** Fetch the page + parent metadata for a set of ids in one query. */
+  private searchRowMeta(pageIds: number[]): Map<number, SearchRow> {
+    const out = new Map<number, SearchRow>();
+    if (pageIds.length === 0) return out;
+    const placeholders = pageIds.map(() => "?").join(", ");
     const rows = this.db
       .prepare(
         `SELECT p.id AS page_id, p.knowledge_id, p.position AS page_position,
                 p.title AS page_title,
-                k.title AS knowledge_title, k.project AS project,
-                snippet(pages_fts, 0, '<<<', '>>>', '…', 40) AS snip_content,
-                snippet(pages_fts, 1, '<<<', '>>>', '…', 40) AS snip_title,
-                snippet(pages_fts, 2, '<<<', '>>>', '…', 40) AS snip_keywords,
-                bm25(pages_fts) AS score
-         FROM pages_fts
-         JOIN pages p ON p.id = pages_fts.rowid
+                k.title AS knowledge_title, k.project AS project
+         FROM pages p
          JOIN knowledge k ON k.id = p.knowledge_id
-         WHERE pages_fts MATCH @q ${where}
-         ORDER BY score
-         LIMIT @limit`,
+         WHERE p.id IN (${placeholders})`,
       )
-      .all(params) as Array<{
-      page_id: number;
-      knowledge_id: number;
-      page_position: number;
-      page_title: string;
-      knowledge_title: string;
-      project: string | null;
-      snip_content: string | null;
-      snip_title: string | null;
-      snip_keywords: string | null;
-      score: number;
-    }>;
+      .all(...pageIds) as SearchRow[];
+    for (const r of rows) out.set(r.page_id, r);
+    return out;
+  }
 
-    return rows.map((row) => {
-      const content = this.readContent(row.knowledge_id, row.page_id);
-      const lineNum = findFirstLineWith(content, query);
-      const heading = findHeadingForLine(content, lineNum);
-      const raw =
-        (row.snip_content && row.snip_content.includes("<<<")
-          ? row.snip_content
-          : null) ??
-        (row.snip_title && row.snip_title.includes("<<<")
-          ? row.snip_title
-          : null) ??
-        (row.snip_keywords && row.snip_keywords.includes("<<<")
-          ? row.snip_keywords
-          : null) ??
-        row.snip_content ??
-        row.snip_title ??
-        row.snip_keywords ??
-        "";
-      const cleanSnippet = raw.replace(/<<</g, "").replace(/>>>/g, "");
-      return {
-        knowledge_id: row.knowledge_id,
-        knowledge_title: row.knowledge_title,
-        project: row.project,
-        page_id: row.page_id,
-        page_position: row.page_position,
-        page_title: row.page_title,
-        line: lineNum,
-        heading,
-        snippet: cleanSnippet,
-        score: row.score,
-      };
-    });
+  /**
+   * How many pages match a query in total, ignoring any `limit`.
+   *
+   * The ranked path caps each term's result set for speed, so counting the
+   * rows it returns would report the cap rather than the truth. This asks the
+   * index the plain question — how many pages match any selected term — in one
+   * query, so a caller can say "20 of 340" instead of implying there were 20.
+   */
+  countMatches(query: string, opts: SearchFilters = {}): number {
+    const trimmed = query.trim();
+    if (!trimmed) return 0;
+    if (/^([&#]|@)\d+$/.test(trimmed)) return this.search(trimmed, opts).length;
+    const planned = planTerms(query, this.searchParams);
+    if (planned.length === 0) return 0;
+    const terms = selectTerms(
+      planned,
+      (t) => this.stats.documentFrequency(t),
+      this.stats.corpusSize(),
+      this.searchParams,
+    );
+    if (terms.length === 0) return 0;
+    const { where, params } = this.searchFilterClause(opts);
+    try {
+      const row = this.db
+        .prepare(
+          `SELECT count(*) AS c
+           FROM pages_fts
+           JOIN pages p ON p.id = pages_fts.rowid
+           JOIN knowledge k ON k.id = p.knowledge_id
+           WHERE pages_fts MATCH @term ${where}`,
+        )
+        .get({
+          ...params,
+          term: terms.map((t) => quote(t.text)).join(" OR "),
+        }) as { c: number };
+      return row.c;
+    } catch {
+      return 0;
+    }
   }
 
   /** Direct id lookup used by `search()` when the query is `&N` or `#N`. */
@@ -3152,6 +3270,10 @@ export class PageStore {
       heading: null,
       snippet: `${marker}${marker === "&" ? r.knowledge_id : r.page_id} · ${r.page_title}`,
       score: 0,
+      // An id lookup asked for one exact thing and got it — nothing partial
+      // about the match, and no query terms behind it.
+      matched_terms: [],
+      match_ratio: 1,
     }));
   }
 
@@ -3171,6 +3293,8 @@ export class PageStore {
         heading: null,
         snippet: `@${blockId} · ${b.kind} block · L${b.line_start}–${b.line_end}`,
         score: 0,
+        matched_terms: [],
+        match_ratio: 1,
         block_id: blockId,
       },
     ];
@@ -3614,29 +3738,3 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function findFirstLineWith(content: string, query: string): number {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((t) => t.length >= 2 && !/^(and|or|not)$/.test(t));
-  if (terms.length === 0) return 1;
-  const lines = content.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const lower = lines[i].toLowerCase();
-    if (terms.some((t) => lower.includes(t))) return i + 1;
-  }
-  return 1;
-}
-
-// Build a trigram-friendly FTS5 phrase query.
-// Each whitespace-separated token is wrapped in double quotes so it is matched
-// as an exact substring. Tokens shorter than 3 codepoints are dropped because
-// the trigram tokenizer cannot match anything shorter than a trigram.
-function sanitizeFtsQuery(q: string): string {
-  const tokens = q
-    .trim()
-    .split(/\s+/)
-    .filter((tok) => [...tok].length >= 3);
-  if (tokens.length === 0) return "";
-  return tokens.map((tok) => `"${tok.replace(/"/g, '""')}"`).join(" ");
-}

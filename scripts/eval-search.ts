@@ -35,6 +35,7 @@ import { loadConfig } from "../src/lib/config.js";
 import { openDb } from "../src/store/db.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore, type SearchHit } from "../src/store/pages.js";
+import { DEFAULT_PARAMS, type SearchParams } from "../src/store/search/params.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 try {
@@ -76,7 +77,15 @@ const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8")) as {
 const cfg = loadConfig(process.env);
 const db = openDb(cfg.dbPath);
 const knowledge = new KnowledgeStore(db);
-const pages = new PageStore(db, cfg.itemsDir);
+
+// `--params '{"minScoreRatio":0.4}'` overrides one tunable for this run, so a
+// value can be chosen by sweeping it against the real corpus instead of taste.
+const paramOverrides = strArg("--params");
+const params: SearchParams = {
+  ...DEFAULT_PARAMS,
+  ...(paramOverrides ? (JSON.parse(paramOverrides) as Partial<SearchParams>) : {}),
+};
+const pages = new PageStore(db, cfg.itemsDir, params);
 
 // ─── Fixture sanity: a target that no longer exists would score as a miss and
 // quietly drag every number down, so say so instead of counting it. ───
@@ -184,7 +193,9 @@ const corpus = db
   .get() as { pages: number; docs: number };
 
 console.log(
-  `\nWikiKai search eval · ${rows.length} queries · corpus ${corpus.pages} pages / ${corpus.docs} docs · limit ${LIMIT}\n`,
+  `\nWikiKai search eval · ${rows.length} queries · corpus ${corpus.pages} pages / ${corpus.docs} docs · limit ${LIMIT}` +
+    (paramOverrides ? ` · params ${paramOverrides}` : "") +
+    "\n",
 );
 if (stale.length) {
   console.log(`⚠️  fixture targets that no longer exist (scored as misses):`);
