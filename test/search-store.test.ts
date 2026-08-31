@@ -184,6 +184,40 @@ describe("PageStore.search", () => {
       expect(hit!.snippet.startsWith("#")).toBe(false);
     });
 
+    it("quotes prose rather than the inside of a diagram", () => {
+      // Diagram source mentions the subject long before the prose does, and a
+      // line of Mermaid tells a reader nothing except "open the page" — which
+      // is the read this excerpt exists to save.
+      const target = add(
+        kid,
+        "Access",
+        [
+          "# Access",
+          "",
+          "```mermaid",
+          'A["reach the wireguard box"] --> B{"tunnel up?"}',
+          "```",
+          "",
+          "Reach the wireguard box on port 11289 with the root key.",
+        ].join("\n"),
+      );
+      const hit = pages.search("wireguard").find((h) => h.page_id === target.id);
+      expect(hit!.line).toBe(7);
+      expect(hit!.snippet).toContain("port 11289");
+      expect(hit!.snippet).not.toContain("-->");
+    });
+
+    it("still points inside a fence when the term appears nowhere else", () => {
+      const target = add(
+        kid,
+        "Config",
+        ["# Config", "", "```bash", "export ZEPHYR_MODE=1", "```"].join("\n"),
+      );
+      const hit = pages.search("ZEPHYR_MODE").find((h) => h.page_id === target.id);
+      expect(hit!.line).toBe(4);
+      expect(hit!.snippet).toContain("ZEPHYR_MODE");
+    });
+
     it("carries the prose under a heading when the match is the heading", () => {
       // Quoting "## Cache" back to someone who searched for "cache" repeats
       // their own query; the paragraph under it is the part that answers.

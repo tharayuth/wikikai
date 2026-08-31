@@ -29,11 +29,15 @@ export function buildExcerpt(
 ): Excerpt {
   const p = { ...DEFAULT_PARAMS, ...overrides };
   const lines = content.split("\n");
-  const found = locate(lines, terms);
+  const fenced = markFencedLines(lines);
+  const found = locate(lines, terms, fenced);
   if (!found) {
     // Nothing matched in the body — the hit came from the title or keywords.
     // Quote the opening instead of pretending to point somewhere.
-    return { line: 1, text: condense(firstProseLine(lines), p.snippetChars) };
+    return {
+      line: 1,
+      text: condense(firstProseLine(lines, fenced, 0), p.snippetChars),
+    };
   }
   const line = lines[found.line - 1];
   if (isStructural(line)) {
@@ -41,7 +45,7 @@ export function buildExcerpt(
     // where the term is — but quoting `## Cache` back to someone who searched
     // for "cache" tells them nothing they did not just type. Carry the prose
     // under it instead, which is the part that answers the question.
-    const prose = firstProseLine(lines.slice(found.line));
+    const prose = firstProseLine(lines, fenced, found.line);
     const head = line.replace(/^#+\s*/, "").trim();
     return {
       line: found.line,
@@ -56,21 +60,36 @@ export function buildExcerpt(
 
 /**
  * First line containing any of the terms, preferring earlier terms in the list
- * and prose over structure.
+ * and readable prose over everything else.
  *
- * The two passes matter: a term very often appears in a heading before it
- * appears in the paragraph that explains it, and pointing at the paragraph is
- * more useful. Only when no prose line contains the term does a heading win.
+ * Three passes, in descending order of how much the quoted line will tell a
+ * reader:
+ *
+ *   1. prose outside any fenced block — the paragraph that explains the term
+ *   2. headings, and other structure outside a fence
+ *   3. anything at all, including the inside of a fence
+ *
+ * The fence rule earns its keep on this corpus. A page built around a Mermaid
+ * diagram mentions its subject inside the diagram source long before the prose
+ * gets to it, and quoting `A["ต้องเข้ากล่อง"] --> B{"WireGuard ไหม?"}` at
+ * someone tells them nothing except that they should open the page — which is
+ * the read this excerpt exists to save.
  */
 function locate(
   lines: string[],
   terms: string[],
+  fenced: boolean[],
 ): { line: number; column: number; length: number } | null {
-  for (const proseOnly of [true, false]) {
+  const passes: Array<(i: number) => boolean> = [
+    (i) => !fenced[i] && !isStructural(lines[i]),
+    (i) => !fenced[i],
+    () => true,
+  ];
+  for (const allowed of passes) {
     for (const term of terms) {
       const needle = term.toLowerCase();
       for (let i = 0; i < lines.length; i++) {
-        if (proseOnly && isStructural(lines[i])) continue;
+        if (!allowed(i)) continue;
         const column = lines[i].toLowerCase().indexOf(needle);
         if (column !== -1) return { line: i + 1, column, length: term.length };
       }
@@ -79,21 +98,41 @@ function locate(
   return null;
 }
 
-/** Headings, fences and blockquote markers — structure rather than prose. */
+/** Flag every line that sits inside a ``` fence, the fence markers included. */
+function markFencedLines(lines: string[]): boolean[] {
+  const out = new Array<boolean>(lines.length).fill(false);
+  let open = false;
+  for (let i = 0; i < lines.length; i++) {
+    const isMarker = lines[i].trimStart().startsWith("```");
+    if (isMarker) {
+      out[i] = true;
+      open = !open;
+      continue;
+    }
+    out[i] = open;
+  }
+  return out;
+}
+
+/** Headings and blockquote markers — structure rather than prose. */
 function isStructural(line: string): boolean {
   const t = line.trim();
   return t.startsWith("#") || t.startsWith("```") || t.startsWith(">");
 }
 
-/** First line of actual prose, skipping blanks and structure, so an excerpt is
- *  never just `# Title` or an opening fence. */
-function firstProseLine(lines: string[]): string {
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t || isStructural(t)) continue;
+/** First line of actual prose at or after `from`, skipping blanks, structure
+ *  and anything inside a fence, so an excerpt is never just `# Title` or a
+ *  line of diagram source. */
+function firstProseLine(lines: string[], fenced: boolean[], from: number): string {
+  for (let i = from; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t || fenced[i] || isStructural(t)) continue;
     return t;
   }
-  return lines.find((l) => l.trim())?.trim() ?? "";
+  for (let i = from; i < lines.length; i++) {
+    if (lines[i].trim()) return lines[i].trim();
+  }
+  return "";
 }
 
 /** Take `width` characters around the match, breaking on spaces where one is
