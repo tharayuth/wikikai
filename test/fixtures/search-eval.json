@@ -1,0 +1,267 @@
+{
+  "$comment": [
+    "Ground truth for scripts/eval-search.ts. Every entry names the knowledge",
+    "documents (and, where one page clearly owns the answer, the pages) that a",
+    "good search would surface for that query.",
+    "",
+    "`knowledge` is the primary target: several documents may legitimately answer",
+    "the same question, so list every acceptable one — a hit on any of them counts.",
+    "`pages` is optional and stricter; it drives the page-level metrics.",
+    "",
+    "`kind` groups queries so the report can show WHERE search is weak rather than",
+    "one blended number:",
+    "  th-question / en-question — a whole sentence, the way an agent phrases it",
+    "  keyword                   — the two or three words a human types in a hurry",
+    "  body                      — the answer lives in the page body, not its title",
+    "  cross-lang                — asked in one language, answered in the other",
+    "  typo                      — a plausible misspelling of a real term",
+    "  id                        — the &N / #N / @N fast path",
+    "",
+    "These ids point at the LIVE database (data/index.db). Editing or deleting the",
+    "target documents invalidates the rows that name them; the eval script reports",
+    "any target that no longer exists instead of silently scoring it as a miss."
+  ],
+  "queries": [
+    {
+      "q": "งวดการจ่ายเงิน OIE มีกี่งวด",
+      "kind": "th-question",
+      "knowledge": [12],
+      "pages": [100]
+    },
+    {
+      "q": "ssh เข้ากล่อง notibox จากข้างนอกยังไง",
+      "kind": "th-question",
+      "knowledge": [153],
+      "pages": [806]
+    },
+    {
+      "q": "วิธีรัน PROD-Replay mock",
+      "kind": "th-question",
+      "knowledge": [178],
+      "pages": [929]
+    },
+    {
+      "q": "ขั้นตอนเมื่อ QA เจอบั๊กระหว่างเทส",
+      "kind": "th-question",
+      "knowledge": [20],
+      "pages": [142]
+    },
+    {
+      "q": "ทับข้อมูลแล้ว lock ไม่ให้แก้ ทำยังไง",
+      "kind": "th-question",
+      "knowledge": [87],
+      "pages": [499, 552]
+    },
+    {
+      "q": "สูตรคำนวณ Quality Score มีกี่มิติ",
+      "kind": "th-question",
+      "knowledge": [5],
+      "pages": [28]
+    },
+    {
+      "q": "endpoint กับ auth ของ API iSingleForm ตัว PROD",
+      "kind": "th-question",
+      "knowledge": [145],
+      "pages": [763]
+    },
+    {
+      "q": "เครื่อง geforce เอาไว้ทำอะไร",
+      "kind": "th-question",
+      "knowledge": [18, 7],
+      "pages": [130, 48]
+    },
+    {
+      "q": "รหัสผ่านกับ key ของ Notibox เก็บไว้ที่ไหน",
+      "kind": "th-question",
+      "knowledge": [153],
+      "pages": [810]
+    },
+    {
+      "q": "แผนทดสอบ revision ผ่าน PROD-Replay ทำยังไงบ้าง",
+      "kind": "th-question",
+      "knowledge": [47],
+      "pages": [309]
+    },
+    {
+      "q": "sector picker TSIC ใช้งานยังไง",
+      "kind": "th-question",
+      "knowledge": [6],
+      "pages": [40]
+    },
+    {
+      "q": "cache ของ Quality Score ออกแบบไว้กี่ชั้น",
+      "kind": "th-question",
+      "knowledge": [5],
+      "pages": [30]
+    },
+
+    {
+      "q": "how do block ids and revisions work",
+      "kind": "en-question",
+      "knowledge": [10],
+      "pages": [85]
+    },
+    {
+      "q": "how do I embed raw HTML in a page",
+      "kind": "en-question",
+      "knowledge": [10, 9, 4],
+      "pages": [84, 72, 43]
+    },
+    {
+      "q": "what kind of charts can I put in a document",
+      "kind": "en-question",
+      "knowledge": [10, 9, 4],
+      "pages": [80, 68, 23]
+    },
+    {
+      "q": "how does the revision system work",
+      "kind": "en-question",
+      "knowledge": [10, 142],
+      "pages": [85]
+    },
+    {
+      "q": "which machine runs the WireGuard server",
+      "kind": "en-question",
+      "knowledge": [18, 7],
+      "pages": [131, 49]
+    },
+
+    {
+      "q": "PMI heatmap",
+      "kind": "keyword",
+      "knowledge": [6, 90],
+      "pages": [38, 512]
+    },
+    { "q": "TSIC", "kind": "keyword", "knowledge": [6], "pages": [40] },
+    { "q": "PROD-Replay", "kind": "keyword", "knowledge": [178, 47] },
+    {
+      "q": "regression test",
+      "kind": "keyword",
+      "knowledge": [20],
+      "pages": [149]
+    },
+    { "q": "WireGuard", "kind": "keyword", "knowledge": [18, 7] },
+    {
+      "q": "quality score config",
+      "kind": "keyword",
+      "knowledge": [5],
+      "pages": [29]
+    },
+    { "q": "invoice receipt quotation", "kind": "keyword", "knowledge": [14] },
+    { "q": "oie-qa2", "kind": "keyword", "knowledge": [7], "pages": [413] },
+    {
+      "q": "mermaid diagram",
+      "kind": "keyword",
+      "knowledge": [10, 9, 4]
+    },
+
+    {
+      "q": "reverse tunnel ฉุกเฉินใช้เครื่องไหนเป็นทางผ่าน",
+      "kind": "body",
+      "knowledge": [153],
+      "pages": [806],
+      "note": "คำตอบคือ s1.qeep.cc / Kssh-R — อยู่ในตารางกลางหน้า ไม่ได้อยู่ในชื่อหน้า"
+    },
+    {
+      "q": "ssh notibox ใช้พอร์ตอะไร",
+      "kind": "body",
+      "knowledge": [153],
+      "pages": [806],
+      "note": "พอร์ต 11289 อยู่ในเนื้อหาเท่านั้น"
+    },
+    {
+      "q": "น้ำหนัก consistency quality stability อย่างละเท่าไหร่",
+      "kind": "body",
+      "knowledge": [5],
+      "pages": [28],
+      "note": "40/35/25 อยู่ใน stats block"
+    },
+    {
+      "q": "consFullCreditMonths ค่า default เท่าไหร่",
+      "kind": "body",
+      "knowledge": [5],
+      "pages": [28, 29]
+    },
+    {
+      "q": "ทับค่า curated แล้วต้องมี flag ไหม",
+      "kind": "body",
+      "knowledge": [87],
+      "pages": [499],
+      "note": "\"ทุกการทับค่า curated ต้องมี flag ห้ามเงียบ\" อยู่ในบทสรุปย่อหน้าแรก"
+    },
+    {
+      "q": "reproduce บั๊กไม่ได้ ต้องทำยังไงต่อ",
+      "kind": "body",
+      "knowledge": [20],
+      "pages": [142],
+      "note": "อยู่ใน flowchart: log ไว้ + หา pattern + flag intermittent"
+    },
+    {
+      "q": "เทสไม่ผ่านให้ reopen หรือเปิด ticket ใหม่",
+      "kind": "body",
+      "knowledge": [20],
+      "pages": [142]
+    },
+    {
+      "q": "request-token เรียกที่ path ไหน",
+      "kind": "body",
+      "knowledge": [145],
+      "pages": [763],
+      "note": "POST /v1/authentication/request-token — อยู่ในส่วน PATH GOTCHA"
+    },
+    {
+      "q": "ดึงข้อมูล ร.ง.8 รายเดือนจากระบบไหน",
+      "kind": "body",
+      "knowledge": [145],
+      "pages": [763]
+    },
+    {
+      "q": "เช็คว่า mock ขึ้นแล้วหรือยังด้วยคำสั่งอะไร",
+      "kind": "body",
+      "knowledge": [178],
+      "pages": [929],
+      "note": "docker ps | grep replay + curl localhost:3100/health"
+    },
+
+    {
+      "q": "ฝัง HTML ดิบลงในหน้าเอกสาร",
+      "kind": "cross-lang",
+      "knowledge": [10, 9, 4],
+      "pages": [84, 72, 43],
+      "note": "ถามไทย แต่คู่มืออังกฤษก็ตอบได้ — ควรเจออย่างน้อยหนึ่งฉบับ"
+    },
+    {
+      "q": "interactive checkbox ในหน้า wiki",
+      "kind": "cross-lang",
+      "knowledge": [10, 9, 4],
+      "pages": [82, 70, 52]
+    },
+    {
+      "q": "which server is the customer QA box",
+      "kind": "cross-lang",
+      "knowledge": [7, 18],
+      "pages": [51, 413, 133],
+      "note": "ถามอังกฤษ เอกสารเป็นไทย"
+    },
+    {
+      "q": "bug workflow ตั้งแต่เจอจนปิด ticket",
+      "kind": "cross-lang",
+      "knowledge": [20]
+    },
+
+    {
+      "q": "wireguad",
+      "kind": "typo",
+      "knowledge": [18, 7],
+      "note": "สะกดตก r — lexical ล้วนคาดว่าพลาด บันทึกไว้เป็นเพดานของแนวทางนี้"
+    },
+    {
+      "q": "quality scrore",
+      "kind": "typo",
+      "knowledge": [5]
+    },
+
+    { "q": "&5", "kind": "id", "knowledge": [5] },
+    { "q": "#806", "kind": "id", "knowledge": [153], "pages": [806] }
+  ]
+}
