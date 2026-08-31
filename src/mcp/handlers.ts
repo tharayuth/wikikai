@@ -1653,7 +1653,7 @@ export function buildToolHandlers(
       // Snapshot the title BEFORE we drop the row so the audit row stays
       // meaningful after the knowledge is gone.
       const before = knowledge.get(parsed.id);
-      pages.removeKnowledgeFiles(parsed.id);
+      pages.purgeKnowledge(parsed.id);
       knowledge.remove(parsed.id);
       const removed_images = cleanupOrphanImages(pages, images);
       recordActivity({

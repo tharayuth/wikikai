@@ -3329,7 +3329,23 @@ export class PageStore {
     };
   }
 
-  removeKnowledgeFiles(knowledgeId: number): void {
+  /** Drop everything a knowledge owns that `ON DELETE CASCADE` cannot reach:
+   *  its markdown files on disk and its rows in the FTS index. Call this
+   *  before `KnowledgeStore.remove()`. */
+  purgeKnowledge(knowledgeId: number): void {
+    // `pages_fts` is a virtual table, so it can never be a foreign-key
+    // target — dropping the knowledge row cascades `pages` but would leave
+    // its index rows orphaned. They stay invisible (the search JOIN drops
+    // them) while still counting toward the collection statistics bm25
+    // ranks with, so every later score is computed against a corpus partly
+    // made of deleted pages. Must run BEFORE the knowledge row goes, while
+    // the page rows are still here to name.
+    this.db
+      .prepare(
+        `DELETE FROM pages_fts
+          WHERE rowid IN (SELECT id FROM pages WHERE knowledge_id = ?)`,
+      )
+      .run(knowledgeId);
     const dir = path.resolve(this.itemsDir, String(knowledgeId));
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   }

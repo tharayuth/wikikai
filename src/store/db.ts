@@ -58,7 +58,40 @@ export function openDb(dbPath: string): Db {
   db.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_k_share ON knowledge(share_token)`,
   );
+  const ghosts = purgeOrphanFtsRows(db);
+  if (ghosts > 0) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[wikikai] purged ${ghosts} orphan pages_fts row(s) left by deleted knowledge`,
+    );
+  }
   return db;
+}
+
+/**
+ * Delete `pages_fts` rows whose page no longer exists, and report how many
+ * went. Deleting a knowledge cascades its `pages` rows, but `pages_fts` is a
+ * virtual table and cannot be a foreign-key target, so before the fix in
+ * `PageStore.purgeKnowledge` those index rows were stranded. They never
+ * surface as results — the search JOIN drops them — but they do count toward
+ * the collection statistics bm25 uses, which quietly skews every ranking.
+ *
+ * Runs on every open. The guard is a pair of counts so the (scanning) delete
+ * only runs on a database that actually drifted; a healthy one pays two cheap
+ * counts and nothing else.
+ */
+export function purgeOrphanFtsRows(db: Db): number {
+  const { fts, pages } = db
+    .prepare(
+      `SELECT (SELECT count(*) FROM pages_fts) AS fts,
+              (SELECT count(*) FROM pages)     AS pages`,
+    )
+    .get() as { fts: number; pages: number };
+  if (fts === pages) return 0;
+  const info = db
+    .prepare(`DELETE FROM pages_fts WHERE rowid NOT IN (SELECT id FROM pages)`)
+    .run();
+  return Number(info.changes ?? 0);
 }
 
 /**
