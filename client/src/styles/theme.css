@@ -3043,6 +3043,17 @@ button.ki-id-badge::after {
   font-family: var(--mono);
   font-size: 10.5px;
 }
+/* Flags a hit that matched only part of the query — worth a glance before a
+   click. Hover shows which terms it did match. */
+.sr-meta .sr-partial {
+  background: var(--amber-light);
+  color: var(--amber);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: help;
+}
 
 /* GFM task lists — `- [ ]` / `- [x]` anywhere in markdown.
    Click a checkbox → PageStore.toggleTaskAtIndex flips the source. */

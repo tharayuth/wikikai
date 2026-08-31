@@ -408,7 +408,7 @@ export const SearchSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "Substring to find. Minimum 3 codepoints (trigram FTS index). Works for Thai/CJK because the index is character-trigram based, not whitespace-tokenized.",
+      "What you are looking for. Ask in whole sentences — terms are weighted by rarity, so the words that identify your subject decide the ranking and filler words cost nothing. Words shorter than three characters cannot be indexed and are ignored. Thai and CJK work without word segmentation.",
     ),
   project: z
     .string()
@@ -1049,7 +1049,14 @@ export interface ToolHandlers {
       snippet: string;
       url: string;
       score: number;
+      /** Query terms this page matched, rarest first. */
+      matched_terms: string[];
+      /** Share of the query's terms this page matched, 0–1. A low ratio marks
+       *  a hit worth skipping without opening the page. */
+      match_ratio: number;
     }[];
+    /** Total pages matching the query, which may exceed `hits.length` when
+     *  `limit` cut the list short. */
     total: number;
   }>;
 
@@ -2122,24 +2129,39 @@ export function buildToolHandlers(
 
     async search(input) {
       const parsed = SearchSchema.parse(input);
-      const hits = pages.search(parsed.query, {
-        project: parsed.project,
-        projects: parsed.projects,
-        knowledge_id: parsed.knowledge_id,
-        limit: parsed.limit,
-        includeArchived: parsed.include_archived,
-      });
+      // Push the caller's visible projects into the query rather than filtering
+      // the results afterwards. Filtering after the fact would make `total`
+      // count documents the caller may not see, and would silently shrink an
+      // already-limited page of results.
       const visible = visibleProjectsForCaller();
-      const filtered =
-        visible === null
-          ? hits
-          : hits.filter((h) => h.project != null && visible.has(h.project));
+      const requested = [parsed.project, ...(parsed.projects ?? [])].filter(
+        (p): p is string => !!p,
+      );
+      let filters: { project?: string; projects?: string[] };
+      if (visible === null) {
+        filters = { project: parsed.project, projects: parsed.projects };
+      } else {
+        const allowed = requested.length
+          ? requested.filter((p) => visible.has(p))
+          : [...visible];
+        // No overlap between what was asked for and what is visible — including
+        // the case of a caller with no grants at all, where an absent filter
+        // would mean "everything".
+        if (allowed.length === 0) return { hits: [], total: 0 };
+        filters = { projects: allowed };
+      }
+      const scope = {
+        ...filters,
+        knowledge_id: parsed.knowledge_id,
+        includeArchived: parsed.include_archived,
+      };
+      const hits = pages.search(parsed.query, { ...scope, limit: parsed.limit });
       return {
-        hits: filtered.map((h) => ({
+        hits: hits.map((h) => ({
           ...h,
           url: urlFor(ctx, h.knowledge_id, h.page_id, h.line),
         })),
-        total: filtered.length,
+        total: pages.countMatches(parsed.query, scope),
       };
     },
 

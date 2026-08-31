@@ -78,6 +78,10 @@ export interface SearchHit {
   snippet: string;
   score: number;
   url: string;
+  /** Query terms this page matched, rarest first. */
+  matched_terms: string[];
+  /** Share of the query's terms this page matched, 0–1. */
+  match_ratio: number;
   /** Set when the hit came from an `@N` block-id lookup. */
   block_id?: number;
 }

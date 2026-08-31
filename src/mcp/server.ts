@@ -258,7 +258,12 @@ const toggleTaskShape = {
 };
 
 const searchShape = {
-  query: z.string().min(1).describe("Full-text search (SQLite FTS5). Searches page content, title, keywords."),
+  query: z
+    .string()
+    .min(1)
+    .describe(
+      "What you are looking for. A natural-language question works better than keywords — every term is weighted by how rare it is, so the words that identify your subject carry the ranking and filler words cost nothing. Minimum three characters per word.",
+    ),
   project: z.string().optional(),
   knowledge_id: z.number().int().positive().optional(),
   limit: z.number().int().min(1).max(200).optional(),
@@ -916,12 +921,20 @@ export function createMcpServer(
     {
       title: "Full-text search across pages",
       description:
-        "FTS5 trigram-tokenized search across page content, title, and keywords. " +
+        "Ranked search across page content, title, and keywords. " +
+        "Ask in whole sentences — a question scores better than a bag of keywords, " +
+        "because rare terms are weighted far above common ones and pages matching " +
+        "more of the query rank higher. Works the same in Thai, English, or a mix, " +
+        "including asking in one language about a page written in the other. " +
         "Project filter is optional — omit `project` to search every project. " +
-        "Each hit returns the parent knowledge (&knowledge_id + title + project) and " +
-        "the page (#page_id + position + title), the matched line, and the nearest " +
-        "preceding heading containing it (level + text + anchor id) so you can deep-link " +
-        "or call read_page with a tight line_start/line_end. Works for Thai/CJK too.",
+        "Each hit returns the parent knowledge (&knowledge_id + title + project), " +
+        "the page (#page_id + position + title), the matched line, the nearest " +
+        "preceding heading (level + text + anchor id), and a snippet of the matched " +
+        "line — usually enough to judge a hit WITHOUT calling read_page. " +
+        "`matched_terms` and `match_ratio` say how much of your query each hit " +
+        "actually contains: a ratio well below 1 marks a weak hit worth skipping. " +
+        "`total` is the real number of matching pages, which may exceed the number " +
+        "returned when `limit` cuts the list short.",
       inputSchema: searchShape,
     },
     async (input) => jsonContent(await handlers.search(input)),
