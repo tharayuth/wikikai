@@ -81,116 +81,90 @@ npm run typecheck  # tsc -p . && tsc -p client/tsconfig.json (no-emit)
 npm test           # vitest
 ```
 
-When editing the UI, **open `:5173`** for HMR — on geforce that is
-`http://10.8.0.105:5173` over WireGuard, since the dev server is not on your laptop.
-`:3939` serves the most recent `client/dist/` build — stale unless you re-run
-`npm run build:client`.
+When editing the UI, **open the Vite port (`:5173`)** for HMR. The server port
+(`:3939`) serves the most recent `client/dist/` build — stale unless you re-run
+`npm run build:client`. On a remote dev box, reach both over the VPN rather than
+exposing them.
 
-## Where this runs — dev on geforce, production on ohh
+## Where this runs — a dev box and a production VPS
 
-Since **2026-09-10** there are exactly two live copies, and they have
-different jobs:
-
-| | Development | Production |
-|---|---|---|
-| Host | `geforce` — Debian 12 on WSL2, `ssh geforce-ssh` | `ohh` VPS — `ssh root@10.8.0.1` |
-| Repo | `/mnt/data/Dev/wikikai` | `/root/Dev/wikikai` |
-| Data | `/mnt/data/Dev/wikikai-data` | `/var/lib/wikikai` |
-| Process | pm2 `wikikai-dev` | pm2 `wikikai-prod` |
-| Reachable at | `http://10.8.0.105:3939` (WireGuard) | https://wikikai.cupcode.cc |
-| Node | v22 (system) | v22 (system) |
-
-The MacBook (M4) used to be both the dev box *and* the production origin —
-nginx on ohh reverse-proxied to it over Netbird, so the public site went down
-whenever the laptop slept. It is neither now: `pm2` on the M4 has no `wikikai`
-entry, and `/Users/kai/Dev/wikikal/data` is a dated backup, not a live copy.
-Don't develop there; it will drift and nothing will pick the work up.
+There are exactly two live copies and they have different jobs: a **development**
+host where all code is written, and a **production** VPS that serves
+the public site under nginx. Concrete hostnames, addresses, paths and ssh
+targets live in `CLAUDE.local.md`, which is untracked — this repo is public.
 
 ### The loop
 
-**All code is written on geforce.** Nothing is edited directly on ohh —
-production only ever receives what came through `git`.
+**All code is written on the dev box.** Nothing is edited directly on
+production — it only ever receives what came through `git`.
 
 ```bash
-# 1. work on geforce
-ssh geforce-ssh
-cd /mnt/data/Dev/wikikai
-
-# 2. gates must pass before the commit
+# 1. work on the dev box, then let the gates pass
 npm run typecheck && npm test
 
-# 3. see it: HMR at http://10.8.0.105:5173, or build and restart pm2
+# 2. see it: Vite HMR, or build and restart the dev pm2 process
 npm run dev
 #   …or…
-npm run build && pm2 restart wikikai-dev
+npm run build && pm2 restart <dev-process>
 
-# 4. commit + push (Conventional Commits — see "Commit style")
+# 3. commit + push (Conventional Commits — see "Commit style")
 git add -A && git commit -m "feat: …" && git push
 
-# 5. deploy to production
-ssh root@10.8.0.1 'cd /root/Dev/wikikai && git pull && npm ci && npm run build && pm2 restart wikikai-prod'
+# 4. deploy: on the production host, pull + build + restart pm2
+#    git pull && npm ci && npm run build && pm2 restart <prod-process>
 
-# 6. verify production actually came back
-curl -s -o /dev/null -w '%{http_code}\n' https://wikikai.cupcode.cc/login   # expect 200
+# 5. verify production actually came back (expect 200)
+curl -s -o /dev/null -w '%{http_code}\n' https://<site>/login
 ```
 
-`npm ci` on step 5 is only needed when `package-lock.json` moved; a docs- or
+`npm ci` on step 4 is only needed when `package-lock.json` moved; a docs- or
 source-only change can skip straight to `npm run build`. `better-sqlite3`
 resolves a prebuilt binary for node v22 on both hosts, so no compiler runs.
 
 A change is **not** deployed because it was pushed. GitHub is a waypoint, not
-the server — production stays on the old build until step 5 runs.
+the server — production stays on the old build until the deploy step runs.
 
 ### Data flows one way: prod → dev
 
-```bash
-ssh geforce-ssh 'cd /mnt/data/Dev/wikikai && ./sync-from-prod.sh'
-```
+A sync script pulls production data down to dev. It takes a `sqlite3 .backup`
+snapshot (consistent — production keeps serving throughout), then pulls
+`items/`, `images/` and `files/`. It stops the dev process first, because
+overwriting a SQLite file while a process holds it open corrupts it.
 
-It takes a `sqlite3 .backup` snapshot (consistent — production keeps serving
-throughout), then pulls `items/`, `images/` and `files/`. It stops
-`wikikai-dev` first, because overwriting a SQLite file while a process holds
-it open corrupts it.
-
-`sync-from-prod.sh` is **untracked**, like the ops scripts that preceded it: it
-hardcodes one pair of hosts and has no meaning in a fresh clone. It exists only
-at `geforce:/mnt/data/Dev/wikikai/sync-from-prod.sh`. If that box is ever
-rebuilt the script goes with it — the constraints it encodes are the two bullets
-below, and they are the part worth keeping.
-
-Two consequences worth internalising:
+The ops scripts (`sync-from-prod.sh`, `backup-prod.sh`) are **gitignored**: they
+hardcode one pair of hosts and have no meaning in a fresh clone. The constraints
+they encode are the two bullets below, and those are the part worth keeping.
 
 - **Nothing syncs back into production.** Knowledge authored on dev is *lost*
   on the next sync. Dev is a scratch copy to break; real content is written
   through production.
 - **The integrity check must run through the app's SQLite**, never the system
-  `sqlite3` CLI. ohh ships CLI 3.45.1, which cannot validate an FTS5
-  `trigram` index written by better-sqlite3's 3.49.2 and reports
-  `malformed inverted index for FTS5 table main.pages_fts` on a perfectly
-  healthy database. Checking with the wrong version teaches you to wave off
-  the alarm — which is precisely how a real corruption would slip past.
+  `sqlite3` CLI. An older CLI (3.45.1) cannot validate an FTS5 `trigram` index
+  written by better-sqlite3's 3.49.2 and reports `malformed inverted index for
+  FTS5 table main.pages_fts` on a perfectly healthy database. Checking with the
+  wrong version teaches you to wave off the alarm — which is precisely how a
+  real corruption would slip past.
 
 ### Production facts that constrain a change
 
-- **The server binds `127.0.0.1:3939` on ohh and nothing else.** That host has
-  a public IP; binding `0.0.0.0` would publish WikiKai straight to the
-  internet, bypassing Cloudflare, TLS termination and nginx's real-IP
-  handling. nginx runs on the same box, so loopback is all it needs.
+- **The server binds loopback only** in production and nothing else. That host
+  has a public IP; binding `0.0.0.0` would publish WikiKai straight to the
+  internet, bypassing Cloudflare, TLS termination and nginx's real-IP handling.
+  nginx runs on the same box, so loopback is all it needs.
 - **`DATA_DIR` points outside the repo** on both hosts, so a code
   `rsync --delete` can never wipe the data.
-- **nginx has three `proxy_pass` lines** in
-  `/etc/nginx/sites-available/wikikai.cupcode.cc` — `/api/events` (SSE),
-  `/mcp` and `/`. A new endpoint that needs streaming or a long timeout needs
-  its own block; the default one buffers.
-- Full runbook, including emergency rollback, lives on the server at
-  `/root/Dev/wikikai/PRODUCTION.md`.
+- **nginx has three `proxy_pass` blocks** — `/api/events` (SSE), `/mcp` and
+  `/`. A new endpoint that needs streaming or a long timeout needs its own
+  block; the default one buffers.
+- Full runbook, including emergency rollback, lives on the production host as
+  `PRODUCTION.md` (path in `CLAUDE.local.md`).
 
 ## Native-module gotchas
 
 - `better-sqlite3` and `@rollup/rollup-darwin-arm64` are compiled native modules. After switching Node versions (or moving the repo across machines / renaming the directory), you may see `NODE_MODULE_VERSION` mismatch or `code signature ... different Team IDs` errors.
 - Fix with `npm rebuild better-sqlite3` (ABI) or `rm -rf node_modules && npm install` (signature).
-- The bullets above are mostly a **macOS** concern and date from when the M4 was the dev
-  box. On geforce and ohh (Linux, system node v22) `better-sqlite3` resolves a prebuilt
+- The bullets above are mostly a **macOS** concern and date from when a Mac was the dev
+  box. On the current Linux hosts (system node v22) `better-sqlite3` resolves a prebuilt
   binary and none of this comes up.
 - On macOS specifically: the hardened-runtime `node` bundled with some IDEs (e.g.
   `/Applications/Codex.app/Contents/Resources/node`) rejects adhoc-signed `.node` files.

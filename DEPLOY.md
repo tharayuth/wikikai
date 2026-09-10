@@ -110,7 +110,7 @@ After this, update the client's `mcpServers.wikikai.url` in every `~/.claude/set
 
 ```bash
 # Stop both sides first to avoid concurrent writes.
-rsync -av --delete /Users/kai/Dev/aiportal/data/ \
+rsync -av --delete /path/to/local/data/ \
   wikikai@your-server:/var/lib/wikikai/
 
 # Verify on the server

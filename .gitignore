@@ -32,3 +32,11 @@ AGENTS.md
 
 # Local DB backups (do not commit)
 backups/
+
+# Host-bound ops scripts — hardcode one pair of machines, meaningless in a
+# fresh clone, and describe production layout. Keep them off the public repo.
+sync-from-prod.sh
+backup-prod.sh
+
+# Machine-specific context for Claude Code (hosts, paths, ssh targets)
+CLAUDE.local.md

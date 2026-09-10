@@ -1672,7 +1672,7 @@ Expected: PASS.
 
 ```bash
 npx tsc -p .
-node /Users/kai/Dev/aiportal/dist/index.js &
+node /path/to/wikikai/dist/index.js &
 # open http://localhost:3939, log in as admin, click avatar → Manage users
 # → Edit Alice → see new "Project access" section → toggle radios → Save.
 ```
