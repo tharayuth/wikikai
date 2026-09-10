@@ -194,7 +194,7 @@ To attach a downloadable file (PDF, CSV, XLSX, ZIP, …) to a page:
    ```
    ```
 
-   Several files → a JSON array of those objects in one fence. Renders a card: name · size · type · description · **View** (new tab, for PDF / images / text / CSV / JSON / audio / video only) · **Download**. The download is saved under `name` (the original filename); the server keeps the bytes under an opaque `/file/<sha256>.<ext>`.
+   Several files → a JSON array of those objects in one fence. Renders a card: name · size · type · description · **View** (in-app dialog: images / PDF / audio / video natively, any text file as plain text — sniffed by content, so `.http` / `.sql` / no extension work; binaries point to Download) · **Download**. The download is saved under `name` (the original filename); the server keeps the bytes under an opaque `/file/<sha256>.<ext>`.
 3. Lifecycle is automatic: when no page references the `src` any more (after edit_page / edit_lines / edit_section / replace_text / delete_page / delete_knowledge, or a human Edit raw → Save), the bytes are deleted. Don't try to "clean up" files yourself.
 
 Max 50MB per file.

@@ -47,7 +47,7 @@ Working with an AI day-to-day, every useful answer ends up buried in a chat sess
 | ` ```stats ` | Inline KPI card row with semantic colors |
 | ` ```steps ` | Numbered step cards (markdown inline allowed inside `body`) |
 | ` ```images ` | Thumbnail gallery → click-to-lightbox + per-image size |
-| ` ```file ` | Attachment card (name · size · type · description · View · Download). View opens PDF / image / text / audio / video inline in a new tab; other types are download-only. Bytes live under an opaque hash; the download restores the original filename; unreferenced files are deleted automatically |
+| ` ```file ` | Attachment card (name · size · type · description · View · Download). View opens a large in-app dialog: images / PDF / audio / video natively, and any text file (sniffed by content, so `.http`, `.sql`, no-extension all work) as plain text; binaries point to Download. Bytes live under an opaque hash; the download restores the original filename; unreferenced files are deleted automatically |
 | Plain `- [ ]` lists + cells | **Interactive checkboxes** — write a GFM task `- [ ] item` in any list, or drop `[ ]` / `[x]` directly into a markdown table cell; clicking writes back to source (version-bumped + revision-snapshotted) |
 | Markdown tables | Get an `@N` id automatically; the AI can `get_table_row({ block_id, row_index })` or `find_table_rows({ block_id, filter })` to read one row without re-fetching the page |
 | ` ```html-embed ` | Raw HTML for layouts markdown can't express — gradient cards, SVG, `<details>`, custom CSS. Embedded `<input type="checkbox">` is also clickable and write-backed |

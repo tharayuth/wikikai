@@ -30,14 +30,17 @@ describe("renderMarkdown", () => {
     expect(html).toContain(`href="/file/${hash}.pdf?view=1" target="_blank" rel="noopener">View`);
   });
 
-  it("offers View only for inline-safe types", async () => {
+  it("carries the card's display data as attributes for the in-app viewer", async () => {
     const hash = "cd".repeat(32);
-    const zip = await renderMarkdown("```file\n" + JSON.stringify({ src: `/file/${hash}.zip` }) + "\n```\n");
-    expect(zip).not.toContain("file-card-view");
-    const svg = await renderMarkdown("```file\n" + JSON.stringify({ src: `/file/${hash}.svg` }) + "\n```\n");
-    expect(svg).not.toContain("file-card-view");
-    const csv = await renderMarkdown("```file\n" + JSON.stringify({ src: `/file/${hash}.csv` }) + "\n```\n");
-    expect(csv).toContain("file-card-view");
+    const html = await renderMarkdown(
+      "```file\n" + JSON.stringify({ src: `/file/${hash}.http`, name: 'req "x".http', size_bytes: 2048 }) + "\n```\n",
+    );
+    expect(html).toContain(`data-src="/file/${hash}.http"`);
+    expect(html).toContain('data-name="req &quot;x&quot;.http"');
+    expect(html).toContain('data-size="2.0 KB"');
+    expect(html).toContain('data-type="HTTP"');
+    // View is offered on every card; the server decides what can be shown.
+    expect(html).toContain("file-card-view");
   });
 
   it("rejects a file entry whose src is not a store path", async () => {

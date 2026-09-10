@@ -26,7 +26,13 @@ import {
 } from "./auth.js";
 import { ForbiddenError, assertProjectAccess } from "../lib/permissions.js";
 import type { ShareUserStore } from "../store/shareUsers.js";
-import { inlineViewMime, parseFileSrc, type FileStore } from "../store/files.js";
+import {
+  TEXT_PREVIEW_MAX_BYTES,
+  inlineViewMime,
+  isProbablyText,
+  parseFileSrc,
+  type FileStore,
+} from "../store/files.js";
 import {
   ShareLoginLimiter,
   clearShareCookie,
@@ -150,9 +156,10 @@ export function buildApp(opts: BuildAppOptions): Express {
   // immutable), so this is open like /img/. Served as an attachment under
   // the ORIGINAL filename with a generic binary type by default: the bytes
   // are arbitrary user uploads and must never execute as a page in our
-  // origin. `?view=1` shows it inline instead, but only for the safelist in
-  // `inlineViewMime` (PDF, images, plain text, audio/video) and always under
-  // a sandboxing CSP — anything else silently falls back to the download.
+  // origin. `?view=1` shows it inline instead: PDF / images / audio / video
+  // by extension, and ANY file whose bytes are text (sniffed, ≤ 5MB) as
+  // text/plain under a sandboxing CSP — so `.http` or `.sql` previews work.
+  // Everything else silently falls back to the download.
   app.get("/file/:filename", (req, res, next) => {
     try {
       const parsed = parseFileSrc(`/file/${req.params.filename}`);
@@ -171,7 +178,16 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const ascii = meta.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
-      const inlineType = req.query.view === "1" ? inlineViewMime(meta.ext) : null;
+      const wantInline = req.query.view === "1";
+      let inlineType = wantInline ? inlineViewMime(meta.ext) : null;
+      let textBody: Buffer | null = null;
+      if (wantInline && !inlineType && meta.size_bytes <= TEXT_PREVIEW_MAX_BYTES) {
+        const bytes = fs.readFileSync(fp);
+        if (isProbablyText(bytes)) {
+          inlineType = "text/plain; charset=utf-8";
+          textBody = bytes;
+        }
+      }
       const disposition = inlineType ? "inline" : "attachment";
       res.setHeader(
         "Content-Disposition",
@@ -182,6 +198,10 @@ export function buildApp(opts: BuildAppOptions): Express {
       res.setHeader("Content-Length", String(meta.size_bytes));
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.set("Cache-Control", "private, max-age=31536000, immutable");
+      if (textBody) {
+        res.end(textBody);
+        return;
+      }
       fs.createReadStream(fp).pipe(res);
     } catch (e) {
       next(e);

@@ -1,5 +1,4 @@
 import MarkdownIt from "markdown-it";
-import { inlineViewMime } from "../store/files.js";
 import type Token from "markdown-it/lib/token.mjs";
 import { parseImageSize } from "../lib/imageSize.js";
 import { parseAnnotation } from "../lib/blockAnnotation.js";
@@ -409,8 +408,12 @@ function renderFileBlock(
           ? `<div class="file-card-desc">${escapeHtml(f.description)}</div>`
           : "";
       const meta = [type, size].filter(Boolean).map((t) => `<span>${t}</span>`).join("");
+      const attrs =
+        ` data-src="${src}" data-name="${escapeAttr(typeof f.name === "string" && f.name ? f.name : f.src.split("/").pop() ?? "file")}"` +
+        (size ? ` data-size="${escapeAttr(size)}"` : "") +
+        ` data-type="${type}"`;
       return (
-        `<div class="file-card">` +
+        `<div class="file-card"${attrs}>` +
         `<div class="file-card-icon" aria-hidden="true">${type}</div>` +
         `<div class="file-card-body">` +
         `<div class="file-card-name">${name}</div>` +
@@ -418,9 +421,7 @@ function renderFileBlock(
         desc +
         `</div>` +
         `<div class="file-card-actions">` +
-        (inlineViewMime(f.src.split(".").pop() ?? "")
-          ? `<a class="file-card-view" href="${src}?view=1" target="_blank" rel="noopener">View</a>`
-          : "") +
+        `<a class="file-card-view" href="${src}?view=1" target="_blank" rel="noopener">View</a>` +
         `<a class="file-card-download" href="${src}" download>Download</a>` +
         `</div>` +
         `</div>`

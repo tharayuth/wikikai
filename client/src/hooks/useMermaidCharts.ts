@@ -3,6 +3,7 @@ import mermaid from "mermaid";
 import Chart from "chart.js/auto";
 import { openBadgeMenu } from "../lib/badgeMenu.js";
 import { openImageLightbox } from "../lib/imageLightbox.js";
+import { attachFileViewer } from "../lib/fileViewer.js";
 
 /**
  * Open the shared badge menu for an `@N` block badge. The "Edit" path
@@ -261,6 +262,11 @@ export function useMermaidCharts(
       imageHandlers.push({ el: fig, handler });
     }
 
+    // ─── ```file cards → in-app viewer on "View" ───
+    // Delegated on the root; `/file/` is public like `/img/`, so the share
+    // view gets the same dialog.
+    const detachFileViewer = attachFileViewer(root);
+
     // ─── @N block badges → menu (Copy / Edit code) ───
     // Skipped in read-only mode (public share view): the menu's Copy-content
     // and Edit/Delete actions hit auth-gated /api/blocks endpoints that an
@@ -313,6 +319,7 @@ export function useMermaidCharts(
         el.removeEventListener("click", handler);
       }
       closeLightbox?.();
+      detachFileViewer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

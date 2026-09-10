@@ -1449,13 +1449,34 @@ describe("HTTP routes", () => {
       r = await req(app).get(`${csv.src}?view=1`);
       expect(r.headers["content-type"]).toMatch(/^text\/plain/);
 
-      const html = files.add(Buffer.from("<script>alert(1)</script>"), "evil.html");
-      r = await req(app).get(`${html.src}?view=1`);
+      // Any text file previews as text, whatever its extension.
+      const http = files.add(Buffer.from("GET /api/x HTTP/1.1\nAccept: */*\n"), "req.http");
+      r = await req(app).get(`${http.src}?view=1`);
+      expect(r.headers["content-type"]).toMatch(/^text\/plain/);
+      expect(r.headers["content-disposition"]).toMatch(/^inline;/);
+      expect(r.text).toContain("GET /api/x");
+      const noext = files.add(Buffer.from("ทดสอบ utf-8"), "NOTES");
+      r = await req(app).get(`${noext.src}?view=1`);
+      expect(r.headers["content-type"]).toMatch(/^text\/plain/);
+
+      // Binary stays a download.
+      const zip = files.add(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0xff]), "a.zip");
+      r = await req(app).get(`${zip.src}?view=1`);
       expect(r.headers["content-type"]).toMatch(/octet-stream/);
       expect(r.headers["content-disposition"]).toMatch(/^attachment;/);
+
+      // HTML / SVG are text, so they preview — but only ever as text/plain
+      // under nosniff + a sandbox CSP, never as a document in our origin.
+      const html = files.add(Buffer.from("<script>alert(1)</script>"), "evil.html");
+      r = await req(app).get(`${html.src}?view=1`);
+      expect(r.headers["content-type"]).toMatch(/^text\/plain/);
+      expect(r.headers["content-type"]).not.toMatch(/html/);
+      expect(r.headers["x-content-type-options"]).toBe("nosniff");
+      expect(r.headers["content-security-policy"]).toContain("sandbox");
       const svg = files.add(Buffer.from("<svg onload=alert(1)/>"), "x.svg");
       r = await req(app).get(`${svg.src}?view=1`);
-      expect(r.headers["content-type"]).toMatch(/octet-stream/);
+      expect(r.headers["content-type"]).toMatch(/^text\/plain/);
+      expect(r.headers["content-type"]).not.toMatch(/svg/);
     });
 
     it("404s for unknown hashes, wrong extensions, and traversal", async () => {

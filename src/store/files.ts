@@ -82,6 +82,24 @@ const VIEWABLE: Record<string, string> = {
   webm: "video/webm",
 };
 
+/** Largest attachment the text preview will read into memory. */
+export const TEXT_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Content sniff for "can this be shown as plain text": valid UTF-8 with
+ *  no NUL bytes. Extension-agnostic on purpose — a `.http`, `.sql`, `.env`
+ *  or extension-less file is text if its bytes are, and text/plain can
+ *  never execute, so the check is about usefulness, not safety. */
+export function isProbablyText(buf: Buffer): boolean {
+  if (buf.length === 0) return false;
+  if (buf.includes(0)) return false;
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The Content-Type to view an attachment inline, or null when the
  *  extension is not on the inline safelist. Keyed by extension so the
  *  renderer (no DB) and the route (DB row) reach the same answer. */

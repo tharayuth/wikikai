@@ -4787,6 +4787,155 @@ button.ki-id-badge::after {
   }
 }
 
+/* ─── File viewer dialog (View button on a ```file card) ─── */
+.file-viewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+  animation: lb-fade-in .15s ease-out;
+}
+.file-viewer-dialog {
+  width: min(1400px, 96vw);
+  height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.file-viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.file-viewer-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.file-viewer-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-viewer-meta {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.file-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.file-viewer-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.file-viewer-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+}
+.file-viewer-btn.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.file-viewer-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.file-viewer-close:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.file-viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: var(--bg);
+  overflow: auto;
+}
+.file-viewer-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+.file-viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  margin: auto;
+  display: block;
+}
+.file-viewer-media {
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+}
+.file-viewer-text {
+  width: 100%;
+  margin: 0;
+  padding: 16px 20px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow: auto;
+  background: var(--surface);
+  color: var(--text);
+  tab-size: 4;
+}
+.file-viewer-msg {
+  margin: auto;
+  padding: 24px;
+  color: var(--text-3);
+  font-size: 14px;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .file-viewer {
+    padding: 0;
+  }
+  .file-viewer-dialog {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+}
+
 /* ─── Share dialog ─── */
 .share-modal {
   max-width: 520px;
