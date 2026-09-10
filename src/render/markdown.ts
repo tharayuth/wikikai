@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { inlineViewMime } from "../store/files.js";
 import type Token from "markdown-it/lib/token.mjs";
 import { parseImageSize } from "../lib/imageSize.js";
 import { parseAnnotation } from "../lib/blockAnnotation.js";
@@ -416,7 +417,12 @@ function renderFileBlock(
         `<div class="file-card-meta">${meta}</div>` +
         desc +
         `</div>` +
+        `<div class="file-card-actions">` +
+        (inlineViewMime(f.src.split(".").pop() ?? "")
+          ? `<a class="file-card-view" href="${src}?view=1" target="_blank" rel="noopener">View</a>`
+          : "") +
         `<a class="file-card-download" href="${src}" download>Download</a>` +
+        `</div>` +
         `</div>`
       );
     })

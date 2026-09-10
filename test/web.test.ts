@@ -1437,6 +1437,27 @@ describe("HTTP routes", () => {
       expect(Buffer.from(r.body).toString()).toBe("hello,world");
     });
 
+    it("?view=1 shows safe types inline and falls back to download otherwise", async () => {
+      const pdf = files.add(Buffer.from("%PDF-1.4"), "doc.pdf");
+      let r = await req(app).get(`${pdf.src}?view=1`);
+      expect(r.status).toBe(200);
+      expect(r.headers["content-type"]).toMatch(/application\/pdf/);
+      expect(r.headers["content-disposition"]).toMatch(/^inline;/);
+      expect(r.headers["content-security-policy"]).toContain("sandbox");
+
+      const csv = files.add(Buffer.from("a,b"), "t.csv");
+      r = await req(app).get(`${csv.src}?view=1`);
+      expect(r.headers["content-type"]).toMatch(/^text\/plain/);
+
+      const html = files.add(Buffer.from("<script>alert(1)</script>"), "evil.html");
+      r = await req(app).get(`${html.src}?view=1`);
+      expect(r.headers["content-type"]).toMatch(/octet-stream/);
+      expect(r.headers["content-disposition"]).toMatch(/^attachment;/);
+      const svg = files.add(Buffer.from("<svg onload=alert(1)/>"), "x.svg");
+      r = await req(app).get(`${svg.src}?view=1`);
+      expect(r.headers["content-type"]).toMatch(/octet-stream/);
+    });
+
     it("404s for unknown hashes, wrong extensions, and traversal", async () => {
       const meta = files.add(Buffer.from("x"), "x.txt");
       expect((await req(app).get(`/file/${"0".repeat(64)}.txt`)).status).toBe(404);

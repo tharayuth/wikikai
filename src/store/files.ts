@@ -59,6 +59,36 @@ const EXT_TO_MIME: Record<string, string> = {
   mp4: "video/mp4",
 };
 
+/** Types a browser can show inline safely. Everything else — HTML, SVG,
+ *  scripts, office files, archives — stays download-only, so nothing a
+ *  user uploads can ever execute as a page in the portal's origin. Text
+ *  formats are viewed as plain text (a CSV or JSON is readable that way
+ *  and can't carry markup). */
+const VIEWABLE: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  txt: "text/plain; charset=utf-8",
+  md: "text/plain; charset=utf-8",
+  csv: "text/plain; charset=utf-8",
+  json: "text/plain; charset=utf-8",
+  xml: "text/plain; charset=utf-8",
+  log: "text/plain; charset=utf-8",
+  mp3: "audio/mpeg",
+  mp4: "video/mp4",
+  webm: "video/webm",
+};
+
+/** The Content-Type to view an attachment inline, or null when the
+ *  extension is not on the inline safelist. Keyed by extension so the
+ *  renderer (no DB) and the route (DB row) reach the same answer. */
+export function inlineViewMime(ext: string): string | null {
+  return VIEWABLE[ext.toLowerCase()] ?? null;
+}
+
 export function mimeForFileExt(ext: string): string {
   return EXT_TO_MIME[ext.toLowerCase()] ?? "application/octet-stream";
 }

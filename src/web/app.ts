@@ -26,7 +26,7 @@ import {
 } from "./auth.js";
 import { ForbiddenError, assertProjectAccess } from "../lib/permissions.js";
 import type { ShareUserStore } from "../store/shareUsers.js";
-import { parseFileSrc, type FileStore } from "../store/files.js";
+import { inlineViewMime, parseFileSrc, type FileStore } from "../store/files.js";
 import {
   ShareLoginLimiter,
   clearShareCookie,
@@ -147,9 +147,12 @@ export function buildApp(opts: BuildAppOptions): Express {
 
   // ─── Files: attachment download ───
   // /file/<sha256>.<ext> — the hash is the whole credential (unguessable,
-  // immutable), so this is open like /img/. Always served as an attachment
-  // under the ORIGINAL filename, with a generic binary type: the bytes are
-  // arbitrary user uploads and must never execute as a page in our origin.
+  // immutable), so this is open like /img/. Served as an attachment under
+  // the ORIGINAL filename with a generic binary type by default: the bytes
+  // are arbitrary user uploads and must never execute as a page in our
+  // origin. `?view=1` shows it inline instead, but only for the safelist in
+  // `inlineViewMime` (PDF, images, plain text, audio/video) and always under
+  // a sandboxing CSP — anything else silently falls back to the download.
   app.get("/file/:filename", (req, res, next) => {
     try {
       const parsed = parseFileSrc(`/file/${req.params.filename}`);
@@ -168,11 +171,14 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const ascii = meta.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
+      const inlineType = req.query.view === "1" ? inlineViewMime(meta.ext) : null;
+      const disposition = inlineType ? "inline" : "attachment";
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+        `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
       );
-      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Type", inlineType ?? "application/octet-stream");
+      if (inlineType) res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
       res.setHeader("Content-Length", String(meta.size_bytes));
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.set("Cache-Control", "private, max-age=31536000, immutable");

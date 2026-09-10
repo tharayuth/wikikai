@@ -27,6 +27,17 @@ describe("renderMarkdown", () => {
     expect(html).toContain(">PDF<");
     expect(html).toContain("final &amp; signed");
     expect(html).toContain(`href="/file/${hash}.pdf" download`);
+    expect(html).toContain(`href="/file/${hash}.pdf?view=1" target="_blank" rel="noopener">View`);
+  });
+
+  it("offers View only for inline-safe types", async () => {
+    const hash = "cd".repeat(32);
+    const zip = await renderMarkdown("```file\n" + JSON.stringify({ src: `/file/${hash}.zip` }) + "\n```\n");
+    expect(zip).not.toContain("file-card-view");
+    const svg = await renderMarkdown("```file\n" + JSON.stringify({ src: `/file/${hash}.svg` }) + "\n```\n");
+    expect(svg).not.toContain("file-card-view");
+    const csv = await renderMarkdown("```file\n" + JSON.stringify({ src: `/file/${hash}.csv` }) + "\n```\n");
+    expect(csv).toContain("file-card-view");
   });
 
   it("rejects a file entry whose src is not a store path", async () => {

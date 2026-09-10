@@ -4742,6 +4742,26 @@ button.ki-id-badge::after {
   color: var(--text-2);
   line-height: 1.45;
 }
+.file-card-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+.file-card-view {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.file-card-view:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+}
 .file-card-download {
   flex: 0 0 auto;
   font-size: 13px;
@@ -4762,7 +4782,7 @@ button.ki-id-badge::after {
   .file-card {
     flex-wrap: wrap;
   }
-  .file-card-download {
+  .file-card-actions {
     margin-left: 60px;
   }
 }
