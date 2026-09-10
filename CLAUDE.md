@@ -8,6 +8,44 @@ WikiKai is a self-hosted **MCP server + web portal** for storing presentation-st
 
 Read `README.md` for the user-facing overview. Read `DEPLOY.md` for production / multi-machine concerns.
 
+## This repo is public — assume every commit is read by strangers
+
+`github.com/tharayuth/wikikai` is an **open-source public repository**. Anything
+committed is world-readable the moment it is pushed, and stays readable in the
+history even after a later commit removes it. Treat that as a property of every
+change, not as a step at the end.
+
+**Before writing anything into a tracked file, ask whether it belongs in the
+open.** These do not:
+
+- Hostnames, IP addresses (including VPN ranges), ssh users and ssh targets
+- Absolute paths on real machines — repo, data, and config paths on the dev box
+  or the production VPS
+- pm2 process names, nginx site-config paths, and anything else that describes
+  the production layout
+- Real tokens, passwords, keys, or anything hinting where they are kept
+- Content pulled from the live corpus — internal or customer system names,
+  document ids that only resolve against a private database
+
+Machine-specific context goes in `CLAUDE.local.md`, which is gitignored. Ops
+scripts that hardcode hosts (`sync-from-prod.sh`, `backup-prod.sh`) are
+gitignored too — being merely *untracked* is not protection, because one
+`git add -A` publishes them.
+
+What **should** stay in this file: conventions, architecture, the URL contract,
+and the constraints that shape a change (loopback-only bind, `DATA_DIR` outside
+the repo, nginx needing its own block for streaming endpoints). A contributor
+needs to know a rule exists; they do not need the coordinates it applies to.
+
+Before a commit that touches docs, config, fixtures, or scripts:
+
+```bash
+git grep --cached -nIE '10\.[0-9]+\.[0-9]+\.[0-9]+|root@|/root/|/mnt/data|ssh |cupcode\.cc'
+```
+
+A hit is not automatically a leak — a tokenizer test may need a real string, and
+`127.0.0.1` in a deployment example is fine — but every hit needs a reason.
+
 ## Stack
 
 - **Server**: Node (≥ 20.12), TypeScript, Express, `better-sqlite3` with SQLite FTS5, `@modelcontextprotocol/sdk` Streamable HTTP, Zod, markdown-it, Shiki
@@ -274,3 +312,58 @@ Exception: if the new edit is **required** for the current uncommitted
 work to function (e.g. a bug in a helper being called, a missing type),
 it belongs in the same commit — that isn't a topic change, it's part of
 the same change.
+
+### Pull before you start, push when the topic closes
+
+Production and the dev box both track `main`, and work can land from more than
+one place. **Start every task by syncing**, so a change is written on top of
+what is actually published:
+
+```bash
+git fetch origin && git status -sb     # behind? ahead? untracked strays?
+git pull --ff-only                     # refuse a surprise merge; investigate instead
+```
+
+If `--ff-only` refuses, stop and look rather than forcing it — a divergence
+means something landed that this tree does not know about.
+
+Push as soon as a topic is committed, not in a batch at the end of the day. A
+commit that sits only on the dev box is invisible to production, to the next
+session, and to anyone else reading the repo. GitHub is a waypoint, not the
+server: **pushing is not deploying** — production stays on its old build until
+the deploy step in `CLAUDE.local.md` runs.
+
+### Cut a release when the work warrants one
+
+Tags are what the GitHub Releases page reads. A `main` full of unreleased
+commits looks abandoned from the outside, however active it really is — the
+repo once showed four months of silence while 51 commits sat untagged, because
+the version was bumped and the tag was forgotten.
+
+Release when a user-visible capability lands — a new MCP tool, a content fence,
+a portal feature — or when a batch of fixes is worth naming. Not for a docs-only
+or refactor-only commit.
+
+```bash
+npm run typecheck && npm test                    # gates first, always
+npm version <x.y.z> --no-git-tag-version         # package.json AND the lockfile
+git add package.json package-lock.json
+git commit -m "chore(release): v<x.y.z>"
+git tag -a v<x.y.z> -m "v<x.y.z> — <what changed, in a phrase>"
+git push origin main && git push origin v<x.y.z>
+```
+
+Then create the GitHub Release for that tag — a tag alone does not make one.
+
+Rules worth keeping:
+
+- **Bump `package.json` and `package-lock.json` in the same commit.** Use
+  `npm version --no-git-tag-version`; editing `package.json` by hand leaves the
+  lockfile behind and costs a follow-up commit.
+- **Tag the release commit itself**, and push the tag in the same breath as the
+  branch. An untagged `chore(release)` commit is the failure described above.
+- **Every commit should fall inside some tagged range.** To check:
+  `git rev-list --count <latest-tag>..HEAD` — a large number means releases are
+  overdue.
+- **Never move or delete a pushed tag.** If a release was tagged in the wrong
+  place, tag the correct commit retroactively and move on.
