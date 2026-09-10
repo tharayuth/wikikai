@@ -342,6 +342,88 @@ function renderImages(
   return `<div class="${layoutClass}"${blockIdAttr(blockId)}>${figures}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
 }
 
+/** One entry of a ```file block. Everything is display data copied from
+ *  the `add_file` response; the download route re-derives name + size from
+ *  the store, so a stale label here can never rename the file. */
+interface FileEntry {
+  src: string;
+  name?: string;
+  size_bytes?: number;
+  mime?: string;
+  description?: string;
+}
+
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "";
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB"];
+  let v = n / 1024;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
+}
+
+/** Short type label for the card: the extension when it looks like one,
+ *  else the mime subtype. */
+function fileTypeLabel(src: string, mime: string | undefined): string {
+  const ext = /\.([a-z0-9]{1,10})$/i.exec(src)?.[1];
+  if (ext) return ext.toUpperCase();
+  if (mime) return mime.split("/").pop() ?? mime;
+  return "FILE";
+}
+
+function renderFileBlock(
+  jsonText: string,
+  blockId: number | null = null,
+  caption: string | null = null,
+): string {
+  let items: unknown;
+  try {
+    items = JSON.parse(jsonText);
+  } catch (e) {
+    return `<div class="render-error">file error: ${escapeHtml((e as Error).message)}</div>`;
+  }
+  const arr: unknown[] = Array.isArray(items) ? items : [items];
+  if (arr.length === 0) {
+    return `<div class="render-error">file error: empty array</div>`;
+  }
+  const cards = arr
+    .map((raw, i) => {
+      if (typeof raw !== "object" || raw === null) {
+        return `<div class="render-error">item ${i}: not an object</div>`;
+      }
+      const f = raw as Partial<FileEntry>;
+      if (typeof f.src !== "string" || !/^\/file\/[a-f0-9]{64}\.[a-z0-9]{1,10}$/i.test(f.src)) {
+        return `<div class="render-error">item ${i}: src must be a /file/&lt;hash&gt;.&lt;ext&gt; path from add_file</div>`;
+      }
+      const src = escapeAttr(f.src);
+      const name = escapeHtml(typeof f.name === "string" && f.name ? f.name : f.src.split("/").pop() ?? "file");
+      const size = typeof f.size_bytes === "number" ? formatBytes(f.size_bytes) : "";
+      const type = escapeHtml(fileTypeLabel(f.src, typeof f.mime === "string" ? f.mime : undefined));
+      const desc =
+        typeof f.description === "string" && f.description.trim()
+          ? `<div class="file-card-desc">${escapeHtml(f.description)}</div>`
+          : "";
+      const meta = [type, size].filter(Boolean).map((t) => `<span>${t}</span>`).join("");
+      return (
+        `<div class="file-card">` +
+        `<div class="file-card-icon" aria-hidden="true">${type}</div>` +
+        `<div class="file-card-body">` +
+        `<div class="file-card-name">${name}</div>` +
+        `<div class="file-card-meta">${meta}</div>` +
+        desc +
+        `</div>` +
+        `<a class="file-card-download" href="${src}" download>Download</a>` +
+        `</div>`
+      );
+    })
+    .join("");
+  return `<div class="file-block"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+}
+
 function renderChartGrid(
   jsonText: string,
   blockId: number | null = null,
@@ -430,6 +512,9 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     }
     if (info === "images") {
       return renderImages(token.content, blockId, caption) + "\n";
+    }
+    if (info === "file") {
+      return renderFileBlock(token.content, blockId, caption) + "\n";
     }
     if (info === "md" || info === "markdown") {
       // Syntax-highlight as markdown source, then wrap in the rich-block

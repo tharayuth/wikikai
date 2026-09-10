@@ -1361,6 +1361,7 @@ export class PageStore {
       "steps",
       "html-embed",
       "images",
+      "file",
       "md",
       "markdown",
       // Plain code-fence languages that opt into the `@N` block-id system
@@ -3479,8 +3480,16 @@ export class PageStore {
    *  orphan-image cleanup after delete_knowledge / delete_page so a
    *  removed page's exclusive images don't leak forever. */
   allReferencedImageHashes(): Set<string> {
+    return this.allReferencedHashes(/\/img\/([a-f0-9]{64})\.[a-z0-9]{2,5}/gi);
+  }
+
+  /** Same walk for attachments (`/file/<hash>.<ext>`). */
+  allReferencedFileHashes(): Set<string> {
+    return this.allReferencedHashes(/\/file\/([a-f0-9]{64})\.[a-z0-9]{1,10}/gi);
+  }
+
+  private allReferencedHashes(re: RegExp): Set<string> {
     const set = new Set<string>();
-    const re = /\/img\/([a-f0-9]{64})\.[a-z0-9]{2,5}/gi;
     const rows = this.db
       .prepare(`SELECT id, knowledge_id FROM pages`)
       .all() as { id: number; knowledge_id: number }[];

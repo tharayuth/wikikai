@@ -106,6 +106,9 @@ export function requireAuth(opts: AuthOptions) {
       p.startsWith("/api/share/") ||
       p.startsWith("/assets/") ||
       p.startsWith("/img/") ||
+      // Attachment downloads: the hash in the path is the credential, and a
+      // share-link reader must be able to fetch them too.
+      p.startsWith("/file/") ||
       p === "/favicon-32.png" ||
       p === "/favicon-192.png" ||
       p === "/favicon-512.png" ||

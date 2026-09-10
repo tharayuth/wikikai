@@ -13,6 +13,8 @@ export interface Config {
   dbPath: string;
   itemsDir: string;
   imagesDir: string;
+  /** Attachment bytes (`add_file`), content-addressed like images. */
+  filesDir: string;
   publicBaseUrl: string;
   /**
    * Optional bearer token. When set, the /mcp endpoint requires
@@ -80,6 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const dbPath = env.DB_PATH ?? path.join(dataDir, "index.db");
   const itemsDir = env.ITEMS_DIR ?? path.join(dataDir, "items");
   const imagesDir = env.IMAGES_DIR ?? path.join(dataDir, "images");
+  const filesDir = env.FILES_DIR ?? path.join(dataDir, "files");
 
   let publicBaseUrl = env.PUBLIC_BASE_URL;
   if (!publicBaseUrl) {
@@ -147,6 +150,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dbPath,
     itemsDir,
     imagesDir,
+    filesDir,
     publicBaseUrl,
     mcpToken,
     webAuth,

@@ -218,3 +218,16 @@ CREATE TABLE IF NOT EXISTS share_users (
   UNIQUE (knowledge_id, username)
 );
 CREATE INDEX IF NOT EXISTS idx_share_users_kid ON share_users(knowledge_id);
+
+-- ───── Files: attachments (content-addressed, like images) ─────
+-- Bytes live at data/files/<2-char-prefix>/<sha256>.<ext>. `name` is the
+-- original filename, restored on download; the on-disk name is the hash.
+-- Rows are dropped when no page references /file/<hash>.<ext> any more.
+CREATE TABLE IF NOT EXISTS files (
+  hash         TEXT    PRIMARY KEY,
+  ext          TEXT    NOT NULL,
+  mime         TEXT    NOT NULL,
+  name         TEXT    NOT NULL,
+  size_bytes   INTEGER NOT NULL,
+  created_at   TEXT    NOT NULL
+);

@@ -26,6 +26,7 @@ import {
 } from "./auth.js";
 import { ForbiddenError, assertProjectAccess } from "../lib/permissions.js";
 import type { ShareUserStore } from "../store/shareUsers.js";
+import { parseFileSrc, type FileStore } from "../store/files.js";
 import {
   ShareLoginLimiter,
   clearShareCookie,
@@ -48,6 +49,8 @@ export interface BuildAppOptions {
   permissions: PermissionStore;
   /** Per-knowledge throwaway credentials for password-protected share links. */
   shareUsers: ShareUserStore;
+  /** Attachments (`add_file`). Optional so lightweight test apps can skip it. */
+  files?: FileStore;
   /** Defaults to true. When false, project-level ACL is bypassed. */
   projectAclEnabled?: boolean;
   handlers: ToolHandlers;
@@ -137,6 +140,43 @@ export function buildApp(opts: BuildAppOptions): Express {
       res.type(mimeForExt(meta.ext) ?? meta.mime);
       res.set("Cache-Control", "public, max-age=31536000, immutable");
       fs.createReadStream(file).pipe(res);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ─── Files: attachment download ───
+  // /file/<sha256>.<ext> — the hash is the whole credential (unguessable,
+  // immutable), so this is open like /img/. Always served as an attachment
+  // under the ORIGINAL filename, with a generic binary type: the bytes are
+  // arbitrary user uploads and must never execute as a page in our origin.
+  app.get("/file/:filename", (req, res, next) => {
+    try {
+      const parsed = parseFileSrc(`/file/${req.params.filename}`);
+      if (!parsed || !opts.files) {
+        res.status(404).type("text/plain").send("file not found");
+        return;
+      }
+      const meta = opts.files.get(parsed.hash);
+      if (!meta || meta.ext !== parsed.ext) {
+        res.status(404).type("text/plain").send("file not found");
+        return;
+      }
+      const fp = opts.files.filePath(meta.hash, meta.ext);
+      if (!fs.existsSync(fp)) {
+        res.status(404).type("text/plain").send("file missing");
+        return;
+      }
+      const ascii = meta.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+      );
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Length", String(meta.size_bytes));
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.set("Cache-Control", "private, max-age=31536000, immutable");
+      fs.createReadStream(fp).pipe(res);
     } catch (e) {
       next(e);
     }

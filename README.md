@@ -9,14 +9,15 @@
 ```
 ┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
 │                               │  HTTP   │  /mcp        ← MCP tools         │
-│  38 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
+│  39 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
 │  read_page, edit_section,     │         │  /           ← React SPA         │
-│  add_image, toggle_task,      │         │  /mermaid/.. ← fullscreen viewer │
+│  add_image, add_file,         │         │  /mermaid/.. ← fullscreen viewer │
 │  get_prompt_log, search, …    │         │  /chart/..   ← fullscreen viewer │
 └───────────────────────────────┘         │  /img/<hash> ← image serving     │
                                           │                                  │
                                           │  SQLite (FTS5) + items/<id>.md   │
                                           │  + data/images/<2-prefix>/<hash> │
+                                          │  + data/files/<2-prefix>/<hash>  │
                                           └──────────────────────────────────┘
 ```
 
@@ -46,6 +47,7 @@ Working with an AI day-to-day, every useful answer ends up buried in a chat sess
 | ` ```stats ` | Inline KPI card row with semantic colors |
 | ` ```steps ` | Numbered step cards (markdown inline allowed inside `body`) |
 | ` ```images ` | Thumbnail gallery → click-to-lightbox + per-image size |
+| ` ```file ` | Downloadable attachment card (name · size · type · description · Download). Bytes live under an opaque hash; the download restores the original filename; unreferenced files are deleted automatically |
 | Plain `- [ ]` lists + cells | **Interactive checkboxes** — write a GFM task `- [ ] item` in any list, or drop `[ ]` / `[x]` directly into a markdown table cell; clicking writes back to source (version-bumped + revision-snapshotted) |
 | Markdown tables | Get an `@N` id automatically; the AI can `get_table_row({ block_id, row_index })` or `find_table_rows({ block_id, filter })` to read one row without re-fetching the page |
 | ` ```html-embed ` | Raw HTML for layouts markdown can't express — gradient cards, SVG, `<details>`, custom CSS. Embedded `<input type="checkbox">` is also clickable and write-backed |
@@ -83,7 +85,7 @@ Knowledge (&N)  ──┬── Page (#N) ──┬── Markdown content
 
 URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, near line 42.
 
-### MCP tool surface (38 tools)
+### MCP tool surface (39 tools)
 
 **Knowledge** — `add_knowledge` · `edit_knowledge` · `list_knowledge` · `get_knowledge` · `delete_knowledge` · `get_outline`
 
@@ -96,6 +98,8 @@ URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, ne
 **Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `set_block_caption` (set/clear the `{@N "caption"}` figcaption on a block) · `get_example` (templates with `outline_only` + slice modes)
 
 **Images** — `add_image` (base64 in, **or `path` to import a server-local file with zero base64** when `WIKIKAI_IMAGE_IMPORT_ROOTS` is set; content-addressed) · `get_image` (returns inline image content block)
+
+**Files** — `add_file` (base64 or server-local `path`, any type up to 50MB; returns a ready-to-paste ` ```file ` fence; content-addressed, garbage-collected when no page references it)
 
 **Interaction** — `toggle_task` (flip a plain `- [ ]` / `- [x]` task on a page — the same code path the web UI uses when a user clicks a rendered checkbox)
 
@@ -141,7 +145,7 @@ Open <http://localhost:5173> for the dev UI (HMR + proxied API), or <http://loca
 }
 ```
 
-Restart Claude Code; all 38 tools appear automatically. Try:
+Restart Claude Code; all 39 tools appear automatically. Try:
 
 > Save what we just discussed as a knowledge titled "Postgres timeout fix", project "infra-notes".
 

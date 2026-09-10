@@ -304,6 +304,41 @@ const addImageShape = {
     .describe("Optional default alt text stored with the image record."),
 };
 
+const addFileShape = {
+  data_base64: z
+    .string()
+    .min(4)
+    .optional()
+    .describe(
+      "File bytes, base64-encoded. Max 50MB decoded. Raw bytes only — no `data:` prefix. Use only when the file is NOT on the server machine; for a local file prefer `path`. Mutually exclusive with `path`.",
+    ),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Absolute path to a file ON THE SERVER machine — read off disk, so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS, shared with add_image). Mutually exclusive with `data_base64`.",
+    ),
+  name: z
+    .string()
+    .min(1)
+    .max(255)
+    .optional()
+    .describe(
+      "Original filename (e.g. `report-q3.pdf`) — what the reader's download is saved as. Required with `data_base64`; defaults to the path's basename with `path`.",
+    ),
+  mime_type: z
+    .string()
+    .max(200)
+    .optional()
+    .describe("MIME type. Optional — inferred from the filename extension when omitted."),
+  description: z
+    .string()
+    .max(1000)
+    .optional()
+    .describe("Optional one-line description for the block. Echoed into the returned `fence`; not stored."),
+};
+
 const getImageShape = {
   hash: z
     .string()
@@ -1118,6 +1153,22 @@ export function createMcpServer(
       inputSchema: addImageShape,
     },
     async (input) => jsonContent(await handlers.add_image(input)),
+  );
+
+  // ─── File attachment ───
+  server.registerTool(
+    "add_file",
+    {
+      title: "Attach a downloadable file",
+      description:
+        "Store an arbitrary file (PDF, CSV, XLSX, ZIP, …) and get back `{ src, name, size_bytes, mime, url, fence }`. " +
+        "Bytes are content-addressed (`/file/<sha256>.<ext>`) so identical uploads dedupe and the on-disk name is opaque; the ORIGINAL `name` is what a reader's download is saved as. " +
+        "Then paste the returned `fence` into a page — a ```file block whose JSON is `{ src, name, size_bytes, mime, description? }` (or an array of those for several files) — and the portal renders a card with the filename, size, type, description and a Download button. " +
+        "Lifecycle: when every page that referenced the file drops the reference (edit_page / edit_lines / edit_section / replace_text / delete_page / delete_knowledge, or a human's Edit raw → Save), the bytes are deleted from disk automatically. " +
+        "Max 50MB. Prefer `path` when the file is already on the server machine (zero base64).",
+      inputSchema: addFileShape,
+    },
+    async (input) => jsonContent(await handlers.add_file(input)),
   );
 
   // ─── Image fetch ───

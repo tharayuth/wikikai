@@ -14,6 +14,27 @@ describe("renderMarkdown", () => {
     expect(out).toMatch(/<h2[^>]+id="section-one"/);
   });
 
+  it("renders a ```file fence as a download card", async () => {
+    const hash = "ab".repeat(32);
+    const html = await renderMarkdown(
+      "```file\n" +
+        JSON.stringify({ src: `/file/${hash}.pdf`, name: "Q3 <report>.pdf", size_bytes: 1536000, mime: "application/pdf", description: "final & signed" }) +
+        "\n```\n",
+    );
+    expect(html).toContain('class="file-block"');
+    expect(html).toContain("Q3 &lt;report&gt;.pdf");
+    expect(html).toContain("1.5 MB");
+    expect(html).toContain(">PDF<");
+    expect(html).toContain("final &amp; signed");
+    expect(html).toContain(`href="/file/${hash}.pdf" download`);
+  });
+
+  it("rejects a file entry whose src is not a store path", async () => {
+    const html = await renderMarkdown("```file\n" + JSON.stringify({ src: "/etc/passwd" }) + "\n```\n");
+    expect(html).toContain("render-error");
+    expect(html).not.toContain('href="/etc/passwd"');
+  });
+
   it("sizes images via title 'WxH' suffix", async () => {
     const out = await renderMarkdown(`![cat](/img/abc.png "300x200")`);
     expect(out).toMatch(/<img[^>]+src="\/img\/abc\.png"/);

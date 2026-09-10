@@ -12,6 +12,7 @@ import { ActivityLogStore } from "../src/store/activityLog.js";
 import { SessionStore, UserStore } from "../src/store/users.js";
 import { PermissionStore } from "../src/store/permissions.js";
 import { ShareUserStore } from "../src/store/shareUsers.js";
+import { FileStore } from "../src/store/files.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
 import type { Express } from "express";
@@ -48,6 +49,7 @@ describe("HTTP routes", () => {
   let tmpDir: string;
   let knowledge: KnowledgeStore;
   let shareUsers: ShareUserStore;
+  let files: FileStore;
   let pages: PageStore;
   let app: ReturnType<typeof buildApp>;
 
@@ -63,8 +65,9 @@ describe("HTTP routes", () => {
     const sessions = new SessionStore(db, users);
     const permissions = new PermissionStore(db);
     shareUsers = new ShareUserStore(db);
-    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users, db);
-    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, shareUsers, handlers, publicBaseUrl: "http://test" });
+    files = new FileStore(db, path.join(tmpDir, "files"));
+    const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users, db, files);
+    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, shareUsers, files, handlers, publicBaseUrl: "http://test" });
   });
 
   afterEach(async () => {
@@ -1417,6 +1420,41 @@ describe("HTTP routes", () => {
       const { token } = makeShared();
       expect((await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" })).status).toBe(400);
       expect((await req(app).post(`/api/share/nosuch/login`).send({ username: "r", password: "p" })).status).toBe(404);
+    });
+  });
+
+  describe("attachment downloads", () => {
+    it("serves /file/<hash>.<ext> as an attachment under the original name", async () => {
+      const meta = files.add(Buffer.from("hello,world"), "รายงาน Q3.csv");
+      const r = await req(app).get(meta.src);
+      expect(r.status).toBe(200);
+      expect(r.headers["content-type"]).toMatch(/application\/octet-stream/);
+      expect(r.headers["content-disposition"]).toContain("attachment;");
+      expect(r.headers["content-disposition"]).toContain(
+        `filename*=UTF-8''${encodeURIComponent("รายงาน Q3.csv")}`,
+      );
+      expect(r.headers["x-content-type-options"]).toBe("nosniff");
+      expect(Buffer.from(r.body).toString()).toBe("hello,world");
+    });
+
+    it("404s for unknown hashes, wrong extensions, and traversal", async () => {
+      const meta = files.add(Buffer.from("x"), "x.txt");
+      expect((await req(app).get(`/file/${"0".repeat(64)}.txt`)).status).toBe(404);
+      expect((await req(app).get(`/file/${meta.hash}.exe`)).status).toBe(404);
+      expect((await req(app).get(`/file/..%2F..%2Fetc%2Fpasswd`)).status).toBe(404);
+    });
+
+    it("Edit raw → Save through the web route deletes a dropped attachment", async () => {
+      const k = knowledge.add({ title: "Doc", project: "examples" });
+      const meta = files.add(Buffer.from("bytes"), "a.bin");
+      const fence = "```file\n" + JSON.stringify({ src: meta.src, name: meta.name }) + "\n```\n";
+      const p = pages.add({ knowledge_id: k.id, title: "P", content: "# P\n\n" + fence });
+      const onDisk = files.filePath(meta.hash, meta.ext);
+      expect(fs.existsSync(onDisk)).toBe(true);
+      const r = await req(app).patch(`/api/pages/${p.id}`).send({ content: "# P\n\nno attachment" });
+      expect(r.status).toBe(200);
+      expect(fs.existsSync(onDisk)).toBe(false);
+      expect(files.get(meta.hash)).toBeNull();
     });
   });
 

@@ -3,6 +3,7 @@ import { openDb } from "./store/db.js";
 import { KnowledgeStore } from "./store/knowledge.js";
 import { PageStore } from "./store/pages.js";
 import { ImageStore } from "./store/images.js";
+import { FileStore } from "./store/files.js";
 import { PromptLogStore } from "./store/promptLog.js";
 import { ActivityLogStore } from "./store/activityLog.js";
 import { SessionStore, UserStore } from "./store/users.js";
@@ -31,6 +32,7 @@ export async function startServer(): Promise<RunningServer> {
   const knowledge = new KnowledgeStore(db);
   const pages = new PageStore(db, config.itemsDir);
   const images = new ImageStore(db, config.imagesDir);
+  const files = new FileStore(db, config.filesDir);
   const promptLog = new PromptLogStore(db);
   const activityLog = new ActivityLogStore(db);
   const users = new UserStore(db);
@@ -84,6 +86,7 @@ export async function startServer(): Promise<RunningServer> {
     permissions,
     users,
     db,
+      files,
   );
   const mcpHandler = createMcpHandler(() =>
     createMcpServer(handlers, { defaultUserId: mcpDefaultUserId }),
@@ -99,6 +102,7 @@ export async function startServer(): Promise<RunningServer> {
     sessions,
     permissions,
     shareUsers,
+    files,
     projectAclEnabled: config.projectAclEnabled,
     handlers,
     publicBaseUrl: config.publicBaseUrl,

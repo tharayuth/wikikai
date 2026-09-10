@@ -16,6 +16,7 @@ export type ActivityTarget =
   | "knowledge"
   | "page"
   | "block"
+  | "file"
   | "image"
   | "task";
 

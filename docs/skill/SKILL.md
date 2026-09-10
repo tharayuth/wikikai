@@ -178,7 +178,26 @@ Pick by intent:
 ```steps             — array of { title, body? } — auto-numbered cards, body is markdown
 ```html-embed        — raw HTML for flexible content (richer tables with row colors / col-span / sticky headers, custom card/grid layouts, inline SVG, iframes, <details>). <script> tags are inert by design. **Last resort** — see block-choice rule above
 ```images            — multi-image GALLERY only (4+ side-by-side thumbnails as a uniform grid). For a single image, use plain markdown `![alt](src "WxH")` instead — it now has drag-to-resize + click-to-lightbox, so it covers the same use case with less syntax
+```file              — downloadable attachment card (name · size · type · description · Download). Get the fence from `add_file`
 ```typescript / etc  — code blocks with Shiki highlight
+
+## Files (attachments)
+
+To attach a downloadable file (PDF, CSV, XLSX, ZIP, …) to a page:
+
+1. `add_file({ path })` when the file is on the server machine (same `WIKIKAI_IMAGE_IMPORT_ROOTS` roots as images, zero base64), or `add_file({ data_base64, name })` otherwise. Optional `mime_type`, `description`.
+2. Paste the returned `fence` into the page as-is:
+
+   ```markdown
+   ```file
+   { "src": "/file/<hash>.pdf", "name": "report-q3.pdf", "size_bytes": 1536000, "mime": "application/pdf", "description": "Final, signed" }
+   ```
+   ```
+
+   Several files → a JSON array of those objects in one fence. Renders a card: name · size · type · description · **Download**. The download is saved under `name` (the original filename); the server keeps the bytes under an opaque `/file/<sha256>.<ext>`.
+3. Lifecycle is automatic: when no page references the `src` any more (after edit_page / edit_lines / edit_section / replace_text / delete_page / delete_knowledge, or a human Edit raw → Save), the bytes are deleted. Don't try to "clean up" files yourself.
+
+Max 50MB per file.
 
 ## Images
 

@@ -5,6 +5,12 @@ import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
 import type { PageStore, PageEntry, PageWithStats, EditFeedback } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
 import {
+  FILE_MAX_BYTES,
+  cleanupRemovedFileRefs,
+  extractFileHashesSet,
+  type FileStore,
+} from "../store/files.js";
+import {
   cleanupRemovedImageRefs,
   extractImageHashesSet,
   mimeForExt,
@@ -56,10 +62,30 @@ function readLocalImageFile(
   ctx: HandlerContext,
   mimeOverride: string | undefined,
 ): { buffer: Buffer; mime: string } {
+  const { buffer, resolved } = readLocalBytes(rawPath, ctx, IMAGE_MAX_BYTES, "image");
+  const ext = path.extname(resolved).replace(/^\./, "").toLowerCase();
+  const mime = mimeOverride ?? sniffImageMime(buffer) ?? mimeForExt(ext);
+  if (!mime) {
+    throw new Error(
+      `cannot determine image mime type from ${path.basename(resolved)} — pass mime_type explicitly`,
+    );
+  }
+  return { buffer, mime };
+}
+
+/** Shared sandboxed read for `add_image({ path })` and `add_file({ path })`:
+ *  import-root containment, realpath, fstat-on-fd, size cap. `what` only
+ *  flavours the error messages. */
+function readLocalBytes(
+  rawPath: string,
+  ctx: HandlerContext,
+  maxBytes: number,
+  what: "image" | "file",
+): { buffer: Buffer; resolved: string } {
   const roots = ctx.imageImportRoots ?? [];
   if (!ctx.imageImportEnabled || roots.length === 0) {
     throw new Error(
-      "local-path image import is disabled; set WIKIKAI_IMAGE_IMPORT_ROOTS on the server, or send `data_base64` instead",
+      `local-path ${what} import is disabled; set WIKIKAI_IMAGE_IMPORT_ROOTS on the server, or send \`data_base64\` instead`,
     );
   }
   if (!path.isAbsolute(rawPath)) {
@@ -69,7 +95,7 @@ function readLocalImageFile(
   try {
     resolved = fs.realpathSync(rawPath);
   } catch {
-    throw new Error("image file not found");
+    throw new Error(`${what} not found`);
   }
   const contained = roots.some((root) => {
     const rel = path.relative(root, resolved);
@@ -85,11 +111,9 @@ function readLocalImageFile(
   try {
     const st = fs.fstatSync(fd);
     if (!st.isFile()) throw new Error("`path` is not a regular file");
-    if (st.size === 0) throw new Error("image file is empty");
-    if (st.size > IMAGE_MAX_BYTES) {
-      throw new Error(
-        `image too large: ${st.size} bytes (max ${IMAGE_MAX_BYTES})`,
-      );
+    if (st.size === 0) throw new Error(`${what} is empty`);
+    if (st.size > maxBytes) {
+      throw new Error(`${what} too large: ${st.size} bytes (max ${maxBytes})`);
     }
     buffer = Buffer.allocUnsafe(st.size);
     let off = 0;
@@ -101,14 +125,7 @@ function readLocalImageFile(
   } finally {
     fs.closeSync(fd);
   }
-  const ext = path.extname(resolved).replace(/^\./, "").toLowerCase();
-  const mime = mimeOverride ?? sniffImageMime(buffer) ?? mimeForExt(ext);
-  if (!mime) {
-    throw new Error(
-      `cannot determine image mime type from ${path.basename(resolved)} — pass mime_type explicitly`,
-    );
-  }
-  return { buffer, mime };
+  return { buffer, resolved };
 }
 
 const USER_PROMPT_EDIT_NOTE =
@@ -490,6 +507,60 @@ export const AddImageSchema = z
     }
   });
 
+export const AddFileSchema = z
+  .object({
+    data_base64: z
+      .string()
+      .min(4)
+      .optional()
+      .describe(
+        "The file bytes, base64-encoded (max 50MB decoded). Raw bytes only — no `data:` prefix. Prefer `path` for a file already on the server machine.",
+      ),
+    path: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Absolute path to a file ON THE SERVER machine; read off disk so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS — the same roots as add_image). Mutually exclusive with `data_base64`.",
+      ),
+    name: z
+      .string()
+      .min(1)
+      .max(255)
+      .optional()
+      .describe(
+        "Original filename, e.g. `report-q3.pdf`. This is what a reader's download is saved as. Required with `data_base64`; defaults to the path's basename with `path`.",
+      ),
+    mime_type: z
+      .string()
+      .max(200)
+      .optional()
+      .describe("MIME type. Optional — inferred from the filename extension when omitted."),
+    description: z
+      .string()
+      .max(1000)
+      .optional()
+      .describe(
+        "Optional one-line description shown on the block under the filename. Only echoed back inside the returned `fence` snippet — not stored.",
+      ),
+  })
+  .superRefine((v, ctx) => {
+    const hasPath = typeof v.path === "string" && v.path.length > 0;
+    const hasB64 = typeof v.data_base64 === "string" && v.data_base64.length > 0;
+    if (hasPath === hasB64) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "supply exactly one of `path` or `data_base64`",
+      });
+    }
+    if (hasB64 && !v.name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "`name` is required when sending `data_base64`",
+      });
+    }
+  });
+
 export const GetImageSchema = z
   .object({
     hash: z
@@ -842,6 +913,7 @@ export type ToolInputs = {
   add_lines: z.infer<typeof AddLinesSchema>;
   set_block_caption: z.infer<typeof SetBlockCaptionSchema>;
   add_image: z.infer<typeof AddImageSchema>;
+  add_file: z.infer<typeof AddFileSchema>;
   get_image: z.infer<typeof GetImageSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
   get_prompt_log: z.infer<typeof GetPromptLogSchema>;
@@ -1218,6 +1290,19 @@ export interface ToolHandlers {
     url: string;
   }>;
 
+  add_file(input: ToolInputs["add_file"]): Promise<{
+    hash: string;
+    ext: string;
+    mime: string;
+    name: string;
+    size_bytes: number;
+    created_at: string;
+    src: string;
+    url: string;
+    /** Ready-to-paste ```file block for this attachment. */
+    fence: string;
+  }>;
+
   get_image(input: ToolInputs["get_image"]): Promise<{
     hash: string;
     ext: string;
@@ -1420,6 +1505,17 @@ function pageEntryShape(ctx: HandlerContext, p: PageEntry) {
  *  by remaining page content; delete the orphans (file + DB row) and
  *  return how many were removed. Run after delete_knowledge /
  *  delete_page so a removed page's exclusive images don't linger. */
+function cleanupOrphanFiles(pages: PageStore, files: FileStore | null): number {
+  if (!files) return 0;
+  const referenced = pages.allReferencedFileHashes();
+  let removed = 0;
+  for (const { hash } of files.listAllHashes()) {
+    if (referenced.has(hash)) continue;
+    if (files.remove(hash)) removed++;
+  }
+  return removed;
+}
+
 function cleanupOrphanImages(pages: PageStore, images: ImageStore): number {
   const referenced = pages.allReferencedImageHashes();
   const stored = images.listAllHashes();
@@ -1441,8 +1537,20 @@ export function buildToolHandlers(
   permissions: PermissionStore,
   users: UserStore,
   db: Db,
+  files: FileStore | null = null,
 ): ToolHandlers {
   const aclEnabled = ctx.projectAclEnabled ?? true;
+
+  /** Attachment references in a page body, for diff-based cleanup after
+   *  an edit. Empty when no file store is wired (tests that never attach). */
+  const fileRefs = (content: string | undefined): Set<string> =>
+    files && content ? extractFileHashesSet(content) : new Set<string>();
+  const gcFileRefs = (before: Set<string>, afterContent: string | undefined, pageId: number): void => {
+    if (!files) return;
+    const after = fileRefs(afterContent);
+    const removed = new Set<string>([...before].filter((h) => !after.has(h)));
+    cleanupRemovedFileRefs(removed, pageId, db, files);
+  };
 
   function resolveCallerForAcl(): { user: User | null } {
     const { user_id } = getCallContext();
@@ -1663,6 +1771,7 @@ export function buildToolHandlers(
       pages.purgeKnowledge(parsed.id);
       knowledge.remove(parsed.id);
       const removed_images = cleanupOrphanImages(pages, images);
+      cleanupOrphanFiles(pages, files);
       recordActivity({
         action: "delete",
         target: "knowledge",
@@ -1720,11 +1829,13 @@ export function buildToolHandlers(
       if (!beforePage) throw new Error(`page #${parsed.page_id} not found`);
       const before = beforePage;
       const oldHashes = extractImageHashesSet(beforePage.content);
+      const oldFiles = fileRefs(beforePage.content);
       const r = pages.update(parsed.page_id, parsed);
       const afterPage = pages.get(parsed.page_id);
       const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
       const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
       cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
+      gcFileRefs(oldFiles, afterPage?.content, parsed.page_id);
       logIf(
         "edit_page",
         parsed.user_prompt,
@@ -1788,6 +1899,7 @@ export function buildToolHandlers(
       const before = pages.getMetadata(parsed.page_id);
       pages.remove(parsed.page_id);
       const removed_images = cleanupOrphanImages(pages, images);
+      cleanupOrphanFiles(pages, files);
       recordActivity({
         action: "delete",
         target: "page",
@@ -1984,6 +2096,7 @@ export function buildToolHandlers(
       if (!beforePage) throw new Error(`page #${parsed.page_id} not found`);
       const meta = beforePage;
       const oldHashes = extractImageHashesSet(beforePage.content);
+      const oldFiles = fileRefs(beforePage.content);
       const r = pages.editLines(
         parsed.page_id,
         parsed.line_start,
@@ -1995,6 +2108,7 @@ export function buildToolHandlers(
       const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
       const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
       cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
+      gcFileRefs(oldFiles, afterPage?.content, parsed.page_id);
       logIf(
         "edit_lines",
         parsed.user_prompt,
@@ -2027,11 +2141,13 @@ export function buildToolHandlers(
       if (!beforePage) throw new Error(`page #${parsed.page_id} not found`);
       const meta = beforePage;
       const oldHashes = extractImageHashesSet(beforePage.content);
+      const oldFiles = fileRefs(beforePage.content);
       const r = pages.editSection(parsed.page_id, parsed.heading, parsed.new_content);
       const afterPage = pages.get(parsed.page_id);
       const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
       const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
       cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
+      gcFileRefs(oldFiles, afterPage?.content, parsed.page_id);
       logIf(
         "edit_section",
         parsed.user_prompt,
@@ -2068,8 +2184,9 @@ export function buildToolHandlers(
       // Only snapshot when `find` could plausibly contain an image
       // hash — otherwise the diff is provably empty and we skip the
       // overhead. Same heuristic for the rare cross-page rename case.
-      const mayAffectImages = /\/img\//i.test(parsed.find);
+      const mayAffectImages = /\/(img|file)\//i.test(parsed.find);
       const beforeSnapshots = new Map<number, Set<string>>();
+      const beforeFileSnapshots = new Map<number, Set<string>>();
       if (mayAffectImages) {
         const targets =
           parsed.page_id != null
@@ -2079,7 +2196,10 @@ export function buildToolHandlers(
             : pages.list(parsed.knowledge_id);
         for (const t of targets) {
           const got = pages.get(t.id);
-          if (got) beforeSnapshots.set(t.id, extractImageHashesSet(got.content));
+          if (got) {
+            beforeSnapshots.set(t.id, extractImageHashesSet(got.content));
+            beforeFileSnapshots.set(t.id, fileRefs(got.content));
+          }
         }
       }
       const r = pages.replaceText(
@@ -2098,6 +2218,7 @@ export function buildToolHandlers(
             [...oldHashes].filter((h) => !newHashes.has(h)),
           );
           cleanupRemovedImageRefs(removed, rep.page_id, db, images);
+          gcFileRefs(beforeFileSnapshots.get(rep.page_id) ?? new Set<string>(), after?.content, rep.page_id);
         }
       }
       const total = r.replacements.reduce((sum, it) => sum + it.count, 0);
@@ -2489,6 +2610,41 @@ export function buildToolHandlers(
         target: "image",
       });
       return { ...meta, url: `${base}${meta.src}` };
+    },
+
+    async add_file(input) {
+      const parsed = AddFileSchema.parse(input);
+      if (!files) throw new Error("file attachments are not enabled on this server");
+      let bytes: Buffer;
+      let name: string;
+      if (parsed.path !== undefined && parsed.path.length > 0) {
+        const local = readLocalBytes(parsed.path, ctx, FILE_MAX_BYTES, "file");
+        bytes = local.buffer;
+        name = parsed.name ?? path.basename(local.resolved);
+      } else {
+        const raw = parsed.data_base64!.replace(/^data:[^,]+,/, "");
+        try {
+          bytes = Buffer.from(raw, "base64");
+        } catch (e) {
+          throw new Error(`base64 decode failed: ${(e as Error).message}`);
+        }
+        name = parsed.name!; // superRefine guarantees presence with base64
+      }
+      const meta = files.add(bytes, name, parsed.mime_type ?? null);
+      const base = ctx.publicBaseUrl.replace(/\/$/, "");
+      const entry: Record<string, unknown> = {
+        src: meta.src,
+        name: meta.name,
+        size_bytes: meta.size_bytes,
+        mime: meta.mime,
+      };
+      if (parsed.description) entry.description = parsed.description;
+      recordActivity({ action: "upload", target: "file" });
+      return {
+        ...meta,
+        url: `${base}${meta.src}`,
+        fence: "```file\n" + JSON.stringify(entry) + "\n```",
+      };
     },
 
     async get_image(input) {
