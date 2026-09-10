@@ -89,6 +89,12 @@ const addPageShape = {
       "showcase image grid (4+ side-by-side) → ```images (otherwise inline `![alt](src \"WxH\")` is simpler and supports drag-to-resize + lightbox). " +
       "Only reach for ```html-embed when a custom layout genuinely improves understanding (gradient status cards, decision matrix with row/col colors, badges + flex layout, `<details>` accordions, inline SVG, iframes) AND no prepared block fits. Inline `style=\"...\"` in html-embed is real token cost — it gets stripped by default when AI reads, so picking the right block upfront stays the cheapest. " +
       "Full fence list (for reference): ```mermaid (diagrams), ```chart / ```chart-grid (Chart.js), ```stats (KPI cards), ```steps (numbered step cards), ```html-embed (raw HTML for flexible tables, layouts, SVG, iframes), ```images (multi-image gallery — legacy; for a single image prefer plain markdown `![alt](src \"WxH\")` which now supports drag-to-resize + click-to-lightbox just like the gallery). " +
+      "⚠️ **```stats, ```steps, ```chart, ```chart-grid and ```images take a JSON body — NOT prose, NOT a markdown table, NOT `label | value` lines.** The body is passed straight to `JSON.parse`; anything else renders as a red `render-error` box on the page. The write still SUCCEEDS (the server stores raw markdown and does not validate fence bodies), so a malformed block is invisible until a human looks at the page — reading the page back as text will NOT reveal it. Shapes: " +
+      "```stats → `[{ \"num\": \"1,247\", \"label\": \"Active users\", \"color\": \"green\" }]` (color optional, one of purple|blue|green|amber|red|cyan — an unknown color is silently dropped, not an error) · " +
+      "```steps → `[{ \"title\": \"...\", \"body\": \"markdown ok\", \"n\": \"1\" }]` (all fields optional; `n` defaults to the 1-based index) · " +
+      "```chart → a Chart.js config object `{ \"type\": \"bar\", \"data\": { \"labels\": [...], \"datasets\": [...] } }` · " +
+      "```chart-grid → an ARRAY of those config objects. " +
+      "Call `get_example({ name: \"stats\" | \"steps\" | \"chart\" })` for a full working template before writing one of these for the first time. " +
       "Each rendered fenced block is auto-assigned a stable global id and annotated in source as ```mermaid {@123}; you can refer to it by `@N` thereafter (e.g. 'update @123'). The annotation can carry a **caption** (like an HTML `<figcaption>` / a Word figure caption): ```mermaid {@123 \"Architecture: API → DB\"} — short text describing what the block IS, rendered as small italic text directly below the block. **Always set a caption when creating a rich block** so an AI calling `get_block({ id, summary: true })` or `read_page({ mode: \"summary\" })` can answer 'what is @123?' without paying the body's token cost. Set/update later via `set_block_caption({ id, caption })`. A diagram the user has resized in the web UI also carries a trailing display height — ```mermaid {@123 \"caption\" h=320}. It is presentation only (width always follows the diagram's own aspect ratio); keep it as-is when rewriting a block so the size the user chose is not reset. " +
       "Interactive checkboxes (three surfaces, all live, all flipped via the same `toggle_task` tool): " +
       "(a) GFM task list `- [ ] thing` / `- [x] done` inside any bulleted list, " +
@@ -112,7 +118,9 @@ const addPageShape = {
 const editPageShape = {
   page_id: z.number().int().positive(),
   title: z.string().min(1).max(200).optional(),
-  content: z.string().optional().describe("Replace entire page content"),
+  content: z.string().optional().describe(
+    "Replace entire page content. Same markdown + fence rules as `add_page.content` — in particular ```stats / ```steps / ```chart / ```chart-grid / ```images take a **JSON body**, and an invalid one is stored happily but renders as a red `render-error` box (see `add_page` for the shapes, or `get_example`).",
+  ),
   summary: z.string().max(500).optional(),
   keywords: z.array(z.string().max(60)).max(20).optional(),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
