@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS knowledge (
   version      INTEGER NOT NULL DEFAULT 1,  -- bumps when metadata changes
   share_token  TEXT                         -- non-null = public read-only share link enabled
 );
+-- NOTE: `knowledge.share_protected` (0/1) is added by the in-place migration
+-- in db.ts, for the same ADD COLUMN IF NOT EXISTS reason as activity_log.user_id.
 
 CREATE INDEX IF NOT EXISTS idx_k_project ON knowledge(project);
 CREATE INDEX IF NOT EXISTS idx_k_session ON knowledge(session_id);
@@ -199,3 +201,20 @@ CREATE TABLE IF NOT EXISTS project_permissions (
   PRIMARY KEY (user_id, project_name)
 );
 CREATE INDEX IF NOT EXISTS idx_pp_user ON project_permissions(user_id);
+
+-- ───── Share users: optional user/password gate on a public share link ─────
+-- Completely separate from `users` (the portal login). These are throwaway
+-- credentials an editor hands out for ONE shared knowledge: "reader / 1234,
+-- valid 30 days". They can only unlock /share/<token> for that knowledge;
+-- they never grant portal access. `knowledge.share_protected` (added by the
+-- migration in db.ts) decides whether the link demands one of these at all.
+CREATE TABLE IF NOT EXISTS share_users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  knowledge_id  INTEGER NOT NULL REFERENCES knowledge(id) ON DELETE CASCADE,
+  username      TEXT    NOT NULL,
+  password_hash TEXT    NOT NULL,           -- scrypt$<salt>$<hash>, same helper as users
+  expires_at    TEXT,                       -- NULL = never expires
+  created_at    TEXT    NOT NULL,
+  UNIQUE (knowledge_id, username)
+);
+CREATE INDEX IF NOT EXISTS idx_share_users_kid ON share_users(knowledge_id);

@@ -11,6 +11,7 @@ import { PromptLogStore } from "../src/store/promptLog.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
 import { SessionStore, UserStore } from "../src/store/users.js";
 import { PermissionStore } from "../src/store/permissions.js";
+import { ShareUserStore } from "../src/store/shareUsers.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
 import type { Express } from "express";
@@ -46,6 +47,7 @@ async function closeServers(): Promise<void> {
 describe("HTTP routes", () => {
   let tmpDir: string;
   let knowledge: KnowledgeStore;
+  let shareUsers: ShareUserStore;
   let pages: PageStore;
   let app: ReturnType<typeof buildApp>;
 
@@ -60,8 +62,9 @@ describe("HTTP routes", () => {
     const users = new UserStore(db);
     const sessions = new SessionStore(db, users);
     const permissions = new PermissionStore(db);
+    shareUsers = new ShareUserStore(db);
     const handlers = buildToolHandlers(knowledge, pages, images, promptLog, activityLog, { publicBaseUrl: "http://test" }, permissions, users, db);
-    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, handlers, publicBaseUrl: "http://test" });
+    app = buildApp({ knowledge, pages, images, promptLog, activityLog, users, sessions, permissions, shareUsers, handlers, publicBaseUrl: "http://test" });
   });
 
   afterEach(async () => {
@@ -1249,6 +1252,171 @@ describe("HTTP routes", () => {
         (await req(app).get(`/share/nosuchtoken/mermaid/${secret.id}/0`))
           .status,
       ).toBe(404);
+    });
+  });
+
+  describe("password-protected share links", () => {
+    function makeShared() {
+      const k = knowledge.add({ title: "Locked Doc", project: "examples" });
+      const p = pages.add({
+        knowledge_id: k.id,
+        title: "Page 1",
+        content:
+          "# Hi\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+          '```chart\n{"type":"bar","data":{"labels":["a"],"datasets":[{"label":"n","data":[1]}]}}\n```\n',
+      });
+      const token = knowledge.enableShare(k.id);
+      return { kid: k.id, pid: p.id, token };
+    }
+    const cookieOf = (r: request.Response): string => {
+      const raw = r.headers["set-cookie"];
+      const first = Array.isArray(raw) ? raw[0] : String(raw ?? "");
+      return first.split(";")[0];
+    };
+
+    it("status reports an open link with no users by default", async () => {
+      const { kid } = makeShared();
+      const r = await req(app).get(`/api/knowledge/${kid}/share`);
+      expect(r.body.protected).toBe(false);
+      expect(r.body.users).toEqual([]);
+    });
+
+    it("adds users (with and without expiry), lists them, deletes one", async () => {
+      const { kid } = makeShared();
+      let r = await req(app)
+        .post(`/api/knowledge/${kid}/share/users`)
+        .send({ username: "forever", password: "pw1" });
+      expect(r.status).toBe(200);
+      r = await req(app)
+        .post(`/api/knowledge/${kid}/share/users`)
+        .send({ username: "week", password: "pw2", expires_in_days: 7 });
+      expect(r.status).toBe(200);
+      const users = r.body.users as { id: number; username: string; expires_at: string | null; expired: boolean }[];
+      expect(users.map((u) => u.username)).toEqual(["forever", "week"]);
+      expect(users[0].expires_at).toBeNull();
+      expect(users[1].expires_at).not.toBeNull();
+      expect(users.every((u) => u.expired === false)).toBe(true);
+      expect(JSON.stringify(r.body)).not.toMatch(/password/);
+
+      // duplicate → 400, bad expiry → 400
+      expect(
+        (await req(app).post(`/api/knowledge/${kid}/share/users`).send({ username: "week", password: "x" })).status,
+      ).toBe(400);
+      expect(
+        (await req(app).post(`/api/knowledge/${kid}/share/users`).send({ username: "z", password: "x", expires_in_days: 0 })).status,
+      ).toBe(400);
+
+      r = await req(app).delete(`/api/knowledge/${kid}/share/users/${users[0].id}`);
+      expect(r.status).toBe(200);
+      expect((r.body.users as { username: string }[]).map((u) => u.username)).toEqual(["week"]);
+      expect((await req(app).delete(`/api/knowledge/${kid}/share/users/999`)).status).toBe(404);
+    });
+
+    it("protecting the link closes every public route until login", async () => {
+      const { kid, pid, token } = makeShared();
+      await req(app).post(`/api/knowledge/${kid}/share/users`).send({ username: "r", password: "p" });
+      let r = await req(app).put(`/api/knowledge/${kid}/share/protected`).send({ protected: true });
+      expect(r.status).toBe(200);
+      expect(r.body.protected).toBe(true);
+
+      r = await req(app).get(`/api/share/${token}`);
+      expect(r.status).toBe(401);
+      expect(r.body).toEqual({ error: "login required", protected: true });
+      expect(JSON.stringify(r.body)).not.toContain("Locked Doc");
+      expect((await req(app).get(`/api/share/${token}/pages/${pid}/rendered`)).status).toBe(401);
+      expect((await req(app).get(`/share/${token}/mermaid/${pid}/0`)).status).toBe(401);
+      expect((await req(app).get(`/share/${token}/chart/${pid}/0`)).status).toBe(401);
+      // The SPA shell itself still loads so the login form can render.
+      // (Served from client/dist when built; a 404 here only means no build.)
+
+      // wrong password / unknown user
+      r = await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "nope" });
+      expect(r.status).toBe(401);
+      expect(r.body.error).toBe("invalid");
+      expect(r.headers["set-cookie"]).toBeUndefined();
+
+      // right password → cookie → everything opens
+      r = await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" });
+      expect(r.status).toBe(200);
+      expect(r.body.ok).toBe(true);
+      const cookie = cookieOf(r);
+      expect(cookie).toMatch(new RegExp(`^wikikai_share_${token}=`));
+      expect(r.headers["set-cookie"][0]).toMatch(/HttpOnly/);
+
+      r = await req(app).get(`/api/share/${token}`).set("Cookie", cookie);
+      expect(r.status).toBe(200);
+      expect(r.body.knowledge.title).toBe("Locked Doc");
+      expect(r.body.protected).toBe(true);
+      expect(r.body.viewer).toBe("r");
+      expect((await req(app).get(`/api/share/${token}/pages/${pid}/rendered`).set("Cookie", cookie)).status).toBe(200);
+      expect((await req(app).get(`/share/${token}/mermaid/${pid}/0`).set("Cookie", cookie)).status).toBe(200);
+      expect((await req(app).get(`/share/${token}/chart/${pid}/0`).set("Cookie", cookie)).status).toBe(200);
+
+      // logout clears it
+      r = await req(app).post(`/api/share/${token}/logout`).set("Cookie", cookie);
+      expect(r.status).toBe(200);
+      expect(r.headers["set-cookie"][0]).toMatch(/Max-Age=0/);
+
+      // a forged cookie for another user id is rejected
+      const forged = cookie.replace(/=\d+\./, "=999.");
+      expect((await req(app).get(`/api/share/${token}`).set("Cookie", forged)).status).toBe(401);
+
+      // turning protection off reopens the link with no cookie
+      await req(app).put(`/api/knowledge/${kid}/share/protected`).send({ protected: false });
+      r = await req(app).get(`/api/share/${token}`);
+      expect(r.status).toBe(200);
+      expect(r.body.protected).toBe(false);
+    });
+
+    it("a deleted user, an expired user, and a rotated link all lock the reader out", async () => {
+      const { kid, token } = makeShared();
+      await req(app).put(`/api/knowledge/${kid}/share/protected`).send({ protected: true });
+      const added = await req(app)
+        .post(`/api/knowledge/${kid}/share/users`)
+        .send({ username: "r", password: "p", expires_in_days: 3 });
+      const uid = (added.body.users as { id: number }[])[0].id;
+      const login = await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" });
+      const cookie = cookieOf(login);
+      expect((await req(app).get(`/api/share/${token}`).set("Cookie", cookie)).status).toBe(200);
+
+      // expired: login says so explicitly, and the old cookie stops working
+      shareUsers.setExpiresAtForTest(uid, new Date(Date.now() - 1000).toISOString());
+      const late = await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" });
+      expect(late.status).toBe(401);
+      expect(late.body.error).toBe("expired");
+      expect((await req(app).get(`/api/share/${token}`).set("Cookie", cookie)).status).toBe(401);
+      const listed = await req(app).get(`/api/knowledge/${kid}/share`);
+      expect((listed.body.users as { expired: boolean }[])[0].expired).toBe(true);
+
+      // deleted
+      shareUsers.setExpiresAtForTest(uid, null);
+      expect((await req(app).get(`/api/share/${token}`).set("Cookie", cookie)).status).toBe(200);
+      await req(app).delete(`/api/knowledge/${kid}/share/users/${uid}`);
+      expect((await req(app).get(`/api/share/${token}`).set("Cookie", cookie)).status).toBe(401);
+
+      // rotated link: the cookie is bound to the old token name
+      await req(app).post(`/api/knowledge/${kid}/share/users`).send({ username: "r", password: "p" });
+      const again = cookieOf(await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" }));
+      const rot = await req(app).post(`/api/knowledge/${kid}/share/rotate`);
+      const token2 = rot.body.share_token as string;
+      expect((await req(app).get(`/api/share/${token2}`).set("Cookie", again)).status).toBe(401);
+    });
+
+    it("throttles repeated failed logins per link", async () => {
+      const { kid, token } = makeShared();
+      await req(app).put(`/api/knowledge/${kid}/share/protected`).send({ protected: true });
+      await req(app).post(`/api/knowledge/${kid}/share/users`).send({ username: "r", password: "p" });
+      for (let i = 0; i < 10; i++) {
+        expect((await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "bad" })).status).toBe(401);
+      }
+      const blocked = await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" });
+      expect(blocked.status).toBe(429);
+    });
+
+    it("login on an unprotected or unknown link is a no-op", async () => {
+      const { token } = makeShared();
+      expect((await req(app).post(`/api/share/${token}/login`).send({ username: "r", password: "p" })).status).toBe(400);
+      expect((await req(app).post(`/api/share/nosuch/login`).send({ username: "r", password: "p" })).status).toBe(404);
     });
   });
 

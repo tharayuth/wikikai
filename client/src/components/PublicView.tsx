@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { attachInlineImageLightbox } from "../lib/imageLightbox";
 import { ArticleResizeHandle } from "./ArticleResizeHandle";
+import { ShareLogin } from "./ShareLogin";
 
 /**
  * Public, read-only viewer for a single shared knowledge document.
@@ -27,6 +28,11 @@ interface ShareData {
     version: number;
   };
   pages: SharePage[];
+  /** True when the link is password protected (the reader has already
+   *  logged in if this payload arrived at all). */
+  protected: boolean;
+  /** Username of the share user who unlocked it; null on an open link. */
+  viewer: string | null;
 }
 
 function readTheme(): "light" | "dark" {
@@ -39,7 +45,9 @@ function readTheme(): "light" | "dark" {
 
 export function PublicView({ token }: { token: string }): JSX.Element {
   const [data, setData] = useState<ShareData | null>(null);
-  const [error, setError] = useState<"not-found" | "error" | null>(null);
+  const [error, setError] = useState<"not-found" | "login" | "error" | null>(null);
+  // Bumped after a successful login (or logout) to refetch the document.
+  const [authGen, setAuthGen] = useState(0);
   const [activePid, setActivePid] = useState<number | null>(null);
   const [html, setHtml] = useState<string>("");
   const [theme, setTheme] = useState<"light" | "dark">(readTheme());
@@ -58,9 +66,14 @@ export function PublicView({ token }: { token: string }): JSX.Element {
   // Load the shared document's metadata + page list.
   useEffect(() => {
     let alive = true;
+    setError(null);
     fetch(`/api/share/${encodeURIComponent(token)}`)
       .then((r) => {
-        if (!r.ok) throw new Error(r.status === 404 ? "not-found" : "error");
+        if (!r.ok) {
+          throw new Error(
+            r.status === 404 ? "not-found" : r.status === 401 ? "login" : "error",
+          );
+        }
         return r.json() as Promise<ShareData>;
       })
       .then((d) => {
@@ -72,12 +85,25 @@ export function PublicView({ token }: { token: string }): JSX.Element {
         setActivePid(initial);
       })
       .catch((e: Error) => {
-        if (alive) setError(e.message === "not-found" ? "not-found" : "error");
+        if (!alive) return;
+        setError(
+          e.message === "not-found" || e.message === "login" ? e.message : "error",
+        );
       });
     return () => {
       alive = false;
     };
-  }, [token]);
+  }, [token, authGen]);
+
+  const logout = () => {
+    fetch(`/api/share/${encodeURIComponent(token)}/logout`, { method: "POST" })
+      .catch(() => undefined)
+      .finally(() => {
+        setData(null);
+        setActivePid(null);
+        setAuthGen((g) => g + 1);
+      });
+  };
 
   // Load the rendered HTML for the active page; keep the URL hash in sync
   // so a page is deep-linkable (`/share/<token>#<pid>`).
@@ -132,6 +158,9 @@ export function PublicView({ token }: { token: string }): JSX.Element {
       />
     );
   }
+  if (error === "login") {
+    return <ShareLogin token={token} onSuccess={() => setAuthGen((g) => g + 1)} />;
+  }
   if (error) {
     return <ShareMessage title="เกิดข้อผิดพลาด" detail="โหลดเอกสารไม่สำเร็จ" />;
   }
@@ -150,15 +179,27 @@ export function PublicView({ token }: { token: string }): JSX.Element {
           <span className="public-brand">WikiKai</span>
           <h1 className="public-title">{data.knowledge.title}</h1>
         </div>
-        <button
-          type="button"
-          className="public-theme-btn"
-          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          title="สลับธีม"
-          aria-label="Toggle theme"
-        >
-          {theme === "dark" ? "☀" : "☾"}
-        </button>
+        <div className="public-header-actions">
+          {data.protected && (
+            <button
+              type="button"
+              className="public-logout-btn"
+              onClick={logout}
+              title={data.viewer ? `ออกจากระบบ (${data.viewer})` : "ออกจากระบบ"}
+            >
+              {data.viewer ? `${data.viewer} · ออก` : "ออก"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="public-theme-btn"
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            title="สลับธีม"
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? "☀" : "☾"}
+          </button>
+        </div>
       </header>
       {/* Two page pickers, one shown at a time by CSS: a dropdown where
           width is scarce, a persistent list once there is room for one.

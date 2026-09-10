@@ -4729,6 +4729,210 @@ button.ki-id-badge::after {
   display: flex;
   gap: 8px;
 }
+.share-modal-wide {
+  max-width: 600px;
+}
+
+/* ─── Share dialog: password gate + share users ─── */
+.share-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.share-mode {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px 10px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.share-mode legend {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 0 4px;
+}
+.share-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.share-warn {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.share-users {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.share-users-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.share-users-note {
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: right;
+}
+.share-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.share-users-table th,
+.share-users-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.share-users-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.share-users-table td:last-child {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+.share-users-table tr.expired td {
+  color: var(--text-3);
+}
+.share-user-name {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.share-user-exp {
+  white-space: nowrap;
+}
+.share-user-forever {
+  color: var(--text-3);
+}
+.share-expired-tag {
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.share-add-user {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.share-add-row {
+  display: flex;
+  gap: 6px;
+}
+.share-add-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.share-add-row input.share-days {
+  flex: 0 0 64px;
+  text-align: center;
+}
+.share-add-row input.invalid {
+  border-color: #b91c1c;
+}
+.share-days-preview {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.share-days-preview.invalid {
+  color: #b91c1c;
+}
+
+/* ─── Public viewer: login form + header actions ─── */
+.public-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.public-logout-btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2, var(--text));
+  cursor: pointer;
+  white-space: nowrap;
+}
+.public-logout-btn:hover {
+  background: var(--bg);
+}
+.public-login {
+  margin: 12vh auto 0;
+  width: min(360px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.public-login h1 {
+  font-size: 17px;
+  margin: 4px 0 0;
+}
+.public-login label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.public-login input {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.public-login-error {
+  margin: 0;
+  font-size: 13px;
+  color: #b91c1c;
+}
+[data-theme="dark"] .share-warn,
+[data-theme="dark"] .share-expired-tag,
+[data-theme="dark"] .share-days-preview.invalid,
+[data-theme="dark"] .public-login-error {
+  color: #fca5a5;
+}
 
 /* Public viewer — phone / small-tablet tuning */
 @media (max-width: 640px) {

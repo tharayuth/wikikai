@@ -51,6 +51,13 @@ export function openDb(dbPath: string): Db {
     // token in the /share/<token> URL.
     db.exec(`ALTER TABLE knowledge ADD COLUMN share_token TEXT`);
   }
+  if (!hasColumn(db, "knowledge", "share_protected")) {
+    // 0 = anyone with the share link reads it; 1 = the link first asks for
+    // one of the knowledge's `share_users` credentials.
+    db.exec(
+      `ALTER TABLE knowledge ADD COLUMN share_protected INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
   // Unique index lives here (not in schema.sql) so it runs AFTER the column
   // exists on BOTH fresh DBs (column from CREATE TABLE) and legacy DBs (column
   // from the ALTER above). NULLs are distinct in SQLite, so un-shared rows

@@ -412,6 +412,25 @@ export class KnowledgeStore {
     return token;
   }
 
+  /** Whether the public link demands a share-user login first. */
+  isShareProtected(id: number): boolean {
+    const row = this.db
+      .prepare(`SELECT share_protected FROM knowledge WHERE id = ?`)
+      .get(id) as { share_protected: number } | undefined;
+    return row?.share_protected === 1;
+  }
+
+  /** Switch the link between "open to anyone with it" and "asks for a
+   *  share user". Independent of whether any share users exist — the UI
+   *  warns when protection is on with nobody who could log in. */
+  setShareProtected(id: number, on: boolean): void {
+    const r = this.db
+      .prepare(`UPDATE knowledge SET share_protected = ? WHERE id = ?`)
+      .run(on ? 1 : 0, id);
+    if (r.changes === 0) throw new Error(`knowledge #${id} not found`);
+    emitEvent({ type: "knowledge-changed" });
+  }
+
   /** Disable sharing — clears the token so the public link 404s. */
   disableShare(id: number): void {
     this.db

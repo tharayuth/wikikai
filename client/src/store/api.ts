@@ -45,6 +45,20 @@ export interface ShareStatus {
   shared: boolean;
   share_token: string | null;
   url: string | null;
+  /** When true the link asks for one of `users` before showing anything. */
+  protected: boolean;
+  users: ShareUser[];
+}
+
+/** A throwaway reader credential for one shared knowledge — unrelated to
+ *  portal accounts. Mirrors `ShareUser` in `src/store/shareUsers.ts`. */
+export interface ShareUser {
+  id: number;
+  knowledge_id: number;
+  username: string;
+  expires_at: string | null;
+  created_at: string;
+  expired: boolean;
 }
 
 export interface PageContent {
@@ -480,6 +494,42 @@ export const portalApi = createApi({
         { type: "KnowledgeList", id: "LIST" },
       ],
     }),
+    // Password gate on the share link. These only touch the Share status —
+    // the sidebar badge shows "shared", not "protected".
+    setShareProtected: builder.mutation<
+      ShareStatus,
+      { id: number; protected: boolean }
+    >({
+      query: ({ id, protected: on }) => ({
+        url: `knowledge/${id}/share/protected`,
+        method: "PUT",
+        body: { protected: on },
+      }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: "Share", id }],
+    }),
+    addShareUser: builder.mutation<
+      ShareStatus,
+      {
+        id: number;
+        username: string;
+        password: string;
+        expires_in_days: number | null;
+      }
+    >({
+      query: ({ id, ...body }) => ({
+        url: `knowledge/${id}/share/users`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: "Share", id }],
+    }),
+    removeShareUser: builder.mutation<ShareStatus, { id: number; uid: number }>({
+      query: ({ id, uid }) => ({
+        url: `knowledge/${id}/share/users/${uid}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: "Share", id }],
+    }),
 
     getPage: builder.query<PageContent, number>({
       query: (pid) => `pages/${pid}`,
@@ -809,4 +859,7 @@ export const {
   useEnableShareMutation,
   useRotateShareMutation,
   useDisableShareMutation,
+  useSetShareProtectedMutation,
+  useAddShareUserMutation,
+  useRemoveShareUserMutation,
 } = portalApi;

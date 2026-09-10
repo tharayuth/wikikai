@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import { closeShareModal, showToast } from "../store/uiSlice";
 import { copyText } from "../lib/clipboard";
+import { ShareUsersPanel } from "./ShareUsersPanel";
 import {
   useDisableShareMutation,
   useEnableShareMutation,
@@ -14,7 +15,9 @@ import {
  * Public-share dialog for a single knowledge (`&N`). Opened from the badge
  * menu's "Share…" item. Lets an editor turn on a read-only public link,
  * copy it, rotate it (invalidating the old one), or turn sharing off.
- * The link works for anyone without a login: `/share/<token>`.
+ * The link works for anyone without a login: `/share/<token>` — unless the
+ * editor flips it to password mode in `ShareUsersPanel`, in which case the
+ * link asks for one of the document's own share users first.
  */
 export function ShareModal(): JSX.Element | null {
   const kid = useAppSelector((s) => s.ui.shareKnowledgeId);
@@ -63,7 +66,7 @@ export function ShareModal(): JSX.Element | null {
   return (
     <div className="modal-backdrop show" onClick={() => dispatch(closeShareModal())}>
       <div
-        className="modal share-modal"
+        className={`modal share-modal${shared ? " share-modal-wide" : ""}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -90,8 +93,9 @@ export function ShareModal(): JSX.Element | null {
           ) : shared ? (
             <>
               <p className="share-hint">
-                เปิดแชร์อยู่ — ใครก็ตามที่มีลิงก์นี้เปิดดูได้ (อ่านอย่างเดียว)
-                โดยไม่ต้องล็อกอิน
+                {status.data?.protected
+                  ? "เปิดแชร์อยู่ — คนที่มีลิงก์ต้องใส่ user + password ของเอกสารนี้ก่อนอ่าน (อ่านอย่างเดียว)"
+                  : "เปิดแชร์อยู่ — ใครก็ตามที่มีลิงก์นี้เปิดดูได้ (อ่านอย่างเดียว) โดยไม่ต้องล็อกอิน"}
               </p>
               <div className="share-link-row">
                 <input
@@ -133,6 +137,7 @@ export function ShareModal(): JSX.Element | null {
                   ปิดการแชร์
                 </button>
               </div>
+              {status.data && <ShareUsersPanel kid={kid as number} status={status.data} />}
             </>
           ) : (
             <>

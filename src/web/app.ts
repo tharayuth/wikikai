@@ -25,6 +25,14 @@ import {
   sessionMiddleware,
 } from "./auth.js";
 import { ForbiddenError, assertProjectAccess } from "../lib/permissions.js";
+import type { ShareUserStore } from "../store/shareUsers.js";
+import {
+  ShareLoginLimiter,
+  clearShareCookie,
+  resolveShareViewer,
+  setShareCookie,
+} from "./shareAccess.js";
+import type { KnowledgeMetadata } from "../store/knowledge.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -38,6 +46,8 @@ export interface BuildAppOptions {
   users: UserStore;
   sessions: SessionStore;
   permissions: PermissionStore;
+  /** Per-knowledge throwaway credentials for password-protected share links. */
+  shareUsers: ShareUserStore;
   /** Defaults to true. When false, project-level ACL is bypassed. */
   projectAclEnabled?: boolean;
   handlers: ToolHandlers;
@@ -353,13 +363,19 @@ export function buildApp(opts: BuildAppOptions): Express {
   // A non-null share_token makes a knowledge readable, read-only, without a
   // login via /share/<token>. Enabling/rotating/disabling requires edit
   // access to the knowledge's project — same gate as any other mutation.
-  const shareStatus = (token: string | null) => ({
-    shared: !!token,
-    share_token: token,
-    url: token
-      ? `${opts.publicBaseUrl.replace(/\/$/, "")}/share/${token}`
-      : null,
-  });
+  const shareStatus = (id: number) => {
+    const token = opts.knowledge.getShareToken(id);
+    return {
+      shared: !!token,
+      share_token: token,
+      url: token
+        ? `${opts.publicBaseUrl.replace(/\/$/, "")}/share/${token}`
+        : null,
+      /** True when the link asks for one of `users` before showing anything. */
+      protected: opts.knowledge.isShareProtected(id),
+      users: opts.shareUsers.list(id),
+    };
+  };
 
   app.get("/api/knowledge/:id/share", (req, res, next) => {
     try {
@@ -369,7 +385,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       gateEdit(req, id);
-      res.json(shareStatus(opts.knowledge.getShareToken(id)));
+      res.json(shareStatus(id));
     } catch (e) {
       next(e);
     }
@@ -383,7 +399,8 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       gateEdit(req, id);
-      res.json(shareStatus(opts.knowledge.enableShare(id)));
+      opts.knowledge.enableShare(id);
+      res.json(shareStatus(id));
     } catch (e) {
       next(e);
     }
@@ -397,7 +414,8 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       gateEdit(req, id);
-      res.json(shareStatus(opts.knowledge.rotateShare(id)));
+      opts.knowledge.rotateShare(id);
+      res.json(shareStatus(id));
     } catch (e) {
       next(e);
     }
@@ -412,10 +430,187 @@ export function buildApp(opts: BuildAppOptions): Express {
       }
       gateEdit(req, id);
       opts.knowledge.disableShare(id);
-      res.json(shareStatus(null));
+      res.json(shareStatus(id));
     } catch (e) {
       next(e);
     }
+  });
+
+  // ─── Share password gate management (authenticated, edit-gated) ───
+  // Optional second layer on top of the token: when `protected` is on, the
+  // link first asks for one of the knowledge's share users. Those users are
+  // unrelated to portal accounts — see `share_users` in schema.sql.
+  app.put("/api/knowledge/:id/share/protected", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      const on = (req.body ?? {}).protected;
+      if (typeof on !== "boolean") {
+        res.status(400).json({ error: "protected must be a boolean" });
+        return;
+      }
+      opts.knowledge.setShareProtected(id, on);
+      res.json(shareStatus(id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/api/knowledge/:id/share/users", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      const body = (req.body ?? {}) as {
+        username?: unknown;
+        password?: unknown;
+        expires_in_days?: unknown;
+      };
+      if (typeof body.username !== "string" || typeof body.password !== "string") {
+        res.status(400).json({ error: "username and password are required" });
+        return;
+      }
+      const days = body.expires_in_days;
+      if (days != null && typeof days !== "number") {
+        res.status(400).json({ error: "expires_in_days must be a number or null" });
+        return;
+      }
+      try {
+        opts.shareUsers.add({
+          knowledge_id: id,
+          username: body.username,
+          password: body.password,
+          expires_in_days: days ?? null,
+        });
+      } catch (e) {
+        res.status(400).json({ error: (e as Error).message });
+        return;
+      }
+      res.json(shareStatus(id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/api/knowledge/:id/share/users/:uid", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!opts.knowledge.get(id)) {
+        res.status(404).json({ error: `knowledge #${id} not found` });
+        return;
+      }
+      gateEdit(req, id);
+      const uid = parseId(req.params.uid);
+      if (!opts.shareUsers.remove(id, uid)) {
+        res.status(404).json({ error: `share user #${uid} not found` });
+        return;
+      }
+      res.json(shareStatus(id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /**
+   * Resolve `req.params.token` to its knowledge AND enforce the password
+   * gate. Writes the 404 / 401 itself and returns null when the caller must
+   * stop; otherwise hands back the knowledge plus who unlocked it (null on
+   * an open link). `kind` picks the error body shape for JSON APIs vs the
+   * HTML viewer windows.
+   */
+  const loginLimiter = new ShareLoginLimiter();
+  function openShare(
+    req: Request,
+    res: Response,
+    kind: "json" | "html",
+  ): { k: KnowledgeMetadata; viewer: string | null } | null {
+    const token = String(req.params.token);
+    const k = opts.knowledge.findByShareToken(token);
+    if (!k) {
+      if (kind === "json") res.status(404).json({ error: "share link not found" });
+      else res.status(404).type("text/html").send("<p>not found</p>");
+      return null;
+    }
+    if (!opts.knowledge.isShareProtected(k.id)) return { k, viewer: null };
+    const viewer = resolveShareViewer(req, token, k.id, opts.shareUsers);
+    if (viewer) return { k, viewer: viewer.username };
+    if (kind === "json") {
+      res.status(401).json({ error: "login required", protected: true });
+    } else {
+      const back = `/share/${encodeURIComponent(token)}`;
+      res
+        .status(401)
+        .type("text/html")
+        .send(`<p>login required — <a href="${back}">open the document</a> and sign in first</p>`);
+    }
+    return null;
+  }
+
+  // Share-user login. Body: { username, password }. Sets the per-link
+  // cookie on success. 400 on an unprotected link (nothing to log into),
+  // 401 `invalid` / `expired`, 429 after repeated misses.
+  app.post("/api/share/:token/login", (req, res, next) => {
+    try {
+      const token = String(req.params.token);
+      const k = opts.knowledge.findByShareToken(token);
+      if (!k) {
+        res.status(404).json({ error: "share link not found" });
+        return;
+      }
+      if (!opts.knowledge.isShareProtected(k.id)) {
+        res.status(400).json({ error: "this link is not password protected" });
+        return;
+      }
+      const { username, password } = (req.body ?? {}) as {
+        username?: unknown;
+        password?: unknown;
+      };
+      if (typeof username !== "string" || typeof password !== "string") {
+        res.status(400).json({ error: "username and password are required" });
+        return;
+      }
+      if (loginLimiter.isBlocked(req, token)) {
+        res.status(429).json({ error: "too many attempts — try again later" });
+        return;
+      }
+      const result = opts.shareUsers.verify(k.id, username, password);
+      if (result === null) {
+        loginLimiter.fail(req, token);
+        res.status(401).json({ error: "invalid" });
+        return;
+      }
+      if (result === "expired") {
+        res.status(401).json({ error: "expired" });
+        return;
+      }
+      loginLimiter.reset(req, token);
+      const full = opts.shareUsers.getWithHash(result.id);
+      if (!full) {
+        res.status(401).json({ error: "invalid" });
+        return;
+      }
+      const { exp } = setShareCookie(res, token, full);
+      res.json({
+        ok: true,
+        username: result.username,
+        expires_at: result.expires_at,
+        cookie_expires_at: new Date(exp).toISOString(),
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/api/share/:token/logout", (req, res) => {
+    clearShareCookie(res, String(req.params.token));
+    res.json({ ok: true });
   });
 
   // ─── Public share read endpoints (NO auth — scoped by the token itself) ───
@@ -424,11 +619,9 @@ export function buildApp(opts: BuildAppOptions): Express {
   // the token resolves to — a page id from any other document 404s.
   app.get("/api/share/:token", (req, res, next) => {
     try {
-      const k = opts.knowledge.findByShareToken(String(req.params.token));
-      if (!k) {
-        res.status(404).json({ error: "share link not found" });
-        return;
-      }
+      const access = openShare(req, res, "json");
+      if (!access) return;
+      const { k, viewer } = access;
       const pages = opts.pages.list(k.id).map((p) => ({
         id: p.id,
         title: p.title,
@@ -444,6 +637,8 @@ export function buildApp(opts: BuildAppOptions): Express {
           version: k.version,
         },
         pages,
+        protected: opts.knowledge.isShareProtected(k.id),
+        viewer,
       });
     } catch (e) {
       next(e);
@@ -452,11 +647,9 @@ export function buildApp(opts: BuildAppOptions): Express {
 
   app.get("/api/share/:token/pages/:pid/rendered", async (req, res, next) => {
     try {
-      const k = opts.knowledge.findByShareToken(String(req.params.token));
-      if (!k) {
-        res.status(404).type("text/html").send("<p>not found</p>");
-        return;
-      }
+      const access = openShare(req, res, "html");
+      if (!access) return;
+      const k = access.k;
       const pid = parseId(req.params.pid);
       const meta = opts.pages.getMetadata(pid);
       // Scope guard: the page must belong to the shared knowledge.
@@ -1291,11 +1484,9 @@ export function buildApp(opts: BuildAppOptions): Express {
   // belong to the knowledge that token shares.
   app.get("/share/:token/mermaid/:pid/:idx", (req, res, next) => {
     try {
-      const k = opts.knowledge.findByShareToken(String(req.params.token));
-      if (!k) {
-        res.status(404).type("text/html").send("<p>not found</p>");
-        return;
-      }
+      const access = openShare(req, res, "html");
+      if (!access) return;
+      const k = access.k;
       sendMermaidViewer(req, res, k.id);
     } catch (e) {
       next(e);
@@ -1304,11 +1495,9 @@ export function buildApp(opts: BuildAppOptions): Express {
 
   app.get("/share/:token/chart/:pid/:idx", (req, res, next) => {
     try {
-      const k = opts.knowledge.findByShareToken(String(req.params.token));
-      if (!k) {
-        res.status(404).type("text/html").send("<p>not found</p>");
-        return;
-      }
+      const access = openShare(req, res, "html");
+      if (!access) return;
+      const k = access.k;
       sendChartViewer(req, res, k.id);
     } catch (e) {
       next(e);
