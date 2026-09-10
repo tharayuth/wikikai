@@ -3,7 +3,8 @@
  *
  * Ranking changes are easy to talk yourself into — a query you happen to try
  * looks better and the work feels done. This runs every query in
- * `test/fixtures/search-eval.json` against the real database and prints the
+ * `test/fixtures/search-eval.json` — a gitignored, machine-local fixture whose
+ * ids point at your own data/index.db — against the real database and prints the
  * numbers that decide it, broken down by the KIND of query so a gain on short
  * keywords can't hide a loss on whole sentences.
  *
@@ -70,6 +71,24 @@ const baselinePath = strArg("--baseline");
 const verbose = process.argv.includes("--verbose");
 
 const fixturePath = path.resolve(here, "..", "test", "fixtures", "search-eval.json");
+if (!fs.existsSync(fixturePath)) {
+  console.error(
+    `No eval fixture at ${fixturePath}.\n\n` +
+      "It is gitignored on purpose: its ids point at whatever is in your own\n" +
+      "data/index.db, so a copy from another machine would score nothing, and\n" +
+      "the queries name real documents. Write your own — a JSON file shaped\n" +
+      "like:\n\n" +
+      '  { "queries": [\n' +
+      '      { "q": "a question you would actually ask",\n' +
+      '        "kind": "th-question",\n' +
+      '        "knowledge": [12], "pages": [34] }\n' +
+      "  ] }\n\n" +
+      "`knowledge` lists every document that would be an acceptable hit; `pages`\n" +
+      "is optional and stricter. `kind` groups the report: th-question,\n" +
+      "en-question, keyword, body, cross-lang, typo, id.",
+  );
+  process.exit(1);
+}
 const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8")) as {
   queries: EvalQuery[];
 };

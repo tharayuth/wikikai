@@ -40,3 +40,7 @@ backup-prod.sh
 
 # Machine-specific context for Claude Code (hosts, paths, ssh targets)
 CLAUDE.local.md
+
+# Search-eval ground truth — its ids point at the live local database, so it
+# is unusable in a fresh clone, and its queries name internal/customer systems.
+test/fixtures/search-eval.json
