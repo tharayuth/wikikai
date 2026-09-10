@@ -152,6 +152,12 @@ throughout), then pulls `items/`, `images/` and `files/`. It stops
 `wikikai-dev` first, because overwriting a SQLite file while a process holds
 it open corrupts it.
 
+`sync-from-prod.sh` is **untracked**, like the ops scripts that preceded it: it
+hardcodes one pair of hosts and has no meaning in a fresh clone. It exists only
+at `geforce:/mnt/data/Dev/wikikai/sync-from-prod.sh`. If that box is ever
+rebuilt the script goes with it — the constraints it encodes are the two bullets
+below, and they are the part worth keeping.
+
 Two consequences worth internalising:
 
 - **Nothing syncs back into production.** Knowledge authored on dev is *lost*
