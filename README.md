@@ -1,293 +1,77 @@
 # WikiKai
 
+**Build knowledge with AI. Keep it ready to use.**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node 20+](https://img.shields.io/badge/node-%E2%89%A520.12-brightgreen)](#requirements)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)](#tech-stack)
+[![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-blue)](https://modelcontextprotocol.io/)
 
-**WikiKai** is a self-hosted **knowledge base + MCP server** — let an AI assistant (Claude Code, Claude Desktop, or any MCP-aware client) write, edit, and recall presentation-ready documents for you. Markdown pages with Mermaid diagrams, Chart.js graphs, interactive checkboxes, image galleries, and stat cards. One persistent, searchable place — not scattered across chat sessions.
+WikiKai is a self-hosted, **AI-native wiki**. Your AI assistant can search, read, create and update documents directly through MCP. Turn conversations into notes, reports, guides and courses, then keep improving them together.
 
-```
-┌─ MCP client (Claude Code, …) ─┐         ┌──────── WikiKai server ────────┐
-│                               │  HTTP   │  /mcp        ← MCP tools         │
-│  39 tools: add_knowledge,     │ ──────► │  /api/*      ← REST for the UI   │
-│  read_page, edit_section,     │         │  /           ← React SPA         │
-│  add_image, add_file,         │         │  /mermaid/.. ← fullscreen viewer │
-│  get_prompt_log, search, …    │         │  /chart/..   ← fullscreen viewer │
-└───────────────────────────────┘         │  /img/<hash> ← image serving     │
-                                          │                                  │
-                                          │  SQLite (FTS5) + items/<id>.md   │
-                                          │  + data/images/<2-prefix>/<hash> │
-                                          │  + data/files/<2-prefix>/<hash>  │
-                                          └──────────────────────────────────┘
-```
+**Explore the live guides:** [English](https://wikikai.cupcode.cc/share/13ba4a37236542d3fe696d74822cc5b18aae2c5105724867) · [Thai](https://wikikai.cupcode.cc/share/291f7ba534b36287d2004812295b825aacd738d7ce83d91c)
 
-<p align="center">
-  <img src="docs/screenshots/01-overview.png" alt="WikiKai overview page with use-case cards" width="900" />
-</p>
+Both guides include working examples of every block type, reusable prompts, and public and password-protected sharing.
 
-## Why
+## Why WikiKai?
 
-Working with an AI day-to-day, every useful answer ends up buried in a chat session you can't search later. WikiKai gives the AI a persistent home to write to:
+- **Let AI do the work.** Create documents, edit sections, update tables, and upload images and files through MCP.
+- **Pick up where you left off.** Organize knowledge into projects and pages, then ask AI to find and reuse it in your next conversation.
+- **Point to exactly what you mean.** Reference a document with `&N`, a page with `#N`, or a table, chart or other supported block with `@N`.
+- **Make knowledge easy to understand.** Combine Markdown, diagrams, charts, KPI cards, step cards, interactive checkboxes, galleries, code and custom HTML layouts.
+- **Share with your audience.** Publish a read-only link, or require a document-specific username and password with optional expiry for each reader.
+- **Keep control.** Self-host your data, manage project permissions, and review page revisions and optional prompt history.
 
-- **Doesn't get lost** — every doc lives in one searchable place, browsable in a sidebar
-- **Presentation-ready** — diagrams, charts, KPI cards, step cards, gallery, interactive checkboxes — not just text walls
-- **Re-editable** — every change is a version snapshot. Roll back, diff old vs new, prune history
-- **Addressable** — every rich block **plus every plain markdown table** has a global `@N` id. Say "update @47" / "row 3 of @58" and the AI uses `get_block` / `get_table_row` / `find_table_rows` to act surgically without reading the whole page
-- **Auditable** — opt-in prompt log records the verbatim request that produced each revision
+## From conversation to knowledge
 
-## Features
+Tell your connected AI what you need:
 
-### Content fences (server-rendered, browser-mounted)
+> Save these meeting notes in WikiKai. Separate decisions from next actions, and add a table of owners and due dates.
 
-| Fence | What it is |
-|---|---|
-| ` ```mermaid ` | Flowchart · sequence · ER · state · mindmap · pie. Click → fullscreen pan/zoom + PNG export |
-| ` ```chart ` | Single Chart.js graph (bar/line/doughnut/…). Click → fullscreen + PNG export |
-| ` ```chart-grid ` | Array of chart configs side-by-side |
-| ` ```stats ` | Inline KPI card row with semantic colors |
-| ` ```steps ` | Numbered step cards (markdown inline allowed inside `body`) |
-| ` ```images ` | Thumbnail gallery → click-to-lightbox + per-image size |
-| ` ```file ` | Attachment card (name · size · type · description · View · Download). View opens a large in-app dialog: images / PDF / audio / video natively, and any text file (sniffed by content, so `.http`, `.sql`, no-extension all work) as plain text; binaries point to Download. Bytes live under an opaque hash; the download restores the original filename; unreferenced files are deleted automatically |
-| Plain `- [ ]` lists + cells | **Interactive checkboxes** — write a GFM task `- [ ] item` in any list, or drop `[ ]` / `[x]` directly into a markdown table cell; clicking writes back to source (version-bumped + revision-snapshotted) |
-| Markdown tables | Get an `@N` id automatically; the AI can `get_table_row({ block_id, row_index })` or `find_table_rows({ block_id, filter })` to read one row without re-fetching the page |
-| ` ```html-embed ` | Raw HTML for layouts markdown can't express — gradient cards, SVG, `<details>`, custom CSS. Embedded `<input type="checkbox">` is also clickable and write-backed |
+> Update the chart at @47 with the new figures, then revise the summary to match.
 
-Plus standard markdown with Shiki syntax highlighting for 30+ languages.
+> Turn our onboarding notes into a training course with lessons, exercises, screenshots and downloadable practice files.
 
-**Click `@N` → menu, edit a block, persist checkbox state** — every rich block is addressable and editable in two paces:
+Open the result in your browser, review it, copy an ID, and keep the conversation going. AI can retrieve a specific block or selected table rows when it only needs part of a document.
 
-<p align="center">
-  <img src="docs/screenshots/02-mermaid-block-menu.png" alt="Mermaid diagram with the @N block-badge menu open showing Copy and Edit actions" width="900" />
-  <br/><em>The <code>@N</code> badge appears on hover. Click it to copy the id (so you can say "update @193") or jump the editor straight to the block's source line.</em>
-</p>
+Sharing settings are managed in the web portal; AI prepares the document through MCP.
 
-<p align="center">
-  <img src="docs/screenshots/03-interactive-checklist.png" alt="Interactive checkboxes with a progress bar and ticked items" width="900" />
-  <br/><em>Interactive checkboxes persist — ticking a <code>- [ ]</code> box writes back to the source (page version bumped, revision snapshotted). The AI can drive the same toggle via the <code>toggle_task</code> tool.</em>
-</p>
+## Run locally
 
-### Document model
-
-```
-Knowledge (&N)  ──┬── Page (#N) ──┬── Markdown content
-                  │               │
-                  │               └── Rich blocks (each gets @N)
-                  │
-                  ├── Project (group key, sidebar grouping)
-                  ├── Tags, session_id, author
-                  └── Revisions per page (snapshot on every change)
-```
-
-- **`&N`** — knowledge id (a whole document)
-- **`#N`** — page id (a tab inside a knowledge)
-- **`@N`** — global rich-block id (mermaid, chart, stats, …)
-- **`:L`** — line number inside a page
-
-URLs follow the same notation: `/&3/#12:42` opens knowledge `&3`, page `#12`, near line 42.
-
-### MCP tool surface (39 tools)
-
-**Knowledge** — `add_knowledge` · `edit_knowledge` · `list_knowledge` · `get_knowledge` · `delete_knowledge` · `get_outline`
-
-**Pages** — `add_page` · `edit_page` · `append_page` · `delete_page` · `list_pages` · `reorder_pages` · `move_page` (relative) · `move_page_to` (absolute position) · `move_page_to_knowledge` (across documents, keeps id + history + images)
-
-**Surgical edits** — `read_page` (with hash) · `edit_lines` · `add_lines` (append to end, no prior read needed) · `insert_lines` (insert before a line) · `edit_section` (heading-anchored, preferred) · `replace_text`
-
-**Tables** — `get_table_row` (one row of a table by `@N` + index) · `get_table_rows` (contiguous range) · `get_table_rows_with_checkbox` (only rows carrying `[ ]`/`[x]`) · `find_table_rows` (header-aware filter across a table without reading the whole page) · `append_table_row` / `append_table_rows` (add rows at the end) · `insert_table_row` / `insert_table_rows` (insert before a row) · `update_table_rows` (replace a row range)
-
-**Search + discovery** — `search` (FTS5 trigram, Thai/CJK works) · `get_block` (fetch by `@N`) · `set_block_caption` (set/clear the `{@N "caption"}` figcaption on a block) · `get_example` (templates with `outline_only` + slice modes)
-
-**Images** — `add_image` (base64 in, **or `path` to import a server-local file with zero base64** when `WIKIKAI_IMAGE_IMPORT_ROOTS` is set; content-addressed) · `get_image` (returns inline image content block)
-
-**Files** — `add_file` (base64 or server-local `path`, any type up to 50MB; returns a ready-to-paste ` ```file ` fence; content-addressed, garbage-collected when no page references it)
-
-**Interaction** — `toggle_task` (flip a plain `- [ ]` / `- [x]` task on a page — the same code path the web UI uses when a user clicks a rendered checkbox)
-
-**Audit** — `get_prompt_log` (rolling list of user prompts that shaped a doc; mutation tools accept opt-in `user_prompt`)
-
-Every mutation tool returns the affected entity's URL so the AI can hand a link straight to the user.
-
-### Web portal
-
-- Theme-aware (light / dark), Sarabun/IBM Plex Sans Thai for Thai content
-- Sidebar grouped by project, with a filter dialog (and **add empty project / move knowledge** workflow)
-- Knowledge tags editable from the `&N` badge menu's **จัดการ tags** dialog (or the info popover), shown on sidebar topics, and selectable from the sidebar tag-filter button for exact chip-based filtering
-- FTS-powered search across content / titles / keywords / block ids (`@47` direct lookup)
-- Per-page version dropdown + line-level diff modal + prune-old-revisions
-- Inline editor (CodeMirror 6) with **Add Images** dialog (file picker + drag-drop, context-aware insertion form)
-- Info popover with project rename + prompt-log timeline
-- Click `@N` badge → menu (Copy / Edit this block — jumps the editor straight to the block's source line)
-- Bearer-token auth for `/mcp` (REST + portal are unprotected by design; gate at the reverse-proxy layer)
-
-## Quick start
+Requires **Node.js 20.12+** and npm.
 
 ```bash
-git clone https://github.com/<you>/wikikai.git
+git clone https://github.com/tharayuth/wikikai.git
 cd wikikai
-npm install
-npm run seed         # optional: creates a bundled "WikiKai — User Guide" tutorial doc
-npm run dev          # server on :3939, Vite HMR on :5173
+npm ci
+cp .env.example .env
+npm run build
+HOST=127.0.0.1 npm start
 ```
 
-Open <http://localhost:5173> for the dev UI (HMR + proxied API), or <http://localhost:3939> for the production-built portal. If you ran `npm run seed`, the sidebar already has a 12-tab walkthrough with examples of every fence type.
+Open [localhost:3939](http://localhost:3939). For development with hot reload, run `npm run dev` and open [localhost:5173](http://localhost:5173).
 
-### Hook it up to Claude Code
+## Connect your AI
 
-```jsonc
-// ~/.claude/settings.json
-{
-  "mcpServers": {
-    "wikikai": {
-      "type": "http",
-      "url": "http://localhost:3939/mcp"
-    }
-  }
-}
-```
+Add WikiKai to an AI client that supports **MCP over Streamable HTTP**:
 
-Restart Claude Code; all 39 tools appear automatically. Try:
-
-> Save what we just discussed as a knowledge titled "Postgres timeout fix", project "infra-notes".
-
-> Open the document we made last week and append a new page called "Rollback procedure".
-
-> Tick @118 item 1 — done.
-
-### Install the Claude skill (recommended)
-
-The MCP tools alone leave it to Claude to guess **when** to use WikiKai. A small skill file shipped in this repo at [`docs/skill/SKILL.md`](docs/skill/SKILL.md) gives Claude Code explicit triggers — "save this", "บันทึก", `&N` / `#N` references, the recommended creation / search / edit / reference workflows, and the do-/don't-list for token-efficient calls.
-
-```bash
-mkdir -p ~/.claude/skills/wikikai
-cp docs/skill/SKILL.md ~/.claude/skills/wikikai/SKILL.md
-# Or symlink so it stays in sync as you pull new versions:
-#   ln -s "$(pwd)/docs/skill/SKILL.md" ~/.claude/skills/wikikai/SKILL.md
-```
-
-Restart Claude Code once more. The skill is announced at session start and will invoke itself when its keyword triggers fire — you can also force it with `/wikikai` if your client supports skill commands.
-
-## Requirements
-
-- **Node ≥ 20.12** (uses `process.loadEnvFile`)
-- Native modules — `better-sqlite3`, `@rollup/rollup-*` — must be rebuilt against the active Node ABI when changing Node versions. Run `npm rebuild` after switching.
-
-## Configuration
-
-All settings come from env vars (or `.env` in the project root). See [`.env.example`](.env.example).
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `3939` | HTTP port |
-| `HOST` | `0.0.0.0` | Bind address |
-| `DATA_DIR` | `./data` | Where SQLite + items + images live |
-| `DB_PATH` | `<DATA_DIR>/index.db` | SQLite file |
-| `ITEMS_DIR` | `<DATA_DIR>/items` | Per-page raw markdown files |
-| `PUBLIC_BASE_URL` | derived from HOST + LAN IP | URL surfaced in tool responses |
-| `WIKIKAI_TOKEN` | unset | If set, `/mcp` requires `Authorization: Bearer <token>` |
-| `WIKIKAI_WEB_AUTH` | `0` | If `1`, enables multi-user auth + per-project permissions (requires reverse-proxy for HTTPS + OAuth2) |
-| `WIKIKAI_PROJECT_ACL` | `1` | If `0`, disables project permission enforcement (emergency rollback) |
-| `WIKIKAI_IMAGE_IMPORT_ROOTS` | unset | Comma-separated absolute dirs. When set, `add_image({ path })` reads a local file off the server disk (no base64 → big token saving for same-machine images). Keep roots narrow — `/img` is unauthenticated. |
-
-## Per-project permissions
-
-When `WIKIKAI_WEB_AUTH=1`, non-admin users start with no access. An admin can open **Manage users → Edit → Project access** to grant `view` or `edit` per project. The grant applies to the web portal and to the user's MCP token equally. Set `WIKIKAI_PROJECT_ACL=0` to disable enforcement temporarily (emergency rollback).
-
-## Tech stack
-
-- **Server**: Node ≥ 20.12, TypeScript (strict), Express, `better-sqlite3` with SQLite FTS5 (trigram tokenizer for Thai/CJK), `@modelcontextprotocol/sdk` over Streamable HTTP, Zod, markdown-it, Shiki
-- **Client**: React 18 + Redux Toolkit (RTK Query), Vite, CodeMirror 6 (inline editor), Mermaid 11, Chart.js 4
-- **Tests**: Vitest + Supertest (100+ tests covering store, markdown rendering, REST routes, tool handlers)
-- **No ORM** — `better-sqlite3` prepared statements are deliberate. The dependency list is intentionally short.
-
-## URL scheme
-
-| URL | Means |
+| Setting | Value |
 |---|---|
-| `/&3` | knowledge `&3`, first page (auto-picked) |
-| `/&3/#12` | knowledge `&3`, page `#12` |
-| `/&3/#12:42` | knowledge `&3`, page `#12`, scroll near line 42 |
-| `/mermaid/12/0` | fullscreen viewer for the 1st mermaid block on page `#12` |
-| `/chart/12/0` | fullscreen viewer for the 1st chart on page `#12` |
-| `/img/<hash>.<ext>` | content-addressed image serving (immutable, cacheable forever) |
+| Server URL | `http://localhost:3939/mcp` |
+| Authorization, when enabled | `Authorization: Bearer <your-token>` |
 
-## Repository layout
+For a hosted instance, use its HTTPS URL followed by `/mcp`. With web authentication enabled, find your personal **MCP API token** and an example configuration in the account menu.
 
-```
-src/
-  index.ts            entry — loads .env then startServer()
-  server.ts           wires config, stores, MCP, web app
-  lib/config.ts       env → typed Config
-  store/
-    db.ts             SQLite connection + schema apply
-    schema.sql        knowledge / pages / page_revisions / images / prompt_log / FTS5
-    knowledge.ts      knowledge CRUD + project registry
-    pages.ts          page CRUD, line ops, block id allocation + injection, FTS sync
-    images.ts         content-addressed image storage
-    promptLog.ts      rolling per-knowledge prompt log (capped at 500 chars)
-  mcp/
-    server.ts         registers all 38 tools on the MCP SDK
-    handlers.ts       Zod schemas + tool implementations (single source of truth)
-    examples/         markdown reference content served via get_example
-  web/
-    app.ts            Express routes — /api, /mcp, /mermaid, /chart, /img, static SPA
-    mcpRoute.ts       Streamable HTTP transport + session map
-    mermaidViewer.ts  standalone fullscreen Mermaid HTML (pan/zoom/PNG export)
-    chartViewer.ts    standalone fullscreen Chart.js HTML (PNG export)
-  render/markdown.ts  markdown-it pipeline with all custom fences
+The optional [WikiKai skill](docs/skill/SKILL.md) gives compatible agents guidance on when to save knowledge and how to work with pages and blocks.
 
-client/src/           React SPA (sidebar, tabs, viewer, search, editor, modals)
-scripts/              one-shot scripts for seeding tutorials and migrations
-test/                 vitest — knowledge / pages / markdown / web / tools / config
-```
+## Under the hood
 
-## Development
+**TypeScript · React · Express · SQLite · Markdown · Mermaid · Chart.js**
 
-```bash
-npm run dev          # tsx watch (server) + vite (HMR client), concurrent
-npm run typecheck    # strict TS across both projects
-npm test             # vitest
-npm run build        # tsc + vite build → dist/ + client/dist/
-npm start            # tsx src/index.ts (production-style, no watch)
-npm run seed         # populate an empty DB with the bundled tutorial doc
-```
+Document metadata and search indexes live in SQLite. Page content is stored as Markdown files, with images and attachments alongside them.
 
-The web UI is served two ways:
-- `npm run dev`: client at <http://localhost:5173> (HMR), proxying `/api`, `/mcp`, `/mermaid`, `/chart`, `/img` to the server on `:3939`
-- Production build: `client/dist/` served by Express on `:3939`
+- [Configuration](.env.example) — storage, authentication and server settings.
+- [Deployment](DEPLOY.md) — production builds and hosting.
+- Development checks: `npm run typecheck` and `npm test`.
 
-When editing UI, hit `:5173` for HMR. `:3939` serves the most recent `npm run build:client` output.
+Ideas, bug reports and pull requests are welcome.
 
-## Deployment
-
-See [`DEPLOY.md`](DEPLOY.md) for systemd unit, nginx + TLS reverse proxy, data migration, and the bearer-token auth model.
-
-## Roadmap
-
-- [ ] Export knowledge to standalone HTML / PDF
-- [ ] Tag autocomplete in the editor
-- [ ] Multi-user authentication (today: single-tenant + reverse-proxy gate)
-- [ ] Real-time collaborative editing
-- [ ] Mobile-optimised sidebar
-
-Feedback and PRs welcome — see [Contributing](#contributing).
-
-## Contributing
-
-This is an early-stage project; the surface evolves. If you find a bug or want to add a fence type / MCP tool:
-
-1. Open an issue describing the use case first — keeps the dep list short and the tool surface coherent
-2. Write a test (Vitest) — `npm test` must stay green
-3. Match the existing conventions: Zod schemas in `mcp/handlers.ts` are the single source of truth, English-only tool descriptions, theme tokens for all colors, no `any` in new code
-4. Update the in-app help (HelpModal, EN + TH) for user-visible changes
-
-## Author
-
-**Tharayuth Kaewma** — <tharayuth@gmail.com>
-
-## License
-
-[MIT](LICENSE) © 2026 Tharayuth Kaewma. Free for personal and commercial use; please keep the copyright notice.
-
-## Acknowledgements
-
-Built on the shoulders of [Anthropic's MCP](https://modelcontextprotocol.io/), [markdown-it](https://github.com/markdown-it/markdown-it), [Shiki](https://shiki.style/), [Mermaid](https://mermaid.js.org/), [Chart.js](https://www.chartjs.org/), [CodeMirror](https://codemirror.net/), and [better-sqlite3](https://github.com/WiseLibs/better-sqlite3).
+[MIT License](LICENSE) · Created by Tharayuth Kaewma.
