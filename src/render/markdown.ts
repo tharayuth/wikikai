@@ -883,6 +883,17 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     return false;
   });
 
+  // Source coordinates let the reader carry a text selection into Edit raw.
+  md.core.ruler.push("source_lines", (state) => {
+    if (!state.env?.sourceSelection) return;
+    for (const token of state.tokens) {
+      if (token.nesting === 1 && token.map) {
+        token.attrSet("data-source-line", String(token.map[0]));
+        token.attrSet("data-source-end-line", String(token.map[1]));
+      }
+    }
+  });
+
   return md;
 }
 
@@ -893,7 +904,7 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
 export async function renderMarkdown(source: string): Promise<string> {
   const highlighter = await getHighlighter();
   const md = buildMd(highlighter);
-  return md.render(source);
+  return md.render(source, { sourceSelection: true });
 }
 
 export interface TocEntry {

@@ -5,7 +5,7 @@ description: Use WikiKai MCP server to persist presentation-style knowledge — 
 
 # WikiKai skill
 
-WikiKai is an MCP server that stores **knowledge documents** with rich rendering (Mermaid, Chart.js, stat cards, step cards). Each document is a **knowledge** (`&N`) containing multiple **pages** (`#N`). Pages are markdown files indexed by SQLite FTS5. The server exposes a web portal for browsing.
+WikiKai is an MCP server that stores **knowledge documents** with rich rendering (Mermaid, Chart.js, stat cards, step cards). Each document is a **knowledge** (`&N`) containing multiple **pages** (`#N`). Pages are markdown files indexed by SQLite FTS5. The server exposes a web portal for browsing. In the portal, select text before clicking **Edit raw** to focus, scroll to, and select its matching Markdown source. Formatting markers may be included when the selection crosses formatted text.
 
 ## When to use
 

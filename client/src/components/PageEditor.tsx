@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import type { RawSelection } from "../lib/rawSelection";
 import { EditorState, Compartment } from "@codemirror/state";
 import {
   EditorView,
@@ -29,6 +30,7 @@ import { markdown } from "@codemirror/lang-markdown";
 
 interface Props {
   initial: string;
+  initialSelection?: RawSelection | null;
   onChange: (value: string) => void;
   theme: "light" | "dark";
   /** When set, scroll the editor + place the caret at this 1-based line. */
@@ -141,7 +143,7 @@ export interface PageEditorHandle {
 }
 
 export const PageEditor = forwardRef<PageEditorHandle, Props>(function PageEditor(
-  { initial, onChange, theme, jumpToLine, onJumped }: Props,
+  { initial, initialSelection, onChange, theme, jumpToLine, onJumped }: Props,
   handleRef,
 ) {
   const ref = useRef<HTMLDivElement>(null);
@@ -186,6 +188,14 @@ export const PageEditor = forwardRef<PageEditorHandle, Props>(function PageEdito
     });
     const view = new EditorView({ state, parent: ref.current });
     viewRef.current = view;
+    if (initialSelection) {
+      const { from, to } = initialSelection;
+      view.dispatch({
+        selection: { anchor: from, head: to },
+        effects: EditorView.scrollIntoView(from, { y: "center" }),
+      });
+      view.focus();
+    }
     return () => {
       view.destroy();
       viewRef.current = null;

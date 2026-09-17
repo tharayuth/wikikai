@@ -165,7 +165,7 @@ function UserGuideEn() {
 
       <h3>Edit / Delete</h3>
       <ul>
-        <li><strong>Edit raw</strong> — opens a modal to edit the raw markdown of the current page; saving re-renders immediately</li>
+        <li><strong>Edit raw</strong> — edits the raw markdown in place; select text in the page first to scroll, focus and select the matching source. Saving re-renders immediately</li>
         <li><strong>Delete page</strong> — removes the current page only; other pages in the knowledge stay</li>
       </ul>
 
@@ -288,7 +288,7 @@ function UserGuideTh() {
 
       <h3>แก้ไข / ลบ</h3>
       <ul>
-        <li><strong>Edit raw</strong> — เปิด modal แก้ markdown ทั้งหน้า (raw .md), Save แล้วระบบ render ใหม่ทันที</li>
+        <li><strong>Edit raw</strong> — แก้ markdown ทั้งหน้าในหน้าเดิม (raw .md) — เลือกข้อความในหน้าอ่านก่อนกด เพื่อเลื่อน โฟกัส และเลือกข้อความต้นฉบับให้ตรงกัน; Save แล้วระบบ render ใหม่ทันที</li>
         <li><strong>Delete page</strong> — ลบ page เดียว (page อื่นใน knowledge ยังอยู่)</li>
       </ul>
 

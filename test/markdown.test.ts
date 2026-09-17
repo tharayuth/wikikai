@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { renderMarkdown } from "../src/render/markdown.js";
 
 describe("renderMarkdown", () => {
+  it("includes source coordinates for repeated reading blocks", async () => {
+    const out = await renderMarkdown("same\n\nsame");
+    expect(out).toContain('<p data-source-line="0" data-source-end-line="1">same</p>');
+    expect(out).toContain('<p data-source-line="2" data-source-end-line="3">same</p>');
+  });
+
   it("renders basic markdown", async () => {
     const out = await renderMarkdown("# Hello\n\nworld **bold**");
     expect(out).toContain("<h1");
@@ -255,10 +261,10 @@ describe("renderMarkdown", () => {
 
   it("centres a paragraph that holds nothing but one image", async () => {
     const solo = await renderMarkdown("![a](/img/x.png)");
-    expect(solo).toContain('<p class="img-block">');
+    expect(solo).toMatch(/<p class="img-block"[^>]*>/);
 
     const linked = await renderMarkdown("[![a](/img/x.png)](https://e.com)");
-    expect(linked).toContain('<p class="img-block">');
+    expect(linked).toMatch(/<p class="img-block"[^>]*>/);
   });
 
   it("captions a solo image with its alt text, not its title", async () => {

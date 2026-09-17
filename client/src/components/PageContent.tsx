@@ -18,6 +18,7 @@ import { useImageResize } from "../hooks/useImageResize";
 import { useBlockResize } from "../hooks/useBlockResize";
 import { navigateTo } from "../hooks/useHash";
 import { openBadgeMenu } from "../lib/badgeMenu";
+import { captureReadingSelection, resolveReadingSelection, type RawSelection } from "../lib/rawSelection";
 import { PageEditor, type PageEditorHandle } from "./PageEditor";
 import { PageDiffModal } from "./PageDiffModal";
 import { ImageUploadModal } from "./ImageUploadModal";
@@ -103,6 +104,7 @@ export function PageContent({ pageId, line, block }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>("");
   const [diffOpen, setDiffOpen] = useState(false);
+  const [rawSelection, setRawSelection] = useState<RawSelection | null>(null);
   const [jumpLine, setJumpLine] = useState<number | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const editorRef = useRef<PageEditorHandle | null>(null);
@@ -195,6 +197,7 @@ export function PageContent({ pageId, line, block }: Props) {
       }
       setDraft(meta.data.content);
       setEditing(true);
+      setRawSelection(null);
       setJumpLine(target);
     };
     window.addEventListener("wikikai-edit-block", onEditBlock);
@@ -329,6 +332,8 @@ export function PageContent({ pageId, line, block }: Props) {
   };
 
   const onStartEdit = async () => {
+    const selected = captureReadingSelection(bodyRef.current);
+    let content = meta.data!.content;
     // Pull fresh raw + rendered HTML before opening the editor. Checkbox
     // toggles and other optimistic mutations skip the Page tag invalidation
     // (so the rendered article doesn't get yanked + scroll-jumped). Without
@@ -337,10 +342,13 @@ export function PageContent({ pageId, line, block }: Props) {
     // "revert" the box because the cached rendered HTML is also stale.
     try {
       const fresh = await meta.refetch().unwrap();
-      setDraft(fresh.content);
+      content = fresh.content;
     } catch {
-      setDraft(meta.data!.content);
+      // Keep the cached source when the refresh fails.
     }
+    setDraft(content);
+    setJumpLine(null);
+    setRawSelection(selected ? resolveReadingSelection(content, selected) : null);
     rendered.refetch();
     setEditing(true);
   };
@@ -486,6 +494,10 @@ export function PageContent({ pageId, line, block }: Props) {
           <>
             <button
               className="page-edit-btn"
+              onMouseDown={(event) => {
+                // Button focus must not collapse the article selection before click.
+                if (event.button === 0) event.preventDefault();
+              }}
               onClick={onStartEdit}
               title={`Edit the raw markdown of page #${pageId} in place`}
               disabled={viewVersion != null && viewVersion !== currentVersion}
@@ -648,6 +660,7 @@ export function PageContent({ pageId, line, block }: Props) {
             initial={draft}
             onChange={setDraft}
             theme={theme}
+            initialSelection={rawSelection}
             jumpToLine={jumpLine}
             onJumped={() => setJumpLine(null)}
           />
