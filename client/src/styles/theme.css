@@ -2344,7 +2344,8 @@ button.ki-id-badge::after {
 .markdown-body .rich-block-mermaid:hover .block-badge,
 .markdown-body .rich-block-md:hover .block-badge,
 .markdown-body .rich-block-code:hover .block-badge,
-.markdown-body .table-wrap:hover .block-badge {
+.markdown-body .table-wrap:hover .block-badge,
+.markdown-body .secret-block:hover .block-badge {
   opacity: 1;
   pointer-events: auto;
 }
@@ -5362,7 +5363,4 @@ button.ki-id-badge::after {
 .secret-actions {
   display: flex;
   gap: 6px;
-}
-.markdown-body .secret-block:hover .block-badge {
-  opacity: 1;
 }
