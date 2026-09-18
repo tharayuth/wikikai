@@ -5210,3 +5210,159 @@ button.ki-id-badge::after {
     padding: 16px 14px 32px;
   }
 }
+
+/* ─── ```secret block (encrypted credential, click-to-reveal) ─── */
+.secret-block {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.secret-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+}
+.secret-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.secret-btn:hover,
+.secret-card.open .secret-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.secret-card.revealed .secret-btn {
+  background: var(--accent-light);
+}
+.secret-lock {
+  font-size: 13px;
+  line-height: 1;
+}
+.secret-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.secret-panel {
+  width: min(520px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.secret-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.secret-key {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.secret-key:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.secret-reveal,
+.secret-copy,
+.secret-hide {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.secret-reveal,
+.secret-copy {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.secret-reveal:hover:not(:disabled),
+.secret-copy:hover {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.secret-hide:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.secret-reveal:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.secret-cancel {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.secret-cancel:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.secret-hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.secret-error {
+  font-size: 12px;
+  color: var(--red);
+}
+.secret-text {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.secret-actions {
+  display: flex;
+  gap: 6px;
+}
+.markdown-body .secret-block:hover .block-badge {
+  opacity: 1;
+}

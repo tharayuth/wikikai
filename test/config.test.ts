@@ -54,3 +54,11 @@ describe("loadConfig", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("loadConfig secret key", () => {
+  it("is null unless WIKIKAI_SECRET_KEY is set", () => {
+    expect(loadConfig({}).secretKey).toBeNull();
+    expect(loadConfig({ WIKIKAI_SECRET_KEY: "  " }).secretKey).toBeNull();
+    expect(loadConfig({ WIKIKAI_SECRET_KEY: "vault-pass" }).secretKey).toBe("vault-pass");
+  });
+});

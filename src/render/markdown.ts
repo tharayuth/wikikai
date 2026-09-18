@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import { parseImageSize } from "../lib/imageSize.js";
+import { parseSecretEnvelope } from "../lib/secret.js";
 import { parseAnnotation } from "../lib/blockAnnotation.js";
 import anchor from "markdown-it-anchor";
 import { createHighlighter, type Highlighter } from "shiki";
@@ -494,6 +495,43 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     }),
   });
 
+/**
+ * ```secret — an encrypted credential. The body is one envelope (or an array)
+ * produced by `seal_secret`; the server never sees a key here. Rendered as a
+ * small locked button carrying the envelope in `data-secret`; the client
+ * prompts for the key and decrypts with WebCrypto on click.
+ */
+function renderSecretBlock(raw: string, blockId: number | null, caption: string | null): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return `<div class="render-error">secret error: ${escapeHtml((e as Error).message)}</div>`;
+  }
+  const items = Array.isArray(parsed) ? parsed : [parsed];
+  if (items.length === 0) return `<div class="render-error">secret error: empty array</div>`;
+  const buttons = items
+    .map((item, i) => {
+      let env;
+      try {
+        env = parseSecretEnvelope(JSON.stringify(item));
+      } catch (e) {
+        return `<div class="render-error">secret error (item ${i}): ${escapeHtml((e as Error).message)}</div>`;
+      }
+      const label = env.label ?? "Secret";
+      const hint = env.hint ? ` data-hint="${escapeAttr(env.hint)}"` : "";
+      return (
+        `<div class="secret-card" data-secret="${escapeAttr(JSON.stringify(env))}"${hint}>` +
+        `<button type="button" class="secret-btn" title="Click to enter the key and reveal">` +
+        `<span class="secret-lock" aria-hidden="true">🔒</span><span class="secret-label">${escapeHtml(label)}</span>` +
+        `</button>` +
+        `</div>`
+      );
+    })
+    .join("");
+  return `<div class="secret-block"${blockIdAttr(blockId)}>${buttons}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+}
+
   const defaultFence = md.renderer.rules.fence!;
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
@@ -522,6 +560,9 @@ function buildMd(highlighter: Highlighter): MarkdownIt {
     }
     if (info === "file") {
       return renderFileBlock(token.content, blockId, caption) + "\n";
+    }
+    if (info === "secret") {
+      return renderSecretBlock(token.content, blockId, caption) + "\n";
     }
     if (info === "md" || info === "markdown") {
       // Syntax-highlight as markdown source, then wrap in the rich-block

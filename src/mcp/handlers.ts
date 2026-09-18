@@ -24,6 +24,8 @@ import type { PermissionStore } from "../store/permissions.js";
 import type { User, UserStore } from "../store/users.js";
 import { getCallContext } from "../lib/callContext.js";
 import { assertProjectAccess } from "../lib/permissions.js";
+import { formatSecretFence, sealSecret, unsealSecret } from "../lib/secret.js";
+import { findSecretFences } from "../lib/secretFences.js";
 import {
   stripInlineStyles,
   stripHtmlEmbedStylesInMarkdown,
@@ -45,6 +47,9 @@ export interface HandlerContext {
   imageImportRoots?: string[];
   /** True iff local-path image import is enabled. */
   imageImportEnabled?: boolean;
+  /** Server-side default key for `seal_secret` / `reveal_secret`
+   *  (`WIKIKAI_SECRET_KEY`). Null/undefined ⇒ every call must pass `key`. */
+  secretKey?: string | null;
 }
 
 /**
@@ -561,6 +566,55 @@ export const AddFileSchema = z
     }
   });
 
+export const SealSecretSchema = z.object({
+  text: z
+    .string()
+    .min(1)
+    .max(64_000)
+    .describe("The credential to encrypt — a password, token, key file, or a short `user: x / pass: y` block. Never stored in the clear."),
+  label: z
+    .string()
+    .max(200)
+    .optional()
+    .describe("Shown on the locked button in the clear — what the secret IS (e.g. \"prod DB password\"), never the secret itself."),
+  hint: z
+    .string()
+    .max(200)
+    .optional()
+    .describe("Optional reminder of which key unlocks it (e.g. \"team vault passphrase\"), shown beside the key prompt in the clear."),
+  key: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Encryption passphrase. Omit to use the server's `WIKIKAI_SECRET_KEY` (error if that is unset). Ask the user for it when unsure — do not invent one."),
+});
+
+export const RevealSecretSchema = z
+  .object({
+    block_id: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("The `@N` id of a ```secret block — the most direct selector."),
+    page_id: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Page to look on when you have no block id. With one secret on the page nothing else is needed; with several pass `label` or `index`."),
+    label: z.string().optional().describe("Pick the secret whose label matches (case-insensitive) when the page holds several."),
+    index: z.number().int().min(0).optional().describe("0-based position among the page's secrets, in source order."),
+    key: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Decryption passphrase. Omit to try the server's `WIKIKAI_SECRET_KEY`. Ask the user when neither works."),
+  })
+  .refine((v) => v.block_id != null || v.page_id != null, {
+    message: "pass block_id or page_id",
+  });
+
 export const GetImageSchema = z
   .object({
     hash: z
@@ -914,6 +968,8 @@ export type ToolInputs = {
   set_block_caption: z.infer<typeof SetBlockCaptionSchema>;
   add_image: z.infer<typeof AddImageSchema>;
   add_file: z.infer<typeof AddFileSchema>;
+  seal_secret: z.infer<typeof SealSecretSchema>;
+  reveal_secret: z.infer<typeof RevealSecretSchema>;
   get_image: z.infer<typeof GetImageSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
   get_prompt_log: z.infer<typeof GetPromptLogSchema>;
@@ -1303,6 +1359,25 @@ export interface ToolHandlers {
     fence: string;
   }>;
 
+  seal_secret(input: ToolInputs["seal_secret"]): Promise<{
+    /** Ready-to-paste ```secret block. */
+    fence: string;
+    label: string | null;
+    key_source: "argument" | "server";
+  }>;
+
+  reveal_secret(input: ToolInputs["reveal_secret"]): Promise<{
+    text: string;
+    label: string | null;
+    hint: string | null;
+    block_id: number | null;
+    page_id: number;
+    knowledge_id: number;
+    index: number;
+    key_source: "argument" | "server";
+    url: string;
+  }>;
+
   get_image(input: ToolInputs["get_image"]): Promise<{
     hash: string;
     ext: string;
@@ -1584,6 +1659,12 @@ export function buildToolHandlers(
     const { user } = resolveCallerForAcl();
     if (!user || !aclEnabled || user.is_admin) return null;
     return new Set(permissions.listVisibleProjects(user.id, false));
+  }
+
+  function resolveSecretKey(given: string | undefined): { key: string; key_source: "argument" | "server" } {
+    if (given) return { key: given, key_source: "argument" };
+    if (ctx.secretKey) return { key: ctx.secretKey, key_source: "server" };
+    throw new Error("no key: pass `key` (ask the user) or set WIKIKAI_SECRET_KEY on the server");
   }
 
   function gateReadByProject(project: string | null | undefined): void {
@@ -2644,6 +2725,69 @@ export function buildToolHandlers(
         ...meta,
         url: `${base}${meta.src}`,
         fence: "```file\n" + JSON.stringify(entry) + "\n```",
+      };
+    },
+
+    async seal_secret(input) {
+      const parsed = SealSecretSchema.parse(input);
+      const { key, key_source } = resolveSecretKey(parsed.key);
+      const env = await sealSecret(parsed.text, key, { label: parsed.label, hint: parsed.hint });
+      return { fence: formatSecretFence(env), label: env.label ?? null, key_source };
+    },
+
+    async reveal_secret(input) {
+      const parsed = RevealSecretSchema.parse(input);
+      let pageId: number;
+      let wantBlock: number | null = null;
+      if (parsed.block_id != null) {
+        const b = pages.getBlockSummary(parsed.block_id);
+        if (!b) throw new Error(`block @${parsed.block_id} not found`);
+        if (b.kind !== "secret") throw new Error(`block @${parsed.block_id} is a ${b.kind} block, not a secret`);
+        pageId = b.page_id;
+        wantBlock = parsed.block_id;
+      } else {
+        pageId = parsed.page_id!;
+      }
+      gateReadByPid(pageId);
+      const meta = pages.getMetadata(pageId);
+      if (!meta) throw new Error(`page #${pageId} not found`);
+      const all = findSecretFences(pages.get(pageId)!.content);
+      if (all.length === 0) throw new Error(`page #${pageId} has no secret blocks`);
+      let candidates = wantBlock == null ? all : all.filter((f) => f.block_id === wantBlock);
+      if (parsed.label !== undefined) {
+        const want = parsed.label.trim().toLowerCase();
+        candidates = candidates.filter((f) => (f.label ?? "").trim().toLowerCase() === want);
+        if (candidates.length === 0) throw new Error(`no secret labelled "${parsed.label}" on page #${pageId}`);
+      }
+      if (parsed.index !== undefined) {
+        candidates = candidates.filter((f) => f.index === parsed.index);
+        if (candidates.length === 0) throw new Error(`no secret at index ${parsed.index} on page #${pageId}`);
+      }
+      if (candidates.length > 1) {
+        const list = candidates.map((f) => `${f.index}: "${f.label ?? ""}"${f.block_id != null ? ` (@${f.block_id})` : ""}`).join(", ");
+        throw new Error(`page #${pageId} has ${candidates.length} secrets — pass label or index: ${list}`);
+      }
+      const hit = candidates[0];
+      const { key, key_source } = resolveSecretKey(parsed.key);
+      const text = await unsealSecret(hit.envelope, key);
+      recordActivity({
+        action: "reveal",
+        target: "secret",
+        knowledge_id: meta.knowledge_id,
+        page_id: pageId,
+        block_id: hit.block_id,
+        block_caption: hit.label,
+      });
+      return {
+        text,
+        label: hit.label,
+        hint: hit.envelope.hint ?? null,
+        block_id: hit.block_id,
+        page_id: pageId,
+        knowledge_id: meta.knowledge_id,
+        index: hit.index,
+        key_source,
+        url: urlFor(ctx, meta.knowledge_id, pageId, hit.line),
       };
     },
 

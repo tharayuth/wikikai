@@ -4,6 +4,7 @@ import Chart from "chart.js/auto";
 import { openBadgeMenu } from "../lib/badgeMenu.js";
 import { openImageLightbox } from "../lib/imageLightbox.js";
 import { attachFileViewer } from "../lib/fileViewer.js";
+import { attachSecretBlocks } from "../lib/secretBlock.js";
 
 /**
  * Open the shared badge menu for an `@N` block badge. The "Edit" path
@@ -267,6 +268,9 @@ export function useMermaidCharts(
     // view gets the same dialog.
     const detachFileViewer = attachFileViewer(root);
 
+    // ─── ```secret cards → key prompt + in-browser decrypt ───
+    const detachSecrets = attachSecretBlocks(root);
+
     // ─── @N block badges → menu (Copy / Edit code) ───
     // Skipped in read-only mode (public share view): the menu's Copy-content
     // and Edit/Delete actions hit auth-gated /api/blocks endpoints that an
@@ -320,6 +324,7 @@ export function useMermaidCharts(
       }
       closeLightbox?.();
       detachFileViewer();
+      detachSecrets();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

@@ -19,6 +19,7 @@ import { extractMermaidFences, mermaidViewerHtml } from "./mermaidViewer.js";
 import { extractChartConfigs, chartViewerHtml } from "./chartViewer.js";
 import { getRecentToolCall, onEvent } from "../lib/events.js";
 import { withCallContext } from "../lib/callContext.js";
+import { parseSecretEnvelope, unsealSecret } from "../lib/secret.js";
 import {
   attachAuthRoutes,
   requireAuth,
@@ -1323,6 +1324,25 @@ export function buildApp(opts: BuildAppOptions): Express {
       res.json(result);
     } catch (e) {
       next(e);
+    }
+  });
+
+  // Decrypt a ```secret envelope for a browser that has no WebCrypto —
+  // `crypto.subtle` only exists in secure contexts, and the portal is often
+  // reached over plain http on a LAN/VPN address. The normal path decrypts in
+  // the browser and never sends the key; this one is the fallback the client
+  // takes only when `crypto.subtle` is missing. Nothing is stored or logged.
+  app.post("/api/secrets/reveal", async (req, res) => {
+    const body = req.body as { envelope?: unknown; key?: unknown };
+    if (typeof body.key !== "string" || !body.key) {
+      res.status(400).json({ error: "key is required" });
+      return;
+    }
+    try {
+      const env = parseSecretEnvelope(JSON.stringify(body.envelope ?? null));
+      res.json({ text: await unsealSecret(env, body.key) });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
     }
   });
 

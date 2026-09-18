@@ -10,7 +10,8 @@ export type ActivityAction =
   | "toggle"
   | "caption"
   | "upload"
-  | "resize";
+  | "resize"
+  | "reveal";
 
 export type ActivityTarget =
   | "knowledge"
@@ -18,7 +19,8 @@ export type ActivityTarget =
   | "block"
   | "file"
   | "image"
-  | "task";
+  | "task"
+  | "secret";
 
 /** What a single recorded row looks like — what callers pass in (no
  *  `created_at` / `id` / `source` — those are filled in for them). */

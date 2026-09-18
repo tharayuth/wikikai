@@ -59,12 +59,13 @@ A hit is not automatically a leak — a tokenizer test may need a real string, a
 src/
   index.ts             entry — calls process.loadEnvFile then startServer
   server.ts            wires Config → Stores → MCP → Express app
-  lib/config.ts        env → typed Config (incl. mcpToken)
+  lib/config.ts        env → typed Config (incl. mcpToken, secretKey)
+  lib/secret.ts        AES-GCM envelope shared by server + browser (```secret)
   store/db.ts          better-sqlite3 connection + schema.sql apply
   store/knowledge.ts   knowledge metadata CRUD
   store/pages.ts       page CRUD + line-range ops + FTS sync
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
-  mcp/server.ts        registers 38 tools on McpServer
+  mcp/server.ts        registers 41 tools on McpServer
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
   mcp/examples/*.md    markdown reference content
@@ -72,7 +73,7 @@ src/
   web/mcpRoute.ts      MCP transport handler + session map
   web/mermaidViewer.ts standalone fullscreen Mermaid HTML (pan/zoom/export PNG)
   web/chartViewer.ts   standalone fullscreen Chart.js HTML (export PNG)
-  render/markdown.ts   markdown-it + custom fences (mermaid/chart/chart-grid/stats/steps)
+  render/markdown.ts   markdown-it + custom fences (mermaid/chart/chart-grid/stats/steps/file/secret)
 
 client/src/
   App.tsx              shell

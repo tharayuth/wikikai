@@ -145,6 +145,26 @@ An editor can turn on a per-document **public read-only share link** from the
   sharing off makes the link 404. Enabling/rotating/disabling requires edit
   access to the document's project.
 
+### Encrypted credential blocks (`WIKIKAI_SECRET_KEY`)
+
+A ```` ```secret ```` block holds a credential as AES-256-GCM ciphertext (key
+derived from a passphrase with PBKDF2-SHA256, 600k iterations). Three ways
+it gets decrypted, and what each one exposes:
+
+- **Browser, secure context (https / localhost).** The reader types the key;
+  WebCrypto decrypts in the page. The server never sees key or plaintext.
+- **Browser, plain http.** `crypto.subtle` does not exist there, so the client
+  posts `{ envelope, key }` to `POST /api/secrets/reveal` and the server
+  decrypts. Nothing is stored or logged, but on plain http the key crosses the
+  wire in the clear — like every other credential on that connection. Put TLS
+  in front for anything beyond a private LAN/VPN.
+- **MCP (`reveal_secret`).** The plaintext travels back over the token-gated
+  `/mcp` channel. Optional `WIKIKAI_SECRET_KEY` is the fallback passphrase
+  when the caller passes none — convenient for unattended agents, but it means
+  **anyone holding an MCP token can decrypt every block sealed with it**. Leave
+  it unset to force the AI to ask the user for the key each time. Every reveal
+  writes an activity-log row (never the text).
+
 ### Local-path image import (`WIKIKAI_IMAGE_IMPORT_ROOTS`)
 
 `add_image({ path })` lets the MCP tool import an image by reading it off the

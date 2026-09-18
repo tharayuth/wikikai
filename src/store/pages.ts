@@ -1362,6 +1362,7 @@ export class PageStore {
       "html-embed",
       "images",
       "file",
+      "secret",
       "md",
       "markdown",
       // Plain code-fence languages that opt into the `@N` block-id system

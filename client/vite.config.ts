@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -15,6 +16,9 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     strictPort: true,
+    // The client imports `src/lib/secret.ts` from the server tree so both
+    // sides share one envelope format; let the dev server read it.
+    fs: { allow: [path.resolve(__dirname, "..")] },
     proxy: {
       "/api": { target: API_TARGET, changeOrigin: true },
       "/mcp": { target: API_TARGET, changeOrigin: true, ws: true },

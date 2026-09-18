@@ -17,6 +17,7 @@ Both guides include working examples of every block type, reusable prompts, and 
 - **Pick up where you left off.** Organize knowledge into projects and pages, then ask AI to find and reuse it in your next conversation.
 - **Point to exactly what you mean.** Reference a document with `&N`, a page with `#N`, or a table, chart or other supported block with `@N`.
 - **Make knowledge easy to understand.** Combine Markdown, diagrams, charts, KPI cards, step cards, interactive checkboxes, galleries, code and custom HTML layouts.
+- **Keep credentials with the docs.** A `secret` block stores a password or token encrypted in the page. Readers unlock it in the browser with their key; AI unlocks it through MCP when a task needs it.
 - **Share with your audience.** Publish a read-only link, or require a document-specific username and password with optional expiry for each reader.
 - **Keep control.** Self-host your data, manage project permissions, and review page revisions and optional prompt history.
 

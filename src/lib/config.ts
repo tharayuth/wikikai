@@ -51,6 +51,11 @@ export interface Config {
   imageImportRoots: string[];
   /** Convenience flag — true iff `imageImportRoots` is non-empty. */
   imageImportEnabled: boolean;
+  /** Default passphrase for `seal_secret` / `reveal_secret` when the MCP
+   *  caller passes no `key`. Null (the default) means every call must
+   *  carry its own key. Never used by the web portal, which decrypts in
+   *  the browser with a key the reader types. */
+  secretKey: string | null;
 }
 
 /**
@@ -142,6 +147,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     imageImportRoots.push(real);
   }
   const imageImportEnabled = imageImportRoots.length > 0;
+  const secretKey = (env.WIKIKAI_SECRET_KEY ?? "").trim() || null;
 
   return {
     port,
@@ -159,5 +165,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     projectAclEnabled,
     imageImportRoots,
     imageImportEnabled,
+    secretKey,
   };
 }

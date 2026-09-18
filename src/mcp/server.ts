@@ -1,7 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { EXAMPLE_KINDS } from "./examples.js";
-import type { ToolHandlers } from "./handlers.js";
+import {
+  RevealSecretSchema,
+  SealSecretSchema,
+  type ToolHandlers,
+} from "./handlers.js";
 import { getCallContext, withCallContext } from "../lib/callContext.js";
 
 const SESSION_NOTE =
@@ -1177,6 +1181,38 @@ export function createMcpServer(
       inputSchema: addFileShape,
     },
     async (input) => jsonContent(await handlers.add_file(input)),
+  );
+
+  // ─── Encrypted credentials ───
+  server.registerTool(
+    "seal_secret",
+    {
+      title: "Encrypt a credential into a ```secret block",
+      description:
+        "Encrypt a password / token / key file with a passphrase and get back a paste-ready ```secret fence (`{ fence, label, key_source }`). " +
+        "AES-256-GCM with a PBKDF2-SHA256 key (600k iterations, fresh salt + IV per call) — the page stores only ciphertext, so the credential never appears in read_page, search, revisions or exports. " +
+        "`label` and `hint` stay in the clear on the button; put what the secret IS there, never the value. " +
+        "Insert the fence with add_page / append_page / edit_section like any other block. The portal renders a small 🔒 button; a reader clicks it, types the key, and the text is decrypted in their browser (the server never sees the key on that path). " +
+        "Key: pass `key` when the user gives one; omit it to use the server's `WIKIKAI_SECRET_KEY` (the call fails when neither exists — ask the user rather than inventing a key). " +
+        "Use when the user says 'store this password in the doc', 'keep the API token with the runbook', 'attach the ssh credentials encrypted'.",
+      inputSchema: SealSecretSchema.shape,
+    },
+    async (input) => jsonContent(await handlers.seal_secret(input)),
+  );
+
+  server.registerTool(
+    "reveal_secret",
+    {
+      title: "Decrypt a ```secret block",
+      description:
+        "Decrypt one ```secret block and return `{ text, label, hint, block_id, page_id, index, key_source, url }`. " +
+        "Select by `block_id` (the `@N` on the block — most direct), or by `page_id` when the page holds one secret; with several, add `label` (case-insensitive) or `index` (0-based, source order). Without a selector the error lists every candidate. " +
+        "Key: pass `key` (ask the user for it — the block's `hint` says which one), or omit it to try the server's `WIKIKAI_SECRET_KEY`; a wrong key fails loudly. " +
+        "Project view permission applies, and every reveal is written to the activity log (never the text). " +
+        "Use when the user asks for a stored password, or when a task needs a credential kept in the docs (e.g. ssh to a host described on the same page).",
+      inputSchema: RevealSecretSchema.innerType().shape,
+    },
+    async (input) => jsonContent(await handlers.reveal_secret(input)),
   );
 
   // ─── Image fetch ───

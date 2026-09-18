@@ -15,6 +15,7 @@ import { ShareUserStore } from "../src/store/shareUsers.js";
 import { FileStore } from "../src/store/files.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { buildApp } from "../src/web/app.js";
+import { sealSecret } from "../src/lib/secret.js";
 import type { Express } from "express";
 import type { Server } from "node:http";
 
@@ -73,6 +74,26 @@ describe("HTTP routes", () => {
   afterEach(async () => {
     await closeServers();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  describe("POST /api/secrets/reveal (fallback for insecure contexts)", () => {
+    it("decrypts an envelope with the given key and never with a wrong one", async () => {
+      const env = await sealSecret("s3cret", "pw", { label: "L" });
+      const ok = await req(app).post("/api/secrets/reveal").send({ envelope: env, key: "pw" });
+      expect(ok.status).toBe(200);
+      expect(ok.body).toEqual({ text: "s3cret" });
+      const bad = await req(app).post("/api/secrets/reveal").send({ envelope: env, key: "nope" });
+      expect(bad.status).toBe(400);
+      expect(bad.body.error).toMatch(/wrong key/);
+    });
+
+    it("rejects a malformed request", async () => {
+      const r = await req(app).post("/api/secrets/reveal").send({ envelope: { v: 1 }, key: "pw" });
+      expect(r.status).toBe(400);
+      expect(r.body.error).toMatch(/missing/);
+      const noKey = await req(app).post("/api/secrets/reveal").send({ envelope: {} });
+      expect(noKey.status).toBe(400);
+    });
   });
 
   describe("auth (opt-in)", () => {

@@ -82,6 +82,7 @@ export async function startServer(): Promise<RunningServer> {
       projectAclEnabled: config.projectAclEnabled,
       imageImportRoots: config.imageImportRoots,
       imageImportEnabled: config.imageImportEnabled,
+      secretKey: config.secretKey,
     },
     permissions,
     users,

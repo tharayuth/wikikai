@@ -166,6 +166,7 @@ Pick by intent:
 | Ordered procedure, how-to, deployment runbook | ```steps |
 | Tabular data | **plain markdown table** (gets `@N`, `[ ]`/`[x]` in cells, `find_table_rows` search, `get_table_row` random access) |
 | 4+ side-by-side screenshots as gallery | ```images |
+| A password / token / key that belongs with the doc | ```secret via `seal_secret` — ciphertext in the page, never the value |
 | Single image inline / in prose / in a table cell | plain markdown `![alt](src "WxH")` (has drag-resize + click-lightbox) |
 | Decision matrix with row/col colors, gradient cards, badges, custom `<details>`, inline SVG, iframe | ```html-embed (last resort) |
 
@@ -179,7 +180,27 @@ Pick by intent:
 ```html-embed        — raw HTML for flexible content (richer tables with row colors / col-span / sticky headers, custom card/grid layouts, inline SVG, iframes, <details>). <script> tags are inert by design. **Last resort** — see block-choice rule above
 ```images            — multi-image GALLERY only (4+ side-by-side thumbnails as a uniform grid). For a single image, use plain markdown `![alt](src "WxH")` instead — it now has drag-to-resize + click-to-lightbox, so it covers the same use case with less syntax
 ```file              — attachment card (name · size · type · description · View · Download). Get the fence from `add_file`
+```secret            — encrypted credential (🔒 button; reader types the key, decrypts in the browser). Get the fence from `seal_secret`
 ```typescript / etc  — code blocks with Shiki highlight
+
+## Secrets (encrypted credentials)
+
+To keep a password, token or key file *with* the document without ever writing it in the clear:
+
+1. Get the key. Pass the user's passphrase as `key`, or omit `key` to use the server's `WIKIKAI_SECRET_KEY` (the call errors when neither exists — **ask the user, never invent a key**).
+2. `seal_secret({ text, label?, hint?, key? })` → `{ fence, label, key_source }`. `label` names what the secret is ("prod DB password"); `hint` reminds which key unlocks it. Both stay readable on the button, so never put the value in them.
+3. Paste `fence` into the page like any block (add_page / append_page / edit_section):
+
+   ```markdown
+   ```secret
+   { "v": 1, "label": "prod DB password", "hint": "team vault", "iter": 600000, "salt": "…", "iv": "…", "ct": "…" }
+   ```
+   ```
+
+   AES-256-GCM, key from PBKDF2-SHA256 (600k iterations, fresh salt + IV each call). The page holds ciphertext only — `read_page`, `search`, revisions and exports never see the value. The portal renders a small **🔒 label** button; a reader clicks it, types the key, and the text is decrypted in their browser (the key never reaches the server on that path). Wrong key → clear error, not garbage.
+4. When the user asks for a stored credential, or a task needs one ("ssh to the box on this page"): `reveal_secret({ block_id })` using the `@N` on the block, or `reveal_secret({ page_id, label? | index? })`. Pass `key` (ask the user — the block's `hint` says which) or omit it to try the server key. Returns `{ text, label, hint, block_id, page_id, index, key_source, url }`; with several secrets and no selector the error lists the candidates. Project view permission applies and every reveal is written to the activity log (never the text).
+
+Handle the revealed text like the credential it is: use it for the task, don't echo it back into the conversation or into another page unless the user asks.
 
 ## Files (attachments)
 

@@ -514,3 +514,42 @@ describe("buildToc", () => {
     });
   });
 });
+
+describe("```secret fence", () => {
+  const env = {
+    v: 1,
+    label: "prod <DB> pass",
+    hint: "the usual & one",
+    iter: 600000,
+    salt: "c2FsdHNhbHRzYWx0c2FsdA==",
+    iv: "aXZpdml2aXZpdml2",
+    ct: "Y2lwaGVydGV4dA==",
+  };
+
+  it("renders a small locked button carrying the envelope for the client", async () => {
+    const html = await renderMarkdown("```secret {@7}\n" + JSON.stringify(env) + "\n```\n");
+    expect(html).toContain('class="secret-block"');
+    expect(html).toContain('data-block-id="7"');
+    expect(html).toContain('<button type="button" class="secret-btn"');
+    expect(html).toContain("prod &lt;DB&gt; pass");
+    expect(html).toContain('data-hint="the usual &amp; one"');
+    expect(html).toMatch(/data-secret="[^"]*&quot;ct&quot;:&quot;Y2lwaGVydGV4dA==&quot;/);
+    expect(html).not.toContain("<script");
+  });
+
+  it("falls back to a generic label and accepts an array of envelopes", async () => {
+    const { label: _l, hint: _h, ...bare } = env;
+    const html = await renderMarkdown("```secret\n" + JSON.stringify([bare, env]) + "\n```\n");
+    expect(html.match(/class="secret-btn"/g)).toHaveLength(2);
+    expect(html).toContain("Secret");
+  });
+
+  it("reports a malformed body inline instead of throwing", async () => {
+    const html = await renderMarkdown("```secret\n{ nope\n```\n");
+    expect(html).toContain('class="render-error"');
+    expect(html).toContain("secret error");
+    const bad = await renderMarkdown("```secret\n" + JSON.stringify({ v: 1, salt: "a" }) + "\n```\n");
+    expect(bad).toContain("secret error");
+    expect(bad).toContain("missing");
+  });
+});
