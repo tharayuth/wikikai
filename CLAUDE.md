@@ -33,7 +33,7 @@ gitignored too — being merely *untracked* is not protection, because one
 `git add -A` publishes them.
 
 What **should** stay in this file: conventions, architecture, the URL contract,
-and the constraints that shape a change (loopback-only bind, `DATA_DIR` outside
+and the constraints that shape a change (single-address bind, `DATA_DIR` outside
 the repo, nginx needing its own block for streaming endpoints). A contributor
 needs to know a rule exists; they do not need the coordinates it applies to.
 
@@ -125,23 +125,37 @@ When editing the UI, **open the Vite port (`:5173`)** for HMR. The server port
 `npm run build:client`. On a remote dev box, reach both over the VPN rather than
 exposing them.
 
-## Where this runs — a dev box and a production VPS
+Vite proxies `/api`, `/mcp` and the viewer routes to `http://127.0.0.1:3939`
+unless told otherwise. When the dev server listens anywhere else — another port,
+or a non-loopback bind address — pass the target in:
+
+```bash
+API_TARGET=http://<bind-address>:<port> npm run dev
+```
+
+## Where this runs — one host, two checkouts
 
 There are exactly two live copies and they have different jobs: a **development**
-host where all code is written, and a **production** VPS that serves
-the public site under nginx. Concrete hostnames, addresses, paths and ssh
-targets live in `CLAUDE.local.md`, which is untracked — this repo is public.
+checkout where all code is written, and a **production** checkout that serves
+the public site. They sit side by side on the **same host**, each with its own
+directory, data dir, `.env`, port and pm2 process, and each behind its own nginx
+site on a **separate** reverse-proxy machine. Concrete hostnames, addresses,
+paths and remote-login targets live in `CLAUDE.local.md`, which is untracked —
+this repo is public.
 
 ### The loop
 
-**All code is written on the dev box.** Nothing is edited directly on
-production — it only ever receives what came through `git`.
+**All code is written in the dev checkout.** Nothing is edited directly in the
+production checkout — it only ever receives what came through `git`, even though
+it is one `cd` away.
 
 ```bash
-# 1. work on the dev box, then let the gates pass
+# 1. work in the dev checkout, then let the gates pass
 npm run typecheck && npm test
 
 # 2. see it: Vite HMR, or build and restart the dev pm2 process
+#    (HMR: stop the dev pm2 process first — `npm run dev` wants the same port —
+#     and pass API_TARGET; CLAUDE.local.md names the helper that does both)
 npm run dev
 #   …or…
 npm run build && pm2 restart <dev-process>
@@ -149,8 +163,8 @@ npm run build && pm2 restart <dev-process>
 # 3. commit + push (Conventional Commits — see "Commit style")
 git add -A && git commit -m "feat: …" && git push
 
-# 4. deploy: on the production host, pull + build + restart pm2
-#    git pull && npm ci && npm run build && pm2 restart <prod-process>
+# 4. deploy: in the production checkout, pull + build + restart pm2
+#    git pull --ff-only && npm ci && npm run build && pm2 restart <prod-process>
 
 # 5. verify production actually came back (expect 200)
 curl -s -o /dev/null -w '%{http_code}\n' https://<site>/login
@@ -158,21 +172,46 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<site>/login
 
 `npm ci` on step 4 is only needed when `package-lock.json` moved; a docs- or
 source-only change can skip straight to `npm run build`. `better-sqlite3`
-resolves a prebuilt binary for node v22 on both hosts, so no compiler runs.
+resolves a prebuilt binary for node v22 in both checkouts, so no compiler runs.
 
 A change is **not** deployed because it was pushed. GitHub is a waypoint, not
 the server — production stays on the old build until the deploy step runs.
 
+### Sharing a host with production
+
+Dev and production are separated by configuration, not by hardware, so the
+separation is only as good as these rules:
+
+- **Dev and production never share a database.** Each has its own `DATA_DIR`.
+  Two processes writing one SQLite file, or dev code applying a schema change to
+  live data, is the failure this layout exists to prevent. To see which file a
+  process really has open: `ls -l /proc/<pid>/fd | grep index.db`.
+- **`process.loadEnvFile` does not override variables already in the
+  environment.** Never `export DATA_DIR` / `PORT` / `HOST` in a shell that then
+  runs `pm2 start` or `pm2 restart --update-env` — the exported value beats the
+  checkout's `.env`, and dev can come up pointed at production's data.
+- **Name the pm2 process, always.** `pm2 restart all` / `stop all` /
+  `delete all` takes production down with dev; both live in one daemon.
+- **Dev has its own port and its own public URL.** `PUBLIC_BASE_URL` must be
+  dev's — otherwise share links and emitted `url` fields point at production.
+
 ### Data flows one way: prod → dev
 
-A sync script pulls production data down to dev. It takes a `sqlite3 .backup`
-snapshot (consistent — production keeps serving throughout), then pulls
+A sync script copies production data into dev's data dir — a local copy now
+that both are on one disk. It takes a `sqlite3 .backup` snapshot (consistent —
+production keeps serving throughout and is never stopped), then copies
 `items/`, `images/` and `files/`. It stops the dev process first, because
 overwriting a SQLite file while a process holds it open corrupts it.
 
 The ops scripts (`sync-from-prod.sh`, `backup-prod.sh`) are **gitignored**: they
-hardcode one pair of hosts and have no meaning in a fresh clone. The constraints
-they encode are the two bullets below, and those are the part worth keeping.
+hardcode one set of paths and hosts and have no meaning in a fresh clone. The
+constraints they encode are the bullets below, and those are the part worth
+keeping.
+
+- **Source and destination are hard-coded and guarded, with no env overrides.**
+  On one disk, `rsync --delete` with the pair swapped erases production.
+- **Files are copied, never hardlinked.** A dev write must not be able to reach
+  a production inode.
 
 - **Nothing syncs back into production.** Knowledge authored on dev is *lost*
   on the next sync. Dev is a scratch copy to break; real content is written
@@ -186,15 +225,17 @@ they encode are the two bullets below, and those are the part worth keeping.
 
 ### Production facts that constrain a change
 
-- **The server binds loopback only** in production and nothing else. That host
-  has a public IP; binding `0.0.0.0` would publish WikiKai straight to the
-  internet, bypassing Cloudflare, TLS termination and nginx's real-IP handling.
-  nginx runs on the same box, so loopback is all it needs.
-- **`DATA_DIR` points outside the repo** on both hosts, so a code
+- **The server binds one address only** — the private link the reverse proxy
+  reaches it on — in production and in dev alike. Not loopback: nginx is on
+  another machine. Never `0.0.0.0`: the host has other interfaces, and listening
+  on them would expose WikiKai directly, bypassing Cloudflare, TLS termination
+  and nginx's real-IP handling.
+- **`DATA_DIR` points outside the repo** for both checkouts, so a code
   `rsync --delete` can never wipe the data.
-- **nginx has three `proxy_pass` blocks** — `/api/events` (SSE), `/mcp` and
-  `/`. A new endpoint that needs streaming or a long timeout needs its own
-  block; the default one buffers.
+- **nginx has three `proxy_pass` blocks per site** — `/api/events` (SSE), `/mcp`
+  and `/`. A new endpoint that needs streaming or a long timeout needs its own
+  block; the default one buffers. Dev's site mirrors production's: change the
+  proxy behaviour in both, or dev stops being a faithful test of production.
 - Full runbook, including emergency rollback, lives on the production host as
   `PRODUCTION.md` (path in `CLAUDE.local.md`).
 
@@ -203,7 +244,7 @@ they encode are the two bullets below, and those are the part worth keeping.
 - `better-sqlite3` and `@rollup/rollup-darwin-arm64` are compiled native modules. After switching Node versions (or moving the repo across machines / renaming the directory), you may see `NODE_MODULE_VERSION` mismatch or `code signature ... different Team IDs` errors.
 - Fix with `npm rebuild better-sqlite3` (ABI) or `rm -rf node_modules && npm install` (signature).
 - The bullets above are mostly a **macOS** concern and date from when a Mac was the dev
-  box. On the current Linux hosts (system node v22) `better-sqlite3` resolves a prebuilt
+  box. On the current Linux host (system node v22) `better-sqlite3` resolves a prebuilt
   binary and none of this comes up.
 - On macOS specifically: the hardened-runtime `node` bundled with some IDEs (e.g.
   `/Applications/Codex.app/Contents/Resources/node`) rejects adhoc-signed `.node` files.
