@@ -12,7 +12,8 @@ import type { Db } from "./db.js";
  * identical uploads dedupe, and the URL (`/file/<hash>.<ext>`) is stable.
  * The ORIGINAL filename lives in the `files` row and is restored in the
  * download's Content-Disposition, so what the reader saves is what was
- * uploaded. Cleanup is reference-counted by page content, same as images.
+ * uploaded. Cleanup is deferred and reference-based, same as images — see
+ * orphanGc.ts.
  */
 export interface FileMeta {
   hash: string;
@@ -138,6 +139,10 @@ function srcOf(hash: string, ext: string): string {
   return `/file/${hash}.${ext}`;
 }
 
+/** Explicit column list — keeps `orphaned_at` (GC bookkeeping) out of API
+ *  responses that spread a file row. */
+const FILE_COLS = "hash, ext, mime, name, size_bytes, created_at";
+
 export class FileStore {
   constructor(private db: Db, private filesDir: string) {
     fs.mkdirSync(filesDir, { recursive: true });
@@ -163,9 +168,13 @@ export class FileStore {
     fs.mkdirSync(path.dirname(fp), { recursive: true });
     if (!fs.existsSync(fp)) fs.writeFileSync(fp, bytes);
     const existing = this.db
-      .prepare(`SELECT * FROM files WHERE hash = ?`)
+      .prepare(`SELECT ${FILE_COLS} FROM files WHERE hash = ?`)
       .get(hash) as FileMeta | undefined;
-    if (existing) return { ...existing, src: srcOf(existing.hash, existing.ext) };
+    if (existing) {
+      // Re-upload = fresh intent to use it: restart its grace period.
+      this.db.prepare(`UPDATE files SET orphaned_at = NULL WHERE hash = ?`).run(hash);
+      return { ...existing, src: srcOf(existing.hash, existing.ext) };
+    }
     const created_at = new Date().toISOString();
     this.db
       .prepare(
@@ -186,7 +195,7 @@ export class FileStore {
 
   get(hash: string): FileMetaWithSrc | null {
     const row = this.db
-      .prepare(`SELECT * FROM files WHERE hash = ?`)
+      .prepare(`SELECT ${FILE_COLS} FROM files WHERE hash = ?`)
       .get(hash) as FileMeta | undefined;
     return row ? { ...row, src: srcOf(row.hash, row.ext) } : null;
   }
@@ -225,26 +234,4 @@ export function extractFileHashesSet(content: string): Set<string> {
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) out.add(m[1].toLowerCase());
   return out;
-}
-
-/** Diff-based cleanup after one page's edit: for each hash the edit
- *  dropped, delete the file unless some OTHER page still references it
- *  (checked through pages_fts, which the caller has already synced).
- *  Returns how many files were actually deleted. */
-export function cleanupRemovedFileRefs(
-  removedHashes: Set<string>,
-  exceptPageId: number,
-  db: Db,
-  files: FileStore,
-): number {
-  if (removedHashes.size === 0) return 0;
-  const stmt = db.prepare(
-    `SELECT 1 FROM pages_fts WHERE pages_fts MATCH ? AND rowid != ? LIMIT 1`,
-  );
-  let removed = 0;
-  for (const hash of removedHashes) {
-    if (stmt.get(`"${hash}"`, exceptPageId)) continue;
-    if (files.remove(hash)) removed++;
-  }
-  return removed;
 }

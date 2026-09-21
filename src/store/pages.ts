@@ -3478,8 +3478,8 @@ export class PageStore {
 
   /** Walk every remaining page on disk and collect every internal image
    *  hash (`/img/<hash>.<ext>`) referenced anywhere in source. Used by
-   *  orphan-image cleanup after delete_knowledge / delete_page so a
-   *  removed page's exclusive images don't leak forever. */
+   *  the orphan sweep (orphanGc.ts) to tell live references from
+   *  assets nothing points at any more. */
   allReferencedImageHashes(): Set<string> {
     return this.allReferencedHashes(/\/img\/([a-f0-9]{64})\.[a-z0-9]{2,5}/gi);
   }
@@ -3503,7 +3503,31 @@ export class PageStore {
       }
       let m: RegExpExecArray | null;
       re.lastIndex = 0;
-      while ((m = re.exec(content)) !== null) set.add(m[1]);
+      while ((m = re.exec(content)) !== null) set.add(m[1].toLowerCase());
+    }
+    return set;
+  }
+
+  /** Image hashes mentioned by any stored revision. A revision is a way
+   *  back to old content, so the orphan sweep treats it as a reference. */
+  allRevisionImageHashes(): Set<string> {
+    return this.allRevisionHashes(/\/img\/([a-f0-9]{64})\.[a-z0-9]{2,5}/gi);
+  }
+
+  /** Same scan for attachments (`/file/<hash>.<ext>`). */
+  allRevisionFileHashes(): Set<string> {
+    return this.allRevisionHashes(/\/file\/([a-f0-9]{64})\.[a-z0-9]{1,10}/gi);
+  }
+
+  private allRevisionHashes(re: RegExp): Set<string> {
+    const set = new Set<string>();
+    const rows = this.db
+      .prepare(`SELECT content FROM page_revisions`)
+      .iterate() as IterableIterator<{ content: string }>;
+    for (const r of rows) {
+      let m: RegExpExecArray | null;
+      re.lastIndex = 0;
+      while ((m = re.exec(r.content)) !== null) set.add(m[1].toLowerCase());
     }
     return set;
   }

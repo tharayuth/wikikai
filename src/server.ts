@@ -9,6 +9,7 @@ import { ActivityLogStore } from "./store/activityLog.js";
 import { SessionStore, UserStore } from "./store/users.js";
 import { PermissionStore } from "./store/permissions.js";
 import { ShareUserStore } from "./store/shareUsers.js";
+import { sweepOrphanedAssets } from "./store/orphanGc.js";
 import { buildToolHandlers } from "./mcp/handlers.js";
 import { createMcpServer } from "./mcp/server.js";
 import { buildApp } from "./web/app.js";
@@ -113,6 +114,29 @@ export async function startServer(): Promise<RunningServer> {
     mcpDefaultUserId,
   });
 
+  // Orphan housekeeping. Edits only STAMP an image / attachment that lost its
+  // last reference; the bytes go here, once it has stayed unreferenced for the
+  // whole grace period. Once a day is plenty, and the first pass waits a
+  // minute so it never competes with startup.
+  const runOrphanSweep = (): void => {
+    try {
+      const r = sweepOrphanedAssets({ db, pages, images, files });
+      if (r.removed_images + r.removed_files > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[wikikai] orphan sweep removed ${r.removed_images} image(s), ${r.removed_files} file(s)`,
+        );
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[wikikai] orphan sweep failed:", e);
+    }
+  };
+  const firstSweep = setTimeout(runOrphanSweep, 60_000);
+  const dailySweep = setInterval(runOrphanSweep, 24 * 60 * 60 * 1000);
+  firstSweep.unref();
+  dailySweep.unref();
+
   return new Promise((resolve, reject) => {
     const httpServer = app.listen(config.port, config.host, () => {
       // eslint-disable-next-line no-console
@@ -131,6 +155,8 @@ export async function startServer(): Promise<RunningServer> {
         sessions,
         close: () =>
           new Promise<void>((resolveClose, rejectClose) => {
+            clearTimeout(firstSweep);
+            clearInterval(dailySweep);
             httpServer.close((err) => {
               db.close();
               if (err) rejectClose(err);

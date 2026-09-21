@@ -4,14 +4,13 @@ import { z } from "zod";
 import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
 import type { PageStore, PageEntry, PageWithStats, EditFeedback } from "../store/pages.js";
 import type { ImageStore } from "../store/images.js";
+import { markDroppedRefs, sweepOrphanedAssets } from "../store/orphanGc.js";
 import {
   FILE_MAX_BYTES,
-  cleanupRemovedFileRefs,
   extractFileHashesSet,
   type FileStore,
 } from "../store/files.js";
 import {
-  cleanupRemovedImageRefs,
   extractImageHashesSet,
   mimeForExt,
   sniffImageMime,
@@ -50,6 +49,9 @@ export interface HandlerContext {
   /** Server-side default key for `seal_secret` / `reveal_secret`
    *  (`WIKIKAI_SECRET_KEY`). Null/undefined ⇒ every call must pass `key`. */
   secretKey?: string | null;
+  /** How long an unreferenced image / attachment survives before the orphan
+   *  sweep may delete it. Defaults to `ORPHAN_GRACE_MS` (7 days). */
+  orphanGraceMs?: number;
 }
 
 /**
@@ -1576,32 +1578,6 @@ function pageEntryShape(ctx: HandlerContext, p: PageEntry) {
   return { ...p, url: urlFor(ctx, p.knowledge_id, p.id) };
 }
 
-/** Compare every stored image hash against the set still referenced
- *  by remaining page content; delete the orphans (file + DB row) and
- *  return how many were removed. Run after delete_knowledge /
- *  delete_page so a removed page's exclusive images don't linger. */
-function cleanupOrphanFiles(pages: PageStore, files: FileStore | null): number {
-  if (!files) return 0;
-  const referenced = pages.allReferencedFileHashes();
-  let removed = 0;
-  for (const { hash } of files.listAllHashes()) {
-    if (referenced.has(hash)) continue;
-    if (files.remove(hash)) removed++;
-  }
-  return removed;
-}
-
-function cleanupOrphanImages(pages: PageStore, images: ImageStore): number {
-  const referenced = pages.allReferencedImageHashes();
-  const stored = images.listAllHashes();
-  let removed = 0;
-  for (const { hash } of stored) {
-    if (referenced.has(hash)) continue;
-    if (images.remove(hash)) removed++;
-  }
-  return removed;
-}
-
 export function buildToolHandlers(
   knowledge: KnowledgeStore,
   pages: PageStore,
@@ -1624,8 +1600,15 @@ export function buildToolHandlers(
     if (!files) return;
     const after = fileRefs(afterContent);
     const removed = new Set<string>([...before].filter((h) => !after.has(h)));
-    cleanupRemovedFileRefs(removed, pageId, db, files);
+    markDroppedRefs(db, "files", removed, pageId);
   };
+
+  /** Orphan sweep, run after a page or a knowledge is deleted. Deletes only
+   *  assets that have been unreferenced for the whole grace period — a fresh
+   *  upload waiting for its page, or an image mid-move between two pages, is
+   *  left alone. */
+  const sweepAssets = (): { removed_images: number; removed_files: number } =>
+    sweepOrphanedAssets({ db, pages, images, files, graceMs: ctx.orphanGraceMs });
 
   function resolveCallerForAcl(): { user: User | null } {
     const { user_id } = getCallContext();
@@ -1851,8 +1834,7 @@ export function buildToolHandlers(
       const before = knowledge.get(parsed.id);
       pages.purgeKnowledge(parsed.id);
       knowledge.remove(parsed.id);
-      const removed_images = cleanupOrphanImages(pages, images);
-      cleanupOrphanFiles(pages, files);
+      const { removed_images } = sweepAssets();
       recordActivity({
         action: "delete",
         target: "knowledge",
@@ -1915,7 +1897,7 @@ export function buildToolHandlers(
       const afterPage = pages.get(parsed.page_id);
       const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
       const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
-      cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
+      markDroppedRefs(db, "images", removed, parsed.page_id);
       gcFileRefs(oldFiles, afterPage?.content, parsed.page_id);
       logIf(
         "edit_page",
@@ -1979,8 +1961,7 @@ export function buildToolHandlers(
       // row keeps human-readable context.
       const before = pages.getMetadata(parsed.page_id);
       pages.remove(parsed.page_id);
-      const removed_images = cleanupOrphanImages(pages, images);
-      cleanupOrphanFiles(pages, files);
+      const { removed_images } = sweepAssets();
       recordActivity({
         action: "delete",
         target: "page",
@@ -2188,7 +2169,7 @@ export function buildToolHandlers(
       const afterPage = pages.get(parsed.page_id);
       const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
       const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
-      cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
+      markDroppedRefs(db, "images", removed, parsed.page_id);
       gcFileRefs(oldFiles, afterPage?.content, parsed.page_id);
       logIf(
         "edit_lines",
@@ -2227,7 +2208,7 @@ export function buildToolHandlers(
       const afterPage = pages.get(parsed.page_id);
       const newHashes = afterPage ? extractImageHashesSet(afterPage.content) : new Set<string>();
       const removed = new Set<string>([...oldHashes].filter((h) => !newHashes.has(h)));
-      cleanupRemovedImageRefs(removed, parsed.page_id, db, images);
+      markDroppedRefs(db, "images", removed, parsed.page_id);
       gcFileRefs(oldFiles, afterPage?.content, parsed.page_id);
       logIf(
         "edit_section",
@@ -2298,7 +2279,7 @@ export function buildToolHandlers(
           const removed = new Set<string>(
             [...oldHashes].filter((h) => !newHashes.has(h)),
           );
-          cleanupRemovedImageRefs(removed, rep.page_id, db, images);
+          markDroppedRefs(db, "images", removed, rep.page_id);
           gcFileRefs(beforeFileSnapshots.get(rep.page_id) ?? new Set<string>(), after?.content, rep.page_id);
         }
       }

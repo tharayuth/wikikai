@@ -1161,7 +1161,8 @@ export function createMcpServer(
         "Two other surfaces, used only when the default doesn't fit:\\n" +
         "  • `<img src='<src>' style='max-width:Npx' />` inside an ```html-embed fence — when the image must live inside a custom HTML layout (flex row, gradient card, `<details>`, custom border). Inline `style` is where sizing lives.\\n" +
         "  • ```images fence (JSON array of `{ src, alt?, caption? }`) — uniform thumbnail grid for **4+ side-by-side screenshots**. For a single image, plain markdown is now equivalent and simpler — only reach for this fence when you genuinely want the grid layout.\\n" +
-        "All three surfaces are picked up by `read_page`'s `images_referenced` list (with `via` set to `markdown` / `images` / `html-embed`). Use `get_image({ hash })` later to view the bytes inline in the assistant.",
+        "All three surfaces are picked up by `read_page`'s `images_referenced` list (with `via` set to `markdown` / `images` / `html-embed`). Use `get_image({ hash })` later to view the bytes inline in the assistant. " +
+        "Lifecycle: an image no page references is only marked as orphaned; the bytes are deleted after it has stayed unreferenced for 7 days and no page revision mentions it. So an upload can safely wait for its page, and moving an image between pages (drop it from one, embed the same `src` in another) keeps it.",
       inputSchema: addImageShape,
     },
     async (input) => jsonContent(await handlers.add_image(input)),
@@ -1176,7 +1177,7 @@ export function createMcpServer(
         "Store an arbitrary file (PDF, CSV, XLSX, ZIP, …) and get back `{ src, name, size_bytes, mime, url, fence }`. " +
         "Bytes are content-addressed (`/file/<sha256>.<ext>`) so identical uploads dedupe and the on-disk name is opaque; the ORIGINAL `name` is what a reader's download is saved as. " +
         "Then paste the returned `fence` into a page — a ```file block whose JSON is `{ src, name, size_bytes, mime, description? }` (or an array of those for several files) — and the portal renders a card with the filename, size, type, description and a Download button. " +
-        "Lifecycle: when every page that referenced the file drops the reference (edit_page / edit_lines / edit_section / replace_text / delete_page / delete_knowledge, or a human's Edit raw → Save), the bytes are deleted from disk automatically. " +
+        "Lifecycle: automatic and deferred. When every page that referenced the file drops the reference (edit_page / edit_lines / edit_section / replace_text / delete_page / delete_knowledge, or a human's Edit raw → Save), the file is only marked as orphaned; the bytes are deleted after it has stayed unreferenced for 7 days and no page revision mentions it. Moving a file between pages, or restoring an old revision, is therefore safe. " +
         "Max 50MB. Prefer `path` when the file is already on the server machine (zero base64).",
       inputSchema: addFileShape,
     },

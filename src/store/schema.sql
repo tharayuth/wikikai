@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS images (
   alt          TEXT,                        -- default alt text
   created_at   TEXT    NOT NULL
 );
+-- NOTE: `images.orphaned_at` and `files.orphaned_at` (ISO timestamp, NULL =
+-- referenced) are added by the in-place migration in db.ts. Assets are never
+-- deleted the moment they lose their last reference — see store/orphanGc.ts.
 
 -- ───── Block ID sequence: global auto-increment for rich blocks ─────
 -- Every fenced rich block (mermaid/chart/chart-grid/stats/steps/html-embed)
@@ -222,7 +225,8 @@ CREATE INDEX IF NOT EXISTS idx_share_users_kid ON share_users(knowledge_id);
 -- ───── Files: attachments (content-addressed, like images) ─────
 -- Bytes live at data/files/<2-char-prefix>/<sha256>.<ext>. `name` is the
 -- original filename, restored on download; the on-disk name is the hash.
--- Rows are dropped when no page references /file/<hash>.<ext> any more.
+-- Rows are dropped once no page has referenced /file/<hash>.<ext> for the
+-- whole orphan grace period (store/orphanGc.ts).
 CREATE TABLE IF NOT EXISTS files (
   hash         TEXT    PRIMARY KEY,
   ext          TEXT    NOT NULL,

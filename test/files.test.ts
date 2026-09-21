@@ -5,7 +5,6 @@ import path from "node:path";
 import { openDb } from "../src/store/db.js";
 import {
   FileStore,
-  cleanupRemovedFileRefs,
   extForFileName,
   extractFileHashesSet,
   parseFileSrc,
@@ -13,6 +12,7 @@ import {
 } from "../src/store/files.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
+import { markDroppedRefs, sweepOrphans } from "../src/store/orphanGc.js";
 
 describe("FileStore", () => {
   let dir: string;
@@ -69,7 +69,7 @@ describe("FileStore", () => {
     expect(store.remove(meta.hash)).toBe(false);
   });
 
-  it("cleans up a dropped reference only when no other page still uses it", () => {
+  it("stamps a dropped reference only when no other page still uses it, and deletes after the grace period", () => {
     const knowledge = new KnowledgeStore(db);
     const pages = new PageStore(db, path.join(dir, "items"));
     const kid = knowledge.add({ title: "K", project: "p" }).id;
@@ -82,11 +82,32 @@ describe("FileStore", () => {
     expect(pages.allReferencedFileHashes()).toEqual(new Set([meta.hash]));
 
     pages.update(p1.id, { content: "# A\n\nno file" });
-    expect(cleanupRemovedFileRefs(new Set([meta.hash]), p1.id, db, store)).toBe(0);
-    expect(store.get(meta.hash)).not.toBeNull();
+    expect(markDroppedRefs(db, "files", new Set([meta.hash]), p1.id)).toBe(0);
 
     pages.update(p2.id, { content: "# B\n\nno file" });
-    expect(cleanupRemovedFileRefs(new Set([meta.hash]), p2.id, db, store)).toBe(1);
+    const droppedAt = new Date("2026-01-01T00:00:00Z");
+    expect(markDroppedRefs(db, "files", new Set([meta.hash]), p2.id, droppedAt)).toBe(1);
+    expect(store.get(meta.hash)).not.toBeNull();
+    expect(fs.existsSync(store.filePath(meta.hash, meta.ext))).toBe(true);
+
+    const day = 24 * 60 * 60 * 1000;
+    const sweepAt = (now: Date, revisionRefs: Set<string>) =>
+      sweepOrphans({
+        db,
+        table: "files",
+        liveRefs: pages.allReferencedFileHashes(),
+        revisionRefs: () => revisionRefs,
+        remove: (hash) => store.remove(hash),
+        graceMs: 7 * day,
+        now,
+      });
+    // Inside the grace period: kept.
+    expect(sweepAt(new Date(droppedAt.getTime() + 6 * day), new Set())).toBe(0);
+    // Past it, but a revision still points at the file: kept.
+    expect(sweepAt(new Date(droppedAt.getTime() + 8 * day), pages.allRevisionFileHashes())).toBe(0);
+    expect(store.get(meta.hash)).not.toBeNull();
+    // Past it and nothing points at it: gone.
+    expect(sweepAt(new Date(droppedAt.getTime() + 8 * day), new Set())).toBe(1);
     expect(store.get(meta.hash)).toBeNull();
     expect(fs.existsSync(store.filePath(meta.hash, meta.ext))).toBe(false);
   });

@@ -90,6 +90,10 @@ function srcOf(hash: string, ext: string): string {
   return `/img/${hash}.${ext}`;
 }
 
+/** Explicit column list — keeps the GC bookkeeping column (`orphaned_at`)
+ *  out of every API response that spreads an image row. */
+const IMAGE_COLS = "hash, ext, mime, size_bytes, width, height, alt, created_at";
+
 export class ImageStore {
   constructor(private db: Db, private imagesDir: string) {
     fs.mkdirSync(imagesDir, { recursive: true });
@@ -129,9 +133,12 @@ export class ImageStore {
       fs.writeFileSync(fp, bytes);
     }
     const existing = this.db
-      .prepare(`SELECT * FROM images WHERE hash = ?`)
+      .prepare(`SELECT ${IMAGE_COLS} FROM images WHERE hash = ?`)
       .get(hash) as ImageMeta | undefined;
     if (existing) {
+      // A re-upload is fresh intent to use the image: take it off the
+      // orphan list so it gets a full grace period again.
+      this.db.prepare(`UPDATE images SET orphaned_at = NULL WHERE hash = ?`).run(hash);
       // Update alt if the new upload supplied one and old row didn't.
       if (alt && !existing.alt) {
         this.db.prepare(`UPDATE images SET alt = ? WHERE hash = ?`).run(alt, hash);
@@ -162,7 +169,7 @@ export class ImageStore {
   /** Look up an image by hash (returns null when not stored). */
   get(hash: string): ImageMetaWithSrc | null {
     const row = this.db
-      .prepare(`SELECT * FROM images WHERE hash = ?`)
+      .prepare(`SELECT ${IMAGE_COLS} FROM images WHERE hash = ?`)
       .get(hash) as ImageMeta | undefined;
     if (!row) return null;
     return { ...row, src: srcOf(row.hash, row.ext) };
@@ -206,42 +213,12 @@ export class ImageStore {
 /** Extract every internal image hash (`/img/<hash>.<ext>`) referenced
  *  in `content`. Covers markdown `![alt](/img/...)`, inline `<img src="/img/...">`,
  *  and the same forms inside fenced blocks — anything matching the
- *  shape is counted. Returns a lowercased Set for cheap diffing. */
+ *  shape is counted. Returns a lowercased Set for cheap diffing. The diff
+ *  feeds `markDroppedRefs` in orphanGc.ts — nothing is deleted on an edit. */
 export function extractImageHashesSet(content: string): Set<string> {
   const out = new Set<string>();
   const re = /\/img\/([a-f0-9]{64})\.[a-z0-9]{2,5}/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) out.add(m[1].toLowerCase());
   return out;
-}
-
-/** Diff-based image GC: for each `removedHashes` entry, check via FTS5
- *  phrase match whether any OTHER page (excluding `exceptPageId`) still
- *  references it; if not, delete the image (file + row). Returns the
- *  count of images actually removed. Pre-condition: the caller's edit
- *  must have already been written to disk AND synced into `pages_fts`
- *  — otherwise the lookup would see stale content for `exceptPageId`
- *  (the `rowid != ?` exclusion still defends against that case but
- *  other pages must be up-to-date for the check to be correct).
- *  Revisions are intentionally NOT counted as live references — same
- *  policy as `cleanupOrphanImages` on delete_page. */
-export function cleanupRemovedImageRefs(
-  removedHashes: Set<string>,
-  exceptPageId: number,
-  db: Db,
-  images: ImageStore,
-): number {
-  if (removedHashes.size === 0) return 0;
-  const stmt = db.prepare(
-    `SELECT 1 FROM pages_fts WHERE pages_fts MATCH ? AND rowid != ? LIMIT 1`,
-  );
-  let removed = 0;
-  for (const hash of removedHashes) {
-    // Phrase-match the hash — trigram tokenizer makes this fast even
-    // on big content tables.
-    const hit = stmt.get(`"${hash}"`, exceptPageId);
-    if (hit) continue;
-    if (images.remove(hash)) removed++;
-  }
-  return removed;
 }

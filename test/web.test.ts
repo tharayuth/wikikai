@@ -1507,7 +1507,7 @@ describe("HTTP routes", () => {
       expect((await req(app).get(`/file/..%2F..%2Fetc%2Fpasswd`)).status).toBe(404);
     });
 
-    it("Edit raw → Save through the web route deletes a dropped attachment", async () => {
+    it("Edit raw → Save through the web route keeps a dropped attachment for the grace period", async () => {
       const k = knowledge.add({ title: "Doc", project: "examples" });
       const meta = files.add(Buffer.from("bytes"), "a.bin");
       const fence = "```file\n" + JSON.stringify({ src: meta.src, name: meta.name }) + "\n```\n";
@@ -1516,8 +1516,9 @@ describe("HTTP routes", () => {
       expect(fs.existsSync(onDisk)).toBe(true);
       const r = await req(app).patch(`/api/pages/${p.id}`).send({ content: "# P\n\nno attachment" });
       expect(r.status).toBe(200);
-      expect(fs.existsSync(onDisk)).toBe(false);
-      expect(files.get(meta.hash)).toBeNull();
+      // Stamped, not deleted — the bytes go only after the orphan grace period.
+      expect(fs.existsSync(onDisk)).toBe(true);
+      expect(files.get(meta.hash)).not.toBeNull();
     });
   });
 

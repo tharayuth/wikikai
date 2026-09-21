@@ -12,6 +12,7 @@ import { PermissionStore } from "../src/store/permissions.js";
 import { UserStore } from "../src/store/users.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { withCallContext } from "../src/lib/callContext.js";
+import { sweepOrphanedAssets } from "../src/store/orphanGc.js";
 
 describe("MCP tool handlers", () => {
   let tmpDir: string;
@@ -671,7 +672,7 @@ describe("MCP tool handlers", () => {
     });
   });
 
-  describe("auto-cleanup orphaned images on edit", () => {
+  describe("deferred cleanup of orphaned images", () => {
     // 1x1 transparent PNG — enough bytes to satisfy the store.
     const PNG_1x1 = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
@@ -687,7 +688,20 @@ describe("MCP tool handlers", () => {
       return { hash: meta.hash, src: meta.src, ext: meta.ext };
     }
 
-    it("removes image from disk + DB when its only referencing edit drops it", async () => {
+    const orphanedAt = (hash: string): string | null =>
+      (db.prepare(`SELECT orphaned_at FROM images WHERE hash = ?`).get(hash) as
+        | { orphaned_at: string | null }
+        | undefined)?.orphaned_at ?? null;
+    /** Pretend the image lost its last reference `days` ago. */
+    const ageOrphan = (hash: string, days: number): void => {
+      const at = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      db.prepare(`UPDATE images SET orphaned_at = ? WHERE hash = ?`).run(at, hash);
+    };
+    const sweep = () => sweepOrphanedAssets({ db, pages, images, files: null });
+    const onDisk = (img: { hash: string; ext: string }): boolean =>
+      fs.existsSync(path.join(imagesDir, img.hash.slice(0, 2), `${img.hash}.${img.ext}`));
+
+    it("an edit that drops the only reference stamps the image but keeps the bytes", async () => {
       const k = await h.add_knowledge({ title: "K", project: "p" });
       const img = await addPng("only-ref");
       const p = await h.add_page({
@@ -695,14 +709,97 @@ describe("MCP tool handlers", () => {
         title: "P",
         content: `before\n![alt](${img.src})\nafter`,
       });
-      const fp = path.join(imagesDir, img.hash.slice(0, 2), `${img.hash}.${img.ext}`);
-      expect(fs.existsSync(fp)).toBe(true);
-      expect(images.get(img.hash)).not.toBeNull();
+      expect(orphanedAt(img.hash)).toBeNull();
 
       await h.edit_page({ page_id: p.id, content: "no image here" });
 
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(onDisk(img)).toBe(true);
+      expect(orphanedAt(img.hash)).not.toBeNull();
+    });
+
+    it("splitting a page — drop from the parent, then reuse in a new page — keeps the image (regression)", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("moved");
+      const parent = await h.add_page({
+        knowledge_id: k.id,
+        title: "Parent",
+        content: `intro\n![shot](${img.src})\n`,
+      });
+      await h.edit_page({ page_id: parent.id, content: "intro only — details moved" });
+      await h.add_page({ knowledge_id: k.id, title: "Sub", content: `![shot](${img.src})\n` });
+
+      // Even a sweep long after the drop must see the new live reference.
+      ageOrphan(img.hash, 30);
+      expect(sweep().removed_images).toBe(0);
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(onDisk(img)).toBe(true);
+      expect(orphanedAt(img.hash)).toBeNull();
+    });
+
+    it("a fresh upload survives someone else's delete_page before it is embedded (regression)", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const scratch = await h.add_page({ knowledge_id: k.id, title: "scratch", content: "tmp" });
+      const img = await addPng("pending");
+
+      const del = await h.delete_page({ page_id: scratch.id });
+      expect(del.removed_images).toBe(0);
+      await h.add_page({ knowledge_id: k.id, title: "Real", content: `![shot](${img.src})\n` });
+
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(onDisk(img)).toBe(true);
+    });
+
+    it("restoring old content after the image was dropped still finds the image (regression)", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("undo");
+      const original = `text\n![shot](${img.src})\n`;
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: original });
+      await h.edit_page({ page_id: p.id, content: "rewritten without the image" });
+      await h.edit_page({ page_id: p.id, content: original });
+
+      expect(images.get(img.hash)).not.toBeNull();
+      sweep();
+      expect(orphanedAt(img.hash)).toBeNull();
+    });
+
+    it("a revision counts as a reference; the image goes once the page and its history are gone", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "p" });
+      const img = await addPng("history");
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: `![a](${img.src})` });
+      await h.edit_page({ page_id: p.id, content: "dropped" });
+
+      ageOrphan(img.hash, 30);
+      expect(sweep().removed_images).toBe(0); // revision v1 still points at it
+      expect(images.get(img.hash)).not.toBeNull();
+
+      const del = await h.delete_page({ page_id: p.id }); // history cascades away
+      expect(del.removed_images).toBe(1);
       expect(images.get(img.hash)).toBeNull();
-      expect(fs.existsSync(fp)).toBe(false);
+      expect(onDisk(img)).toBe(false);
+    });
+
+    it("an upload nobody ever embedded is deleted only after the grace period", async () => {
+      const img = await addPng("never-used");
+      expect(sweep().removed_images).toBe(0); // first sighting: stamped, not deleted
+      expect(orphanedAt(img.hash)).not.toBeNull();
+
+      ageOrphan(img.hash, 6);
+      expect(sweep().removed_images).toBe(0);
+      ageOrphan(img.hash, 8);
+      expect(sweep().removed_images).toBe(1);
+      expect(images.get(img.hash)).toBeNull();
+      expect(onDisk(img)).toBe(false);
+    });
+
+    it("re-uploading an orphaned image restarts its grace period", async () => {
+      const img = await addPng("again");
+      sweep();
+      ageOrphan(img.hash, 30);
+      await addPng("again");
+      expect(orphanedAt(img.hash)).toBeNull();
+      expect(sweep().removed_images).toBe(0);
+      expect(images.get(img.hash)).not.toBeNull();
     });
 
     it("keeps image alive when another page still references it", async () => {
@@ -718,6 +815,7 @@ describe("MCP tool handlers", () => {
 
       expect(images.get(img.hash)).not.toBeNull();
       expect(fs.existsSync(fp)).toBe(true);
+      expect(orphanedAt(img.hash)).toBeNull();
     });
 
     it("edit that keeps the image ref does not delete the image", async () => {
@@ -750,7 +848,7 @@ describe("MCP tool handlers", () => {
       expect(images.get(img.hash)).not.toBeNull();
     });
 
-    it("edit_lines removing the image-bearing line cleans up", async () => {
+    it("edit_lines removing the image-bearing line stamps it", async () => {
       const k = await h.add_knowledge({ title: "K", project: "p" });
       const img = await addPng("lines");
       const p = await h.add_page({
@@ -766,10 +864,11 @@ describe("MCP tool handlers", () => {
         new_text: "plain text instead",
       });
 
-      expect(images.get(img.hash)).toBeNull();
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(orphanedAt(img.hash)).not.toBeNull();
     });
 
-    it("edit_section removing the image-bearing body cleans up", async () => {
+    it("edit_section removing the image-bearing body stamps it", async () => {
       const k = await h.add_knowledge({ title: "K", project: "p" });
       const img = await addPng("section");
       const p = await h.add_page({
@@ -784,10 +883,11 @@ describe("MCP tool handlers", () => {
         new_content: "no image now",
       });
 
-      expect(images.get(img.hash)).toBeNull();
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(orphanedAt(img.hash)).not.toBeNull();
     });
 
-    it("replace_text scoped to a page cleans up the dropped image", async () => {
+    it("replace_text scoped to a page stamps the dropped image", async () => {
       const k = await h.add_knowledge({ title: "K", project: "p" });
       const img = await addPng("replace");
       const p = await h.add_page({
@@ -803,7 +903,8 @@ describe("MCP tool handlers", () => {
         replace: "removed",
       });
 
-      expect(images.get(img.hash)).toBeNull();
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(orphanedAt(img.hash)).not.toBeNull();
     });
   });
 

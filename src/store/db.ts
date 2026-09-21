@@ -58,6 +58,13 @@ export function openDb(dbPath: string): Db {
       `ALTER TABLE knowledge ADD COLUMN share_protected INTEGER NOT NULL DEFAULT 0`,
     );
   }
+  for (const table of ["images", "files"] as const) {
+    if (!hasColumn(db, table, "orphaned_at")) {
+      // Deferred asset GC: NULL = referenced by a live page; ISO timestamp =
+      // when it was last seen losing its final reference. See orphanGc.ts.
+      db.exec(`ALTER TABLE ${table} ADD COLUMN orphaned_at TEXT`);
+    }
+  }
   // Unique index lives here (not in schema.sql) so it runs AFTER the column
   // exists on BOTH fresh DBs (column from CREATE TABLE) and legacy DBs (column
   // from the ALTER above). NULLs are distinct in SQLite, so un-shared rows
