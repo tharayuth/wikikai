@@ -28,10 +28,6 @@ data/
 # those rules quote data paths, process names and hostnames of the machine.
 .claude/
 
-# Codex's auto-generated project context file — equivalent to CLAUDE.md
-# but mirrored per-tool; kept on disk for Codex sessions, not tracked.
-AGENTS.md
-
 # Local DB backups (do not commit)
 backups/
 

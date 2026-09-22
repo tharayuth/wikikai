@@ -5,7 +5,7 @@
 # Rationale: the global skill file lives outside this repo so it's
 # easy for the in-repo copy under docs/skill/ to drift behind.
 # Installers who copy the skill from a fresh clone then get stale
-# guidance. CLAUDE.md notes this explicitly:
+# guidance. AGENTS.md notes this explicitly:
 #
 #   "Plus the global skill file ~/.claude/skills/wikikai/SKILL.md —
 #    that one lives outside this repo but should stay in sync with

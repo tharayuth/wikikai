@@ -246,7 +246,7 @@ Coverage target: ≥ 80 % on the new files (`src/lib/permissions.ts` and
 
 ## 10. Documentation
 
-Per repo convention (`CLAUDE.md` "Documenting a new feature"):
+Per repo convention (`AGENTS.md` "Documenting a new feature"):
 
 - `client/src/components/HelpModal.tsx` — add a permissions section in both
   EN and TH tabs.
