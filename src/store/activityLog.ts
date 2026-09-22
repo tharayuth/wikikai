@@ -1,6 +1,7 @@
 import type { Db } from "./db.js";
 import { getCallContext } from "../lib/callContext.js";
 import { emitEvent } from "../lib/events.js";
+import { projectCalendar, type CalendarDay } from "./calendar.js";
 
 export type ActivityAction =
   | "add"
@@ -166,5 +167,15 @@ export class ActivityLogStore {
       .prepare(`SELECT COUNT(*) AS n FROM activity_log a ${wherePart}`)
       .get(...params) as { n: number };
     return { entries: rows, total: totalRow.n };
+  }
+
+  /** Per-day created/edited pages of one project — see store/calendar.ts. */
+  calendar(opts: {
+    project: string;
+    from: string;
+    to: string;
+    tz: string;
+  }): CalendarDay[] {
+    return projectCalendar(this.db, opts);
   }
 }

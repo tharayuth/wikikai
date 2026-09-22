@@ -841,6 +841,46 @@ export function buildApp(opts: BuildAppOptions): Express {
       next(e);
     }
   });
+  // Month calendar of one project: pages created / edited per local day.
+  // `from` / `to` are inclusive local dates; `tz` is an IANA zone name
+  // (the browser's), so a day boundary means the viewer's midnight.
+  app.get("/api/projects/:id/calendar", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      const project = opts.knowledge.listProjects().find((p) => p.id === id);
+      if (!project) {
+        res.status(404).json({ error: `project ${id} not found` });
+        return;
+      }
+      if (req.user && aclEnabled && !req.user.is_admin) {
+        assertProjectAccess(req.user, project.name, "view", opts.permissions, {
+          enabled: aclEnabled,
+        });
+      }
+      const from = optional(req.query.from);
+      const to = optional(req.query.to);
+      if (!from || !to) {
+        res.status(400).json({ error: "from and to are required" });
+        return;
+      }
+      const tz = optional(req.query.tz) ?? "UTC";
+      const days = opts.activityLog.calendar({
+        project: project.name,
+        from,
+        to,
+        tz,
+      });
+      res.json({
+        project: { id, name: project.name },
+        from,
+        to,
+        tz,
+        days,
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
   // Rename a project (keeps its id). Re-points all knowledge + permissions.
   app.patch("/api/projects/:name", (req, res, next) => {
     try {

@@ -22,6 +22,15 @@ export interface HashLocation {
   block: number | null;
   /** Parsed `?projects=` filter, or null when the param is absent. */
   projects: ProjectFilter | null;
+  /** `?calendar=<projectId>&month=YYYY-MM` — the project calendar view,
+   *  shown in place of the viewer when no knowledge is open. */
+  calendar: CalendarLocation | null;
+}
+
+export interface CalendarLocation {
+  projectId: number;
+  /** `YYYY-MM`, or null for "the current month". */
+  month: string | null;
 }
 
 const NAV_EVENT = "wikikai-nav";
@@ -45,6 +54,41 @@ export function parseProjectFilter(search: string): ProjectFilter | null {
     if (Number.isInteger(n) && n > 0) ids.push(n);
   }
   return { ids, noProject };
+}
+
+/** Parse `?calendar=7&month=2026-09`. Null when absent or malformed. */
+export function parseCalendar(search: string): CalendarLocation | null {
+  const params = new URLSearchParams(search);
+  const projectId = Number(params.get("calendar"));
+  if (!Number.isInteger(projectId) || projectId <= 0) return null;
+  const month = params.get("month");
+  return {
+    projectId,
+    month: month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null,
+  };
+}
+
+/** Query string for the calendar of `projectId` at `month`, keeping any
+ *  other params (notably `?projects=`) from `search`. */
+export function buildCalendarSearch(
+  search: string,
+  projectId: number,
+  month: string | null,
+): string {
+  const params = new URLSearchParams(search);
+  params.set("calendar", String(projectId));
+  if (month) params.set("month", month);
+  else params.delete("month");
+  return `?${params.toString().replace(/%2C/g, ",")}`;
+}
+
+/** `search` minus the calendar params — used when leaving the calendar. */
+export function withoutCalendar(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete("calendar");
+  params.delete("month");
+  const q = params.toString().replace(/%2C/g, ",");
+  return q ? `?${q}` : "";
 }
 
 /** Build the `?projects=` query string for a set of selected tokens (project
@@ -87,10 +131,11 @@ export function currentQueryString(): string {
  */
 export function parseLocation(): HashLocation {
   if (typeof window === "undefined")
-    return { kid: null, pid: null, line: null, block: null, projects: null };
+    return { kid: null, pid: null, line: null, block: null, projects: null, calendar: null };
   const path = window.location.pathname;
   const hash = window.location.hash;
   const projects = parseProjectFilter(currentQueryString());
+  const calendar = parseCalendar(currentQueryString());
 
   // New format: path holds knowledge
   const pathMatch = path.match(/^\/&?(\d+)\/?$/);
@@ -103,6 +148,7 @@ export function parseLocation(): HashLocation {
       line: hashMatch && hashMatch[2] ? Number(hashMatch[2]) : null,
       block: hashMatch && hashMatch[3] ? Number(hashMatch[3]) : null,
       projects,
+      calendar,
     };
   }
 
@@ -116,10 +162,11 @@ export function parseLocation(): HashLocation {
         line: m[3] ? Number(m[3]) : null,
         block: null,
         projects,
+        calendar,
       };
     }
   }
-  return { kid: null, pid: null, line: null, block: null, projects };
+  return { kid: null, pid: null, line: null, block: null, projects, calendar };
 }
 
 /** Render the URL string for a target location (relative, e.g.
@@ -162,10 +209,16 @@ export function navigateTo(
   // Preserve the current query string (notably `?projects=…`) so the sidebar
   // menu filter survives navigation, unless an explicit `search` override is
   // given. buildUrl places it before the hash so it stays in location.search.
+  // Opening a knowledge leaves the calendar, so its params are dropped.
+  const kid = target.kid !== undefined ? target.kid : parseLocation().kid;
   const search =
-    options?.search !== undefined ? options.search : currentQueryString();
+    options?.search !== undefined
+      ? options.search
+      : kid != null
+        ? withoutCalendar(currentQueryString())
+        : currentQueryString();
   const full = buildUrl({
-    kid: target.kid !== undefined ? target.kid : parseLocation().kid,
+    kid,
     pid: target.pid !== undefined ? target.pid : null,
     line: target.line !== undefined ? target.line : null,
     block: target.block !== undefined ? target.block : null,

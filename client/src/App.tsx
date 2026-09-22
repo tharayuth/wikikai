@@ -8,6 +8,7 @@ import { useGetAuthMeQuery } from "./store/api";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
 import { Viewer } from "./components/Viewer";
+import { CalendarView } from "./components/CalendarView";
 import { LoginPage } from "./components/LoginPage";
 import { HelpModal } from "./components/HelpModal";
 import { ActivityLogModal } from "./components/ActivityLogModal";
@@ -185,13 +186,20 @@ export function App() {
           onPick={(kid) => navigate({ kid })}
         />
         <SidebarResizeHandle />
-        <Viewer
-          kid={location.kid}
-          pid={location.pid}
-          line={location.line}
-          block={location.block}
-          onPickPage={(pid) => navigate({ kid: location.kid, pid })}
-        />
+        {location.kid == null && location.calendar ? (
+          <CalendarView
+            projectId={location.calendar.projectId}
+            month={location.calendar.month}
+          />
+        ) : (
+          <Viewer
+            kid={location.kid}
+            pid={location.pid}
+            line={location.line}
+            block={location.block}
+            onPickPage={(pid) => navigate({ kid: location.kid, pid })}
+          />
+        )}
       </div>
       <HelpModal />
       <ActivityLogModal />

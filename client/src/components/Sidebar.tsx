@@ -15,7 +15,13 @@ import {
   type PageMeta,
 } from "../store/api";
 import { useAppDispatch } from "../store";
-import { navigateTo, useHash } from "../hooks/useHash";
+import {
+  buildCalendarSearch,
+  currentQueryString,
+  navigateTo,
+  useHash,
+  withoutCalendar,
+} from "../hooks/useHash";
 import { SharedBadge } from "./SharedBadge";
 import { openActionMenu, openKnowledgeBadgeMenu } from "../lib/badgeMenu";
 import {
@@ -1017,12 +1023,21 @@ function ProjectGroup({
     }
   };
 
+  const openCalendar = () => {
+    if (projectId == null) return;
+    navigateTo(
+      { kid: null },
+      { search: buildCalendarSearch(withoutCalendar(currentQueryString()), projectId, null) },
+    );
+  };
+
   const onBadgeClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (projectId == null) return;
     openActionMenu({
       kind: "project",
       badge: e.currentTarget,
       items: [
+        { label: "Calendar", icon: "calendar", onSelect: openCalendar },
         { label: `Copy id ${projectId}`, icon: "copy", onSelect: copyId },
         { label: "Open only this project (new tab)", icon: "open", onSelect: openOnlyThisProject },
         { label: "Edit project name", icon: "edit", onSelect: onRenameProject },

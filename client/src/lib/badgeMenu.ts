@@ -117,6 +117,9 @@ const MENU_ICONS: Record<string, string> = {
   // three connected nodes — share
   share:
     '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+  // calendar page — project calendar
+  calendar:
+    '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   // price-tag outline — manage knowledge tags
   tag: '<path d="M20.59 13.41 11 3.83V2H2v9h1.83l9.58 9.59a2 2 0 0 0 2.82 0l5.34-5.34a2 2 0 0 0 0-2.84z"/><circle cx="7" cy="7" r="1.5"/>',
 };

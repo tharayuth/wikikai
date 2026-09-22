@@ -164,6 +164,29 @@ export interface ActivityLogResponse {
   total: number;
 }
 
+/** Mirrors `CalendarDay` in src/store/calendar.ts. */
+export interface CalendarPage {
+  id: number;
+  title: string;
+  position: number;
+  created: boolean;
+  count: number;
+  archived: boolean;
+}
+
+export interface CalendarDay {
+  date: string;
+  knowledge: { id: number; title: string; pages: CalendarPage[] }[];
+}
+
+export interface ProjectCalendarResponse {
+  project: { id: number; name: string };
+  from: string;
+  to: string;
+  tz: string;
+  days: CalendarDay[];
+}
+
 export interface PromptLogResponse {
   knowledge_id: number;
   total: number;
@@ -419,6 +442,17 @@ export const portalApi = createApi({
       invalidatesTags: (_r, _e, { userId }) => [
         { type: "Permissions", id: userId },
       ],
+    }),
+
+    getProjectCalendar: builder.query<
+      ProjectCalendarResponse,
+      { projectId: number; from: string; to: string; tz: string }
+    >({
+      query: ({ projectId, from, to, tz }) =>
+        `projects/${projectId}/calendar?${new URLSearchParams({ from, to, tz })}`,
+      // Every create/edit writes an activity row, which fires the
+      // `activity-logged` SSE event that invalidates this tag.
+      providesTags: [{ type: "ActivityLog", id: "LIST" }],
     }),
 
     getActivityLog: builder.query<
@@ -839,6 +873,7 @@ export const {
   useAddPageMutation,
   useGetPromptLogQuery,
   useGetActivityLogQuery,
+  useGetProjectCalendarQuery,
   useGetAuthMeQuery,
   useLoginMutation,
   useLogoutMutation,

@@ -76,6 +76,30 @@ describe("HTTP routes", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  describe("GET /api/projects/:id/calendar", () => {
+    it("returns the project's days and 404s an unknown project", async () => {
+      const k = knowledge.add({ title: "Doc", project: "alpha" });
+      pages.add({ knowledge_id: k.id, title: "Intro", content: "x" });
+      const pid = (await req(app).get("/api/projects")).body.projects.find(
+        (p: { name: string }) => p.name === "alpha",
+      ).id as number;
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await req(app)
+        .get(`/api/projects/${pid}/calendar`)
+        .query({ from: today, to: today, tz: "UTC" });
+      expect(res.status).toBe(200);
+      expect(res.body.project).toEqual({ id: pid, name: "alpha" });
+      expect(res.body.days[0].knowledge[0]).toMatchObject({ id: k.id, title: "Doc" });
+
+      const missing = await req(app)
+        .get("/api/projects/9999/calendar")
+        .query({ from: today, to: today });
+      expect(missing.status).toBe(404);
+      const bad = await req(app).get(`/api/projects/${pid}/calendar`).query({ from: today });
+      expect(bad.status).toBe(400);
+    });
+  });
+
   describe("POST /api/secrets/reveal (fallback for insecure contexts)", () => {
     it("decrypts an envelope with the given key and never with a wrong one", async () => {
       const env = await sealSecret("s3cret", "pw", { label: "L" });
