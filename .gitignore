@@ -10,9 +10,10 @@ logs/
 # User data (SQLite + raw markdown lives here at runtime)
 data/
 
-# Secrets
+# Secrets — every .env variant (backups, per-host copies) except the template
 .env
-.env.local
+.env.*
+!.env.example
 *.pem
 
 # OS / editor cruft
@@ -22,9 +23,10 @@ data/
 .vscode/
 *.swp
 
-# Per-user Claude Code settings (project-level shared settings.json may be committed)
-.claude/settings.local.json
-.claude/worktrees/
+# Claude Code state — the whole directory. settings.json is NOT safe to share
+# here: the harness appends permission rules to it as a session runs, and
+# those rules quote data paths, process names and hostnames of the machine.
+.claude/
 
 # Codex's auto-generated project context file — equivalent to CLAUDE.md
 # but mirrored per-tool; kept on disk for Codex sessions, not tracked.
@@ -37,6 +39,15 @@ backups/
 # fresh clone, and describe production layout. Keep them off the public repo.
 sync-from-prod.sh
 backup-prod.sh
+dev-hmr.sh
+
+# Production runbook and its backups — live on the production host only.
+PRODUCTION.md
+PRODUCTION.md.*
+
+# Ad-hoc backup copies of anything
+*.bak
+*.bak-*
 
 # Machine-specific context for Claude Code (hosts, paths, ssh targets)
 CLAUDE.local.md
