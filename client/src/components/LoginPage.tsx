@@ -7,7 +7,7 @@ import { useLoginMutation } from "../store/api";
  * `POST /api/auth/login`; on success the auth-me cache invalidates and
  * `<App>` swaps back to the normal portal layout.
  *
- * No header/sidebar — keep the screen minimal so the page works even
+ * Independent of the portal header/sidebar, so the page works even
  * when the rest of the SPA wouldn't render (e.g. if anonymous reads
  * are forbidden). After login, the URL hash is preserved so the user
  * lands back on the page they were trying to view.
@@ -99,22 +99,39 @@ export function LoginPage(): JSX.Element {
             <p className="login-access-note">ยังไม่มีบัญชี? ติดต่อผู้ดูแลพื้นที่นี้เพื่อขอสิทธิ์เข้าใช้งาน</p>
           </section>
 
-          <div className="login-visuals">
-            <figure className="login-calendar">
-              <div className="login-calendar-frame">
-                <div className="login-calendar-toolbar" aria-hidden="true">
-                  <span className="login-window-dots"><i /><i /><i /></span>
-                  <span>WikiKai / Project calendar</span>
+          <section className="login-features" aria-label="จุดเด่นของ WikiKai">
+            <img className="login-feature-art" src="/assets/login-features.webp" alt="" width="1942" height="809" />
+            <ul className="login-feature-list">
+              <li>
+                <span className="login-feature-number" aria-hidden="true">01</span>
+                <div>
+                  <h2>ให้ AI ช่วยจัดการความรู้</h2>
+                  <p>ค้น สร้าง และอัปเดตเอกสารผ่าน MCP</p>
                 </div>
-                <img src="/assets/login-calendar.webp" alt="มุมมองปฏิทิน WikiKai แสดงกิจกรรมสร้างและแก้ไขเอกสาร โดยปิดบังรายละเอียดส่วนตัว" width="1648" height="954" />
-              </div>
-              <figcaption>
-                <strong>เห็นความรู้ที่เติบโตในทุกวัน</strong>
-                <span>ย้อนดูเอกสารที่สร้างและแก้ไขได้ในมุมมองปฏิทิน</span>
-              </figcaption>
-            </figure>
-            <img className="login-illustration" src="/assets/login-knowledge.webp" alt="คนและ AI ช่วยกันเรียบเรียงเอกสารเป็นหนังสือความรู้" width="1536" height="1024" />
-          </div>
+              </li>
+              <li>
+                <span className="login-feature-number" aria-hidden="true">02</span>
+                <div>
+                  <h2>เอกสารที่เห็นภาพ</h2>
+                  <p>ตาราง กราฟ แผนภาพ ภาพ และไฟล์ในที่เดียว</p>
+                </div>
+              </li>
+              <li>
+                <span className="login-feature-number" aria-hidden="true">03</span>
+                <div>
+                  <h2>ชี้จุด แล้วคุยต่อ</h2>
+                  <p>อ้าง ID ของเอกสาร หน้า หรือบล็อก ให้ AI ทำต่อได้ตรงจุด</p>
+                </div>
+              </li>
+              <li>
+                <span className="login-feature-number" aria-hidden="true">04</span>
+                <div>
+                  <h2>เก็บ Secret คู่กับคู่มือ</h2>
+                  <p>เก็บรหัสผ่านหรือ token แบบเข้ารหัส เปิดด้วย passphrase</p>
+                </div>
+              </li>
+            </ul>
+          </section>
         </main>
 
         <footer className="login-footer">
