@@ -14,6 +14,8 @@
   --text: #1c1c1b;
   --text-2: #5a5a58;
   --text-3: #8a8a88;
+  --brand-ink: #071936;
+  --brand-ai: #03d39d;
 
   --accent: #6366f1;
   --accent-light: #eef0ff;
@@ -53,6 +55,8 @@
   --text: #ececec;
   --text-2: #b3b3b3;
   --text-3: #7a7a7a;
+  --brand-ink: #ececec;
+  --brand-ai: #03d39d;
 
   --accent: #818cf8;
   --accent-light: #2b2d50;
@@ -197,7 +201,7 @@ a:hover { text-decoration: underline; }
   --brand-height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: calc(var(--brand-height) * .11);
+  gap: calc(var(--brand-height) * .055);
   height: var(--brand-height);
   flex-shrink: 0;
   vertical-align: middle;
@@ -206,15 +210,16 @@ a:hover { text-decoration: underline; }
   display: block;
   height: 100%;
   width: auto;
-  aspect-ratio: 1.26;
+  aspect-ratio: 280 / 230;
 }
 .brand-wordmark {
-  width: calc(var(--brand-height) * 3.28);
-  height: calc(var(--brand-height) * .74);
-  /* Tint only the lettering; the book keeps its indigo and teal in both themes. */
-  background: var(--text);
-  -webkit-mask: url('/assets/wikikai-wordmark.png') center / contain no-repeat;
-  mask: url('/assets/wikikai-wordmark.png') center / contain no-repeat;
+  width: calc(var(--brand-height) * 3.254);
+  height: calc(var(--brand-height) * .757);
+  /* The hard color stop follows the K/ai boundary in the shared wordmark mask.
+     Only WikiK changes with the theme; the final ai stays teal. */
+  background: linear-gradient(to right, var(--brand-ink) 77.7%, var(--brand-ai) 77.7%);
+  -webkit-mask: url('/assets/wikikai-wordmark.png?v=spark-ai-1') center / contain no-repeat;
+  mask: url('/assets/wikikai-wordmark.png?v=spark-ai-1') center / contain no-repeat;
 }
 .welcome-logo { --brand-height: 42px; }
 .topbar-right {

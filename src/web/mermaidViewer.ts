@@ -60,7 +60,7 @@ export function mermaidViewerHtml(opts: {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=open-pages-1">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=spark-ai-1">
 <title>${safeTitle} — Mermaid Viewer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
