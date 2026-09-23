@@ -985,7 +985,7 @@ function ProjectGroup({
   };
 
   const dispatch = useAppDispatch();
-  const [addKnowledge, { isLoading: adding }] = useAddKnowledgeMutation();
+  const [addKnowledge] = useAddKnowledgeMutation();
   const [renameProject] = useRenameProjectMutation();
 
   const copyId = async () => {
@@ -1037,7 +1037,7 @@ function ProjectGroup({
       kind: "project",
       badge: e.currentTarget,
       items: [
-        { label: "Calendar", icon: "calendar", onSelect: openCalendar },
+        { label: "New knowledge", icon: "add-page", onSelect: () => void onAddKnowledge() },
         { label: `Copy id ${projectId}`, icon: "copy", onSelect: copyId },
         { label: "Open only this project (new tab)", icon: "open", onSelect: openOnlyThisProject },
         { label: "Edit project name", icon: "edit", onSelect: onRenameProject },
@@ -1080,29 +1080,32 @@ function ProjectGroup({
           </span>
           <span className="group-name">{project}</span>
         </button>
-        <button
-          type="button"
-          className="sidebar-group-add-btn"
-          onClick={onAddKnowledge}
-          disabled={adding}
-          title={`Add knowledge to ${project}`}
-          aria-label={`Add knowledge to ${project}`}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="14"
-            height="14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+        {projectId != null && (
+          <button
+            type="button"
+            className="sidebar-group-calendar-btn"
+            onClick={openCalendar}
+            title={`Calendar of ${project}`}
+            aria-label={`Calendar of ${project}`}
           >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </button>
+        )}
         {projectId != null && (
           <button
             type="button"

@@ -801,8 +801,9 @@ button.ki-id-badge::after {
 .sidebar-group-title:hover { color: var(--accent-strong); }
 .sidebar-group-title:hover .group-chevron { color: var(--accent); }
 
-/* "+" Add-knowledge button — hidden until mouse hovers the project header */
-.sidebar-group-add-btn {
+/* Calendar button — hidden until the mouse hovers the project header.
+   (New knowledge lives in the id badge's menu.) */
+.sidebar-group-calendar-btn {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -820,22 +821,18 @@ button.ki-id-badge::after {
   visibility: hidden;
   transition: opacity .15s, visibility .15s, background .12s, border-color .12s, color .12s;
 }
-.sidebar-group-header:hover .sidebar-group-add-btn,
-.sidebar-group-add-btn:focus-visible {
+.sidebar-group-header:hover .sidebar-group-calendar-btn,
+.sidebar-group-calendar-btn:focus-visible {
   opacity: 1;
   visibility: visible;
 }
-.sidebar-group-add-btn:hover {
+.sidebar-group-calendar-btn:hover {
   background: var(--surface-2, var(--surface));
   border-color: var(--border);
   color: var(--accent);
 }
-.sidebar-group-add-btn:disabled {
-  cursor: wait;
-  opacity: .6 !important;
-}
-/* Project id pill — same reveal-on-hover behaviour as the "+" button.
-   Click copies the id (used in the `?projects=…` menu-filter URL). */
+/* Project id pill — always shown; click opens the project menu
+   (new knowledge, copy id, open alone, rename). */
 .sidebar-group-id-badge {
   flex: 0 0 auto;
   align-self: center;
@@ -850,14 +847,7 @@ button.ki-id-badge::after {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .15s, visibility .15s, background .12s, border-color .12s, color .12s;
-}
-.sidebar-group-header:hover .sidebar-group-id-badge,
-.sidebar-group-id-badge:focus-visible {
-  opacity: 1;
-  visibility: visible;
+  transition: background .12s, border-color .12s, color .12s;
 }
 .sidebar-group-id-badge:hover {
   background: var(--accent);
