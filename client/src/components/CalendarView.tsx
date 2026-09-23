@@ -9,7 +9,13 @@ import {
   currentQueryString,
   navigateTo,
 } from "../hooks/useHash";
-import { monthGrid, monthOf, shiftMonth, todayLocal } from "../lib/calendarGrid";
+import {
+  filterDays,
+  monthGrid,
+  monthOf,
+  shiftMonth,
+  todayLocal,
+} from "../lib/calendarGrid";
 
 /**
  * Google-Calendar-style month view of one project: each day lists the
@@ -25,24 +31,32 @@ const K_COLORS = ["blue", "green", "amber", "purple", "cyan", "red"];
 
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-/** Remembers whether day cells list pages under each knowledge. Off by
- *  default — cells show knowledge only; the day dialog always shows pages. */
-const SHOW_PAGES_KEY = "wikikai.calendar.showPages";
-
-function readShowPages(): boolean {
-  try {
-    return localStorage.getItem(SHOW_PAGES_KEY) === "1";
-  } catch {
-    return false; // localStorage may be unavailable (private mode)
-  }
-}
-
-function writeShowPages(show: boolean): void {
-  try {
-    localStorage.setItem(SHOW_PAGES_KEY, show ? "1" : "0");
-  } catch {
-    /* private mode — the toggle just won't be remembered */
-  }
+/**
+ * A view toggle remembered in this browser. `showPages` (off by default)
+ * lists pages in day cells — the day dialog always shows them; `created` /
+ * `edited` (both on by default) pick which kind of change is shown anywhere.
+ */
+function useStoredFlag(name: string, initial: boolean): [boolean, () => void] {
+  const key = `wikikai.calendar.${name}`;
+  const [value, setValue] = useState(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v == null ? initial : v === "1";
+    } catch {
+      return initial; // localStorage may be unavailable (private mode)
+    }
+  });
+  const toggle = () => {
+    setValue((v) => {
+      try {
+        localStorage.setItem(key, v ? "0" : "1");
+      } catch {
+        /* private mode — the toggle just won't be remembered */
+      }
+      return !v;
+    });
+  };
+  return [value, toggle];
 }
 
 function kColor(kid: number): CSSProperties {
@@ -86,13 +100,9 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
   const shown = month ?? monthOf(today);
   const grid = useMemo(() => monthGrid(shown), [shown]);
   const [openDay, setOpenDay] = useState<string | null>(null);
-  const [showPages, setShowPages] = useState(readShowPages);
-  const toggleShowPages = () => {
-    setShowPages((v) => {
-      writeShowPages(!v);
-      return !v;
-    });
-  };
+  const [showPages, toggleShowPages] = useStoredFlag("showPages", false);
+  const [showCreated, toggleCreated] = useStoredFlag("created", true);
+  const [showEdited, toggleEdited] = useStoredFlag("edited", true);
 
   const projects = useListProjectsQuery();
   const projectName =
@@ -104,27 +114,32 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
     tz: TZ,
   });
 
+  const days = useMemo(
+    () => filterDays(data?.days ?? [], { created: showCreated, edited: showEdited }),
+    [data, showCreated, showEdited],
+  );
+
   const byDate = useMemo(() => {
     const m = new Map<string, CalendarDay>();
-    for (const d of data?.days ?? []) m.set(d.date, d);
+    for (const d of days) m.set(d.date, d);
     return m;
-  }, [data]);
+  }, [days]);
 
   // Month totals only count days inside the shown month, not the padding.
   const stats = useMemo(() => {
-    let days = 0;
+    let activeDays = 0;
     const pages = new Set<number>();
     const docs = new Set<number>();
-    for (const d of data?.days ?? []) {
+    for (const d of days) {
       if (monthOf(d.date) !== shown) continue;
-      days++;
+      activeDays++;
       for (const k of d.knowledge) {
         docs.add(k.id);
         for (const p of k.pages) pages.add(p.id);
       }
     }
-    return { days, pages: pages.size, docs: docs.size };
-  }, [data, shown]);
+    return { days: activeDays, pages: pages.size, docs: docs.size };
+  }, [days, shown]);
 
   useEffect(() => setOpenDay(null), [shown, projectId]);
 
@@ -143,9 +158,29 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
           </span>
         </div>
         <div className="cal-nav">
+          <div className="cal-filter" role="group" aria-label="Show changes">
+            <button
+              type="button"
+              className={`cal-toggle cal-toggle-created${showCreated ? " on" : ""}`}
+              aria-pressed={showCreated}
+              onClick={toggleCreated}
+              title={showCreated ? "Hide created pages" : "Show created pages"}
+            >
+              <span className="cal-p-mark created">+</span> Created
+            </button>
+            <button
+              type="button"
+              className={`cal-toggle cal-toggle-edited${showEdited ? " on" : ""}`}
+              aria-pressed={showEdited}
+              onClick={toggleEdited}
+              title={showEdited ? "Hide edited pages" : "Show edited pages"}
+            >
+              <span className="cal-p-mark edited">✎</span> Edited
+            </button>
+          </div>
           <button
             type="button"
-            className={`cal-toggle${showPages ? " on" : ""}`}
+            className={`cal-toggle cal-toggle-pages${showPages ? " on" : ""}`}
             aria-pressed={showPages}
             onClick={toggleShowPages}
             title={showPages ? "Hide pages in day cells" : "Show pages in day cells"}

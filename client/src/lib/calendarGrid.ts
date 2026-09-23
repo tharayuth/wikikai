@@ -45,3 +45,39 @@ export function monthGrid(month: string): { from: string; to: string; weeks: str
   }
   return { from: weeks[0][0], to: weeks[rows - 1][6], weeks };
 }
+
+/** Structural subset of the calendar API's day shape, so this module stays
+ *  free of client store imports (it is also exercised by server tests). */
+interface FilterableDay<P extends { created: boolean; count: number }> {
+  date: string;
+  knowledge: { id: number; title: string; pages: P[] }[];
+}
+
+/**
+ * Keep only the created and/or edited side of each day. A page created and
+ * then edited on the same day counts under both: with "created" alone it
+ * shows as one creation, with "edited" alone as its edits (marked edited).
+ * Knowledge and days left with no pages are dropped.
+ */
+export function filterDays<P extends { created: boolean; count: number }>(
+  days: FilterableDay<P>[],
+  show: { created: boolean; edited: boolean },
+): FilterableDay<P>[] {
+  if (show.created && show.edited) return days;
+  const out: FilterableDay<P>[] = [];
+  for (const d of days) {
+    const knowledge = [];
+    for (const k of d.knowledge) {
+      const pages: P[] = [];
+      for (const p of k.pages) {
+        const edits = p.count - (p.created ? 1 : 0);
+        const created = p.created && show.created;
+        const count = (created ? 1 : 0) + (show.edited ? edits : 0);
+        if (count > 0) pages.push({ ...p, created, count });
+      }
+      if (pages.length) knowledge.push({ ...k, pages });
+    }
+    if (knowledge.length) out.push({ ...d, knowledge });
+  }
+  return out;
+}

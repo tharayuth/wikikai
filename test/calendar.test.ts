@@ -6,7 +6,7 @@ import { openDb, type Db } from "../src/store/db.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
 import { bucketEvents, projectCalendar, type CalendarEvent } from "../src/store/calendar.js";
-import { monthGrid, shiftMonth } from "../client/src/lib/calendarGrid.js";
+import { filterDays, monthGrid, shiftMonth } from "../client/src/lib/calendarGrid.js";
 import { buildCalendarSearch, parseCalendar, withoutCalendar } from "../client/src/hooks/useHash.js";
 
 function ev(at: string, over: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -164,5 +164,45 @@ describe("calendar grid + URL helpers", () => {
     expect(parseCalendar("?calendar=7&month=2026-13")).toEqual({ projectId: 7, month: null });
     expect(parseCalendar("?projects=1")).toBeNull();
     expect(withoutCalendar(q)).toBe("?projects=1,2");
+  });
+});
+
+describe("filterDays (created / edited toggles)", () => {
+  const page = (id: number, created: boolean, count: number) => ({
+    id, title: `P${id}`, position: id, created, count, archived: false,
+  });
+  const days = [
+    {
+      date: "2026-09-15",
+      knowledge: [
+        { id: 1, title: "K1", pages: [page(1, true, 1), page(2, true, 4), page(3, false, 2)] },
+        { id: 2, title: "K2", pages: [page(4, true, 1)] },
+      ],
+    },
+  ];
+
+  it("returns everything when both are on", () => {
+    expect(filterDays(days, { created: true, edited: true })).toBe(days);
+  });
+
+  it("created only keeps creations, counted once", () => {
+    const [d] = filterDays(days, { created: true, edited: false });
+    expect(d.knowledge.map((k) => k.pages.map((p) => [p.id, p.created, p.count]))).toEqual([
+      [[1, true, 1], [2, true, 1]],
+      [[4, true, 1]],
+    ]);
+  });
+
+  it("edited only keeps pages with edits, shown as edits, and drops empty knowledge", () => {
+    const [d] = filterDays(days, { created: false, edited: true });
+    expect(d.knowledge.map((k) => k.id)).toEqual([1]);
+    expect(d.knowledge[0].pages.map((p) => [p.id, p.created, p.count])).toEqual([
+      [2, false, 3],
+      [3, false, 2],
+    ]);
+  });
+
+  it("both off leaves no days", () => {
+    expect(filterDays(days, { created: false, edited: false })).toEqual([]);
   });
 });

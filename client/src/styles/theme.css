@@ -5379,7 +5379,8 @@ button.ki-id-badge::after {
 .cal-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cal-project { font-weight: 600; color: var(--text); font-size: 15px; }
 .cal-stats { font-size: 12px; color: var(--text-3); }
-.cal-nav { display: flex; align-items: center; gap: 6px; }
+.cal-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cal-nav button { white-space: nowrap; }
 .cal-nav button {
   min-width: 32px; height: 30px; padding: 0 10px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -5389,6 +5390,13 @@ button.ki-id-badge::after {
 .cal-nav button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border-strong); }
 .cal-nav button:disabled { color: var(--text-3); cursor: default; }
 .cal-nav .cal-toggle { margin-right: 6px; color: var(--text-2); }
+.cal-filter { display: flex; margin-right: 6px; }
+.cal-filter .cal-toggle { margin-right: 0; display: inline-flex; align-items: center; gap: 4px; }
+.cal-filter .cal-toggle:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.cal-filter .cal-toggle:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-left: -1px; }
+.cal-filter .cal-toggle:not(.on) .cal-p-mark { color: var(--text-3); }
+.cal-filter .cal-toggle:not(.on) { color: var(--text-3); text-decoration: line-through; }
+.cal-filter .cal-toggle.on { position: relative; z-index: 1; }
 .cal-nav .cal-toggle.on {
   background: var(--accent-light); border-color: var(--accent); color: var(--accent-strong);
 }
@@ -5504,4 +5512,6 @@ button.ki-id-badge::after {
     font-size: 11px; font-weight: 600; text-align: center;
   }
   .cal-month { min-width: 0; font-size: 15px; }
+  /* Cells never list pages at this width, so the toggle would do nothing. */
+  .cal-toggle-pages { display: none; }
 }
