@@ -1083,6 +1083,17 @@ function ProjectGroup({
         {projectId != null && (
           <button
             type="button"
+            className="sidebar-group-id-badge"
+            onClick={onBadgeClick}
+            title={`Project id ${projectId} — click for menu`}
+            aria-label={`Project id ${projectId} menu`}
+          >
+            {projectId}
+          </button>
+        )}
+        {projectId != null && (
+          <button
+            type="button"
             className="sidebar-group-calendar-btn"
             onClick={openCalendar}
             title={`Calendar of ${project}`}
@@ -1104,17 +1115,6 @@ function ProjectGroup({
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
-          </button>
-        )}
-        {projectId != null && (
-          <button
-            type="button"
-            className="sidebar-group-id-badge"
-            onClick={onBadgeClick}
-            title={`Project id ${projectId} — click for menu`}
-            aria-label={`Project id ${projectId} menu`}
-          >
-            {projectId}
           </button>
         )}
       </div>
