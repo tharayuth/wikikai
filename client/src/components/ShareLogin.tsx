@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BrandLogo } from "./BrandLogo";
 
 /**
  * Login form a public reader sees when a share link is password protected.
@@ -45,7 +46,7 @@ export function ShareLogin({
   return (
     <div className="public-view">
       <form className="public-login" onSubmit={submit} aria-label="Sign in to view">
-        <span className="public-brand">WikiKai</span>
+        <BrandLogo className="public-brand" />
         <h1>เอกสารนี้ต้องใส่รหัสก่อนอ่าน</h1>
         <p className="share-hint">ใช้ user และ password ที่ผู้แชร์ให้ไว้ (ไม่ใช่บัญชีระบบ)</p>
         <label>

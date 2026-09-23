@@ -112,11 +112,13 @@ export function requireAuth(opts: AuthOptions) {
       // Attachment downloads: the hash in the path is the credential, and a
       // share-link reader must be able to fetch them too.
       p.startsWith("/file/") ||
+      p === "/favicon.ico" ||
       p === "/favicon-32.png" ||
       p === "/favicon-192.png" ||
       p === "/favicon-512.png" ||
       p === "/apple-touch-icon.png" ||
-      p === "/wikikai-logo.png"
+      p === "/wikikai-logo.png" ||
+      p === "/wikikai-logo-mini.png"
     ) {
       return next();
     }

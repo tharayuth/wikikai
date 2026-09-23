@@ -20,6 +20,7 @@ import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
 import { SseStatus } from "./SseStatus";
 import { ToolActivity } from "./ToolActivity";
+import { BrandLogo } from "./BrandLogo";
 
 interface TopbarProps {
   searchText: string;
@@ -105,13 +106,7 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
       <div className="topbar-left">
         <h1>
           <a href="/" aria-label="WikiKai — home">
-            <img
-              src="/wikikai-logo.png"
-              alt="WikiKai"
-              className="brand-logo"
-              width="853"
-              height="278"
-            />
+            <BrandLogo />
           </a>
         </h1>
         <button

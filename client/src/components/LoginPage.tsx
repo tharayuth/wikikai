@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useLoginMutation } from "../store/api";
+import { BrandLogo } from "./BrandLogo";
 
 /**
  * Standalone login screen — rendered by `<App>` when the auth-me query
@@ -36,7 +37,7 @@ export function LoginPage(): JSX.Element {
     <div className="login-page" lang="th">
       <div className="login-shell">
         <header className="login-header">
-          <img src="/wikikai-logo.png" alt="WikiKai" className="login-logo" />
+          <BrandLogo className="login-logo" />
           <nav className="login-links" aria-label="ติดตาม WikiKai">
             <a className="login-social-link" href="https://www.facebook.com/profile.php?id=61573996881161" target="_blank" rel="noopener noreferrer">
               <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true">

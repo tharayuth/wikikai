@@ -1,4 +1,4 @@
-# WikiKai
+<h1><img src="client/public/assets/wikikai-mark.png" alt="" width="48" /> WikiKai</h1>
 
 **Build knowledge with AI. Keep it ready to use.**
 

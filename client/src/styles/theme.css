@@ -193,19 +193,30 @@ a:hover { text-decoration: underline; }
 .topbar-left h1 > a:hover {
   background: var(--surface-2);
 }
-.topbar-left .brand-logo {
+.brand-logo {
+  --brand-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--brand-height) * .11);
+  height: var(--brand-height);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.brand-mark {
   display: block;
-  height: 32px;
+  height: 100%;
   width: auto;
-  /* Keep the SVG crisp on high-DPI displays */
-  image-rendering: -webkit-optimize-contrast;
+  aspect-ratio: 1.26;
 }
-[data-theme="dark"] .topbar-left .brand-logo {
-  /* Logo is dark-on-transparent — invert near-black wordmark on dark
-     theme so it stays legible. Keeps colour gradients of the icon
-     mostly intact (hue rotation cancels via 360 cycle). */
-  filter: brightness(0.92) invert(0.92) hue-rotate(180deg);
+.brand-wordmark {
+  width: calc(var(--brand-height) * 3.28);
+  height: calc(var(--brand-height) * .74);
+  /* Tint only the lettering; the book keeps its indigo and teal in both themes. */
+  background: var(--text);
+  -webkit-mask: url('/assets/wikikai-wordmark.png') center / contain no-repeat;
+  mask: url('/assets/wikikai-wordmark.png') center / contain no-repeat;
 }
+.welcome-logo { --brand-height: 42px; }
 .topbar-right {
   display: flex;
   align-items: center;
@@ -3931,7 +3942,7 @@ button.ki-id-badge::after {
   padding: 30px 0;
   border-bottom: 1px solid var(--border);
 }
-.login-logo { width: 156px; height: auto; }
+.login-logo { --brand-height: 38px; }
 .login-links { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .login-social-link {
   display: inline-flex;
@@ -4065,7 +4076,7 @@ button.ki-id-badge::after {
 @media (max-width: 760px) {
   .login-page { padding: 0 24px; }
   .login-header { padding: 20px 0; flex-wrap: wrap; gap: 16px; }
-  .login-logo { width: 132px; }
+  .login-logo { --brand-height: 32px; }
   .login-links { gap: 8px; }
   .login-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "form" "visuals"; gap: 32px; padding: 34px 0; max-width: 480px; width: 100%; margin: 0 auto; }
   .login-intro h1 { font-size: clamp(28px, 5.5vw, 38px); }
@@ -4925,16 +4936,13 @@ button.ki-id-badge::after {
 }
 .public-header-main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   min-width: 0;
   flex: 1;
 }
 .public-brand {
-  font-weight: 700;
-  color: var(--accent);
-  font-size: 14px;
-  white-space: nowrap;
+  --brand-height: 24px;
 }
 .public-title {
   font-size: 16px;

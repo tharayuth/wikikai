@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useGetKnowledgeQuery } from "../store/api";
 import { PageContent } from "./PageContent";
+import { BrandLogo } from "./BrandLogo";
 
 interface Props {
   kid: number | null;
@@ -25,7 +26,7 @@ export function Viewer({ kid, pid, line, block, onPickPage }: Props) {
     return (
       <section className="viewer">
         <div className="viewer-empty">
-          <h2>WikiKai</h2>
+          <h2><BrandLogo className="welcome-logo" /></h2>
           <p>
             Pick an entry on the left, or create one via the MCP tool <code>add_knowledge</code>
           </p>

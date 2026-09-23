@@ -3,6 +3,7 @@ import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { attachInlineImageLightbox } from "../lib/imageLightbox";
 import { ArticleResizeHandle } from "./ArticleResizeHandle";
 import { ShareLogin } from "./ShareLogin";
+import { BrandLogo } from "./BrandLogo";
 
 /**
  * Public, read-only viewer for a single shared knowledge document.
@@ -176,7 +177,7 @@ export function PublicView({ token }: { token: string }): JSX.Element {
     <div className="public-view">
       <header className="public-header">
         <div className="public-header-main">
-          <span className="public-brand">WikiKai</span>
+          <BrandLogo className="public-brand" />
           <h1 className="public-title">{data.knowledge.title}</h1>
         </div>
         <div className="public-header-actions">
