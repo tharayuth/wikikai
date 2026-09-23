@@ -85,7 +85,7 @@ describe("add_file + attachment lifecycle", () => {
 
   it("rejects bad input", async () => {
     await expect(h.add_file({ data_base64: b64("x") })).rejects.toThrow(/name/);
-    await expect(h.add_file({ name: "x.txt" })).rejects.toThrow(/exactly one/);
+    await expect(h.add_file({ name: "x.txt" })).rejects.toThrow(/get_upload_url/);
     await expect(h.add_file({ path: "/etc/hosts" })).rejects.toThrow(/outside/);
   });
 

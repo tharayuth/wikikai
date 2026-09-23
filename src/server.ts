@@ -14,6 +14,7 @@ import { buildToolHandlers } from "./mcp/handlers.js";
 import { createMcpServer } from "./mcp/server.js";
 import { buildApp } from "./web/app.js";
 import { createMcpHandler } from "./web/mcpRoute.js";
+import { UploadTicketStore } from "./lib/uploadTickets.js";
 
 export interface RunningServer {
   config: Config;
@@ -32,6 +33,9 @@ export async function startServer(): Promise<RunningServer> {
   const db = openDb(config.dbPath);
   const knowledge = new KnowledgeStore(db);
   const pages = new PageStore(db, config.itemsDir);
+  // Links to our own /img/ and /file/ written with this server's domain are
+  // stored as plain paths, so content survives a domain change.
+  pages.setAssetOrigins([config.publicBaseUrl]);
   const images = new ImageStore(db, config.imagesDir);
   const files = new FileStore(db, config.filesDir);
   const promptLog = new PromptLogStore(db);
@@ -72,6 +76,7 @@ export async function startServer(): Promise<RunningServer> {
     if (first) mcpDefaultUserId = first.id;
   }
 
+  const uploadTickets = new UploadTicketStore();
   const handlers = buildToolHandlers(
     knowledge,
     pages,
@@ -84,6 +89,8 @@ export async function startServer(): Promise<RunningServer> {
       imageImportRoots: config.imageImportRoots,
       imageImportEnabled: config.imageImportEnabled,
       secretKey: config.secretKey,
+      uploadTickets,
+      imageReadMaxEdge: config.imageReadMaxEdge,
     },
     permissions,
     users,
@@ -112,6 +119,7 @@ export async function startServer(): Promise<RunningServer> {
     mcpToken: config.mcpToken,
     webAuth: config.webAuth,
     mcpDefaultUserId,
+    uploadTickets,
   });
 
   // Orphan housekeeping. Edits only STAMP an image / attachment that lost its

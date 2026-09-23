@@ -206,7 +206,9 @@ Handle the revealed text like the credential it is: use it for the task, don't e
 
 To attach a downloadable file (PDF, CSV, XLSX, ZIP, …) to a page:
 
-1. `add_file({ path })` when the file is on the server machine (same `WIKIKAI_IMAGE_IMPORT_ROOTS` roots as images, zero base64), or `add_file({ data_base64, name })` otherwise. Optional `mime_type`, `description`.
+1. Upload it — **never as base64** (the MCP tools no longer accept it):
+   - **File on your machine (the usual case):** `get_upload_url({})`, then `curl -sS --data-binary @report-q3.pdf '<file_url>?name=report-q3.pdf&description=Final%2C%20signed'`. The bytes go from disk to the server without entering the conversation; curl prints the same JSON as `add_file`.
+   - **File already on the server machine:** `add_file({ path })` (same `WIKIKAI_IMAGE_IMPORT_ROOTS` roots as images). Optional `mime_type`, `description`.
 2. Paste the returned `fence` into the page as-is:
 
    ```markdown
@@ -224,9 +226,19 @@ Max 50MB per file.
 
 To attach an image to a knowledge page:
 
-1. `add_image(...)` — registers the image, returns `{ src: "/img/<hash>.<ext>", hash, size_bytes, … }`. Content-addressed → identical bytes dedupe automatically. Two ways to supply the bytes:
-   - **`{ path, alt? }`** — *prefer this when the file is on the same machine as the server.* The server reads the file off its own disk, so **no base64 enters your context** (a same-machine import that would cost tens-of-thousands of tokens as base64 becomes ~free). `path` must be absolute and under a server-configured import root (`WIKIKAI_IMAGE_IMPORT_ROOTS`); mime is inferred. If it's not on the server, download it there first, then import by path.
-   - **`{ data_base64, mime_type, alt? }`** — fallback for files NOT on the server machine. Sends the bytes inline (token-expensive for large images).
+1. Upload it — **never as base64.** Writing a file out as base64 costs output tokens by the hundred thousand, so the MCP tools do not accept it. Two ways:
+   - **File on your machine (the usual case):** call `get_upload_url({})` once per batch (the link takes any number of uploads for 15 minutes), then for each file:
+
+     ```bash
+     curl -sS --data-binary @login.png '<image_url>?alt=Login%20screen'
+     ```
+
+     The bytes go from disk to the server without entering the conversation. The type is detected from the bytes (PNG, JPEG, GIF, WebP, SVG; max 10MB).
+   - **File already on the server machine:** `add_image({ path, alt? })` — `path` must be absolute and under a server-configured import root (`WIKIKAI_IMAGE_IMPORT_ROOTS`).
+
+   Both return `{ src, markdown, hash, width, height, warnings, url, … }`. Content-addressed → identical bytes dedupe automatically, and re-uploading the same file brings back an image that went missing.
+   - **Put `src` — or the ready `markdown` (`![alt](/img/<hash>.png)`) — into pages. Never `url`:** it carries this server's domain, and content must keep working if the domain changes. (Links to the server's own `/img/` and `/file/` are rewritten to paths on save anyway.)
+   - **Read `warnings`.** For crisp figures, capture screenshots as **PNG at 2x** (e.g. Playwright `deviceScaleFactor: 2`): an image N px wide stays sharp on HiDPI screens only up to about N/2 px on screen, and JPEG smears text edges. A 1x capture of a 1440px window is fine up to `"720x"`.
 2. Embed the returned `src` in markdown. **Default: plain markdown image** — covers virtually every case:
 
    ```markdown
@@ -265,7 +277,9 @@ To attach an image to a knowledge page:
 
 To **view** an image later, use `get_image({ hash })` or `get_image({ src })` — the response includes an MCP `image` content block so the assistant sees the picture inline, plus a JSON sidecar with metadata.
 
-**Token control — `get_image({ ..., mode })`:** pass `mode: "meta"` to get metadata only (mime, size, dimensions, alt) with **no inline bytes** — the cheapest way to decide *what* an image is before paying for base64. `mode: "full"` (or omitting `mode`) inlines the bytes as today (still capped by `max_bytes`, default ~6MB). The response carries a `mode` field reporting which applied. Reach for `meta` first when you only need to know an image exists / its size; use `full` when you actually need to see the picture.
+**Token control — `get_image({ ..., mode })`:** pass `mode: "meta"` to get metadata only (mime, size, dimensions, alt) with **no inline bytes** — the cheapest way to decide *what* an image is before paying for base64. `mode: "full"` (or omitting `mode`) inlines the bytes (still capped by `max_bytes`, default ~6MB). The response carries a `mode` field reporting which applied. Reach for `meta` first when you only need to know an image exists / its size; use `full` when you actually need to see the picture.
+
+**Reading size:** the inlined copy is scaled so its longest side is at most **1280px** (server default, as WebP) — screenshot text stays legible and image tokens drop (they grow with pixel count). The stored original is untouched. Pass `max_edge: N` for another size, or `original: true` when fine detail matters (tiny text, pixel-level checks). `served` in the result reports what was sent (`mime`, `width`, `height`, `resized`).
 
 `read_page` automatically returns an `images_referenced` array covering **all** surfaces — every `{ src, url, alt?, caption?, block_id?, via }` where `via` is `"images"`, `"html-embed"`, or `"markdown"` (plain `![alt](/img/… "WxH/caption")`, title slot included). Use it to pick which image to `get_image` without re-parsing the page.
 

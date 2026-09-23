@@ -104,6 +104,9 @@ export function requireAuth(opts: AuthOptions) {
       // itself, not by a session — bypass the login wall for them.
       p.startsWith("/share/") ||
       p.startsWith("/api/share/") ||
+      // Curl uploads from MCP agents: the ticket in the path is the
+      // credential (see get_upload_url), there is no session to check.
+      p.startsWith("/api/upload/") ||
       p.startsWith("/assets/") ||
       p.startsWith("/img/") ||
       // Attachment downloads: the hash in the path is the credential, and a

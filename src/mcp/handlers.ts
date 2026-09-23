@@ -3,7 +3,8 @@ import path from "node:path";
 import { z } from "zod";
 import type { KnowledgeStore, KnowledgeMetadata } from "../store/knowledge.js";
 import type { PageStore, PageEntry, PageWithStats, EditFeedback } from "../store/pages.js";
-import type { ImageStore } from "../store/images.js";
+import type { ImageMetaWithSrc, ImageStore } from "../store/images.js";
+import type { UploadTicketStore } from "../lib/uploadTickets.js";
 import { markDroppedRefs, sweepOrphanedAssets } from "../store/orphanGc.js";
 import {
   FILE_MAX_BYTES,
@@ -52,7 +53,46 @@ export interface HandlerContext {
   /** How long an unreferenced image / attachment survives before the orphan
    *  sweep may delete it. Defaults to `ORPHAN_GRACE_MS` (7 days). */
   orphanGraceMs?: number;
+  /** Issues `get_upload_url` links. Undefined ⇒ the tool reports that
+   *  uploads are unavailable. */
+  uploadTickets?: UploadTicketStore;
+  /** Longest side of the copy `get_image` inlines by default. */
+  imageReadMaxEdge?: number;
 }
+
+/** Default for `HandlerContext.imageReadMaxEdge`: legible screenshot text
+ *  at roughly half the image tokens of a 1x desktop capture. */
+export const DEFAULT_IMAGE_READ_MAX_EDGE = 1280;
+
+/** Below this width a figure shown across the ~720px article column is
+ *  upscaled on a 2x (HiDPI) screen and looks soft. */
+const CRISP_COLUMN_WIDTH = 1440;
+
+/** Advice returned with an upload: the causes of soft-looking figures. */
+function imageWarnings(meta: { mime: string; width: number | null }): string[] {
+  const out: string[] = [];
+  const raster = meta.mime !== "image/svg+xml" && meta.mime !== "image/gif";
+  if (raster && meta.width != null && meta.width < CRISP_COLUMN_WIDTH) {
+    const crisp = Math.floor(meta.width / 2);
+    out.push(
+      `Only ${meta.width}px wide: on HiDPI (2x) screens it stays sharp up to about ${crisp}px on screen, e.g. a "${crisp}x" size hint. For a full-column figure (~720px) capture it at 2x instead (deviceScaleFactor: 2).`,
+    );
+  }
+  if (meta.mime === "image/jpeg") {
+    out.push(
+      "JPEG: fine for photos, but a screenshot of UI or text should be PNG — JPEG smears text edges.",
+    );
+  }
+  return out;
+}
+
+/** `![alt](src)` for an uploaded image — a path, never an absolute URL. */
+function imageMarkdown(src: string, alt: string | null): string {
+  return `![${(alt ?? "").replace(/[[\]\s]+/g, " ").trim()}](${src})`;
+}
+
+const NO_BASE64_HINT =
+  "For a file on your machine, call get_upload_url and send it with curl — base64 uploads are not accepted over MCP.";
 
 /**
  * Read a local image file off the server's own disk for `add_image({ path })`.
@@ -92,7 +132,7 @@ function readLocalBytes(
   const roots = ctx.imageImportRoots ?? [];
   if (!ctx.imageImportEnabled || roots.length === 0) {
     throw new Error(
-      `local-path ${what} import is disabled; set WIKIKAI_IMAGE_IMPORT_ROOTS on the server, or send \`data_base64\` instead`,
+      `local-path ${what} import is disabled on this server (WIKIKAI_IMAGE_IMPORT_ROOTS is not set). ${NO_BASE64_HINT}`,
     );
   }
   if (!path.isAbsolute(rawPath)) {
@@ -467,14 +507,14 @@ export const AddImageSchema = z
       .min(4)
       .optional()
       .describe(
-        "The image bytes, base64-encoded. Max ~10MB (decoded). Send raw bytes only — no `data:` URI prefix. Use this only when the file is NOT on the server machine; for a local file prefer `path` (no base64 ⇒ far cheaper).",
+        "Internal only: the browser upload route passes base64 here. Not part of the MCP tool — agents upload with get_upload_url + curl.",
       ),
     path: z
       .string()
       .min(1)
       .optional()
       .describe(
-        "Absolute path to an image file ON THE SERVER machine. The server reads it off disk — no bytes travel through the request, so this is the token-cheap way to import a file that is already local. Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS. Mutually exclusive with `data_base64`.",
+        "Absolute path to an image file ON THE SERVER machine. The server reads it off disk — no bytes travel through the request. Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS.",
       ),
     mime_type: z
       .enum([
@@ -500,7 +540,13 @@ export const AddImageSchema = z
   .superRefine((v, ctx) => {
     const hasPath = typeof v.path === "string" && v.path.length > 0;
     const hasB64 = typeof v.data_base64 === "string" && v.data_base64.length > 0;
-    if (hasPath === hasB64) {
+    if (!hasPath && !hasB64) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `add_image needs \`path\` — a file on the server. ${NO_BASE64_HINT}`,
+      });
+    }
+    if (hasPath && hasB64) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "supply exactly one of `path` or `data_base64`",
@@ -521,14 +567,14 @@ export const AddFileSchema = z
       .min(4)
       .optional()
       .describe(
-        "The file bytes, base64-encoded (max 50MB decoded). Raw bytes only — no `data:` prefix. Prefer `path` for a file already on the server machine.",
+        "Internal only (tests / server-side callers). Not part of the MCP tool — agents upload with get_upload_url + curl.",
       ),
     path: z
       .string()
       .min(1)
       .optional()
       .describe(
-        "Absolute path to a file ON THE SERVER machine; read off disk so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS — the same roots as add_image). Mutually exclusive with `data_base64`.",
+        "Absolute path to a file ON THE SERVER machine; read off disk so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS — the same roots as add_image).",
       ),
     name: z
       .string()
@@ -554,7 +600,13 @@ export const AddFileSchema = z
   .superRefine((v, ctx) => {
     const hasPath = typeof v.path === "string" && v.path.length > 0;
     const hasB64 = typeof v.data_base64 === "string" && v.data_base64.length > 0;
-    if (hasPath === hasB64) {
+    if (!hasPath && !hasB64) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `add_file needs \`path\` — a file on the server. ${NO_BASE64_HINT}`,
+      });
+    }
+    if (hasPath && hasB64) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "supply exactly one of `path` or `data_base64`",
@@ -567,6 +619,8 @@ export const AddFileSchema = z
       });
     }
   });
+
+export const GetUploadUrlSchema = z.object({});
 
 export const SealSecretSchema = z.object({
   text: z
@@ -644,6 +698,19 @@ export const GetImageSchema = z
       .describe(
         "`meta` = metadata only, NEVER inline bytes (cheapest — prefer this to decide what an image is). `full` = inline base64 (still capped by max_bytes). Omit for legacy behavior (inline when under the size cap). Default will switch to `meta` in a future major version.",
       ),
+    max_edge: z
+      .number()
+      .int()
+      .min(64)
+      .max(8192)
+      .optional()
+      .describe(
+        "Longest side, in pixels, of the inlined copy. Defaults to the server's reading size (1280 unless configured). Never enlarges.",
+      ),
+    original: z
+      .boolean()
+      .optional()
+      .describe("true = inline the stored original, whatever its size."),
   })
   .refine((v) => !!v.hash || !!v.src, {
     message: "must supply either hash or src",
@@ -973,10 +1040,33 @@ export type ToolInputs = {
   seal_secret: z.infer<typeof SealSecretSchema>;
   reveal_secret: z.infer<typeof RevealSecretSchema>;
   get_image: z.infer<typeof GetImageSchema>;
+  get_upload_url: z.infer<typeof GetUploadUrlSchema>;
   get_example: z.infer<typeof GetExampleSchema>;
   get_prompt_log: z.infer<typeof GetPromptLogSchema>;
   toggle_task: z.infer<typeof ToggleTaskSchema>;
 };
+
+export type StoredImageResult = ImageMetaWithSrc & {
+  /** Ready-to-paste `![alt](src)` — a path, so it survives a domain move. */
+  markdown: string;
+  /** Reasons the figure may look soft; empty when none apply. */
+  warnings: string[];
+  /** Absolute link for humans. Never paste into page content. */
+  url: string;
+};
+
+export interface StoredFileResult {
+  hash: string;
+  ext: string;
+  mime: string;
+  name: string;
+  size_bytes: number;
+  created_at: string;
+  src: string;
+  url: string;
+  /** Ready-to-paste ```file block for this attachment. */
+  fence: string;
+}
 
 export interface ToolHandlers {
   add_knowledge(input: ToolInputs["add_knowledge"]): Promise<{
@@ -1335,31 +1425,29 @@ export interface ToolHandlers {
     url: string;
   }>;
 
-  add_image(input: ToolInputs["add_image"]): Promise<{
-    hash: string;
-    ext: string;
-    mime: string;
-    size_bytes: number;
-    width: number | null;
-    height: number | null;
-    alt: string | null;
-    created_at: string;
-    src: string;
-    url: string;
+  add_image(input: ToolInputs["add_image"]): Promise<StoredImageResult>;
+
+  /** Not an MCP tool: stores bytes for the upload routes (curl ticket,
+   *  browser upload) with the same result as add_image. */
+  store_image(bytes: Buffer, mime: string, alt?: string | null): Promise<StoredImageResult>;
+
+  /** Not an MCP tool: stores bytes for the curl upload route with the same
+   *  result as add_file. */
+  store_file(
+    bytes: Buffer,
+    name: string,
+    opts?: { mime?: string | null; description?: string | null },
+  ): Promise<StoredFileResult>;
+
+  get_upload_url(input: ToolInputs["get_upload_url"]): Promise<{
+    image_url: string;
+    file_url: string;
+    expires_at: string;
+    image_curl: string;
+    file_curl: string;
   }>;
 
-  add_file(input: ToolInputs["add_file"]): Promise<{
-    hash: string;
-    ext: string;
-    mime: string;
-    name: string;
-    size_bytes: number;
-    created_at: string;
-    src: string;
-    url: string;
-    /** Ready-to-paste ```file block for this attachment. */
-    fence: string;
-  }>;
+  add_file(input: ToolInputs["add_file"]): Promise<StoredFileResult>;
 
   seal_secret(input: ToolInputs["seal_secret"]): Promise<{
     /** Ready-to-paste ```secret block. */
@@ -1393,6 +1481,15 @@ export interface ToolHandlers {
     embedded: boolean;
     /** Which return mode applied: "meta" (no bytes) or "full" (bytes when under cap). */
     mode: "meta" | "full";
+    /** What was inlined when `embedded` — a scaled WebP copy unless the
+     *  original was small enough or `original: true` was asked for. */
+    served?: {
+      mime: string;
+      width: number | null;
+      height: number | null;
+      size_bytes: number;
+      resized: boolean;
+    };
     /** Present iff `embedded` is true — raw bytes for MCP image content. */
     data_base64?: string;
   }>;
@@ -2665,13 +2762,54 @@ export function buildToolHandlers(
         }
         mime = parsed.mime_type!; // superRefine guarantees presence with base64
       }
-      const meta = images.add(bytes, mime, parsed.alt ?? null);
+      return this.store_image(bytes, mime, parsed.alt ?? null);
+    },
+
+    async store_image(bytes, mime, alt) {
+      const meta = images.add(bytes, mime, alt ?? null);
       const base = ctx.publicBaseUrl.replace(/\/$/, "");
       recordActivity({
         action: "upload",
         target: "image",
       });
-      return { ...meta, url: `${base}${meta.src}` };
+      return {
+        ...meta,
+        markdown: imageMarkdown(meta.src, meta.alt),
+        warnings: imageWarnings(meta),
+        url: `${base}${meta.src}`,
+      };
+    },
+
+    async store_file(bytes, name, opts) {
+      if (!files) throw new Error("file attachments are not enabled on this server");
+      const meta = files.add(bytes, name, opts?.mime ?? null);
+      const base = ctx.publicBaseUrl.replace(/\/$/, "");
+      const entry: Record<string, unknown> = {
+        src: meta.src,
+        name: meta.name,
+        size_bytes: meta.size_bytes,
+        mime: meta.mime,
+      };
+      if (opts?.description) entry.description = opts.description;
+      recordActivity({ action: "upload", target: "file" });
+      return {
+        ...meta,
+        url: `${base}${meta.src}`,
+        fence: "```file\n" + JSON.stringify(entry) + "\n```",
+      };
+    },
+
+    async get_upload_url() {
+      if (!ctx.uploadTickets) throw new Error("uploads are not enabled on this server");
+      const ticket = ctx.uploadTickets.issue(getCallContext().user_id ?? null);
+      const root = `${ctx.publicBaseUrl.replace(/\/$/, "")}/api/upload/${ticket.token}`;
+      return {
+        image_url: `${root}/image`,
+        file_url: `${root}/file`,
+        expires_at: new Date(ticket.expires_at).toISOString(),
+        image_curl: `curl -sS --data-binary @<FILE> '${root}/image?alt=<URL-ENCODED ALT>'`,
+        file_curl: `curl -sS --data-binary @<FILE> '${root}/file?name=<URL-ENCODED NAME>&description=<OPTIONAL>'`,
+      };
     },
 
     async add_file(input) {
@@ -2692,21 +2830,10 @@ export function buildToolHandlers(
         }
         name = parsed.name!; // superRefine guarantees presence with base64
       }
-      const meta = files.add(bytes, name, parsed.mime_type ?? null);
-      const base = ctx.publicBaseUrl.replace(/\/$/, "");
-      const entry: Record<string, unknown> = {
-        src: meta.src,
-        name: meta.name,
-        size_bytes: meta.size_bytes,
-        mime: meta.mime,
-      };
-      if (parsed.description) entry.description = parsed.description;
-      recordActivity({ action: "upload", target: "file" });
-      return {
-        ...meta,
-        url: `${base}${meta.src}`,
-        fence: "```file\n" + JSON.stringify(entry) + "\n```",
-      };
+      return this.store_file(bytes, name, {
+        mime: parsed.mime_type ?? null,
+        description: parsed.description ?? null,
+      });
     },
 
     async seal_secret(input) {
@@ -2788,17 +2915,37 @@ export function buildToolHandlers(
       if (parsed.mode === "meta") {
         return { ...meta, url, embedded: false, mode: "meta" as const };
       }
+      const maxEdge = parsed.original
+        ? null
+        : (parsed.max_edge ?? ctx.imageReadMaxEdge ?? DEFAULT_IMAGE_READ_MAX_EDGE);
+      const v =
+        maxEdge == null
+          ? {
+              bytes: images.readBytes(meta.hash, meta.ext),
+              mime: meta.mime,
+              width: meta.width,
+              height: meta.height,
+              resized: false,
+            }
+          : await images.variant(meta, maxEdge);
+      const served = {
+        mime: v.mime,
+        width: v.width,
+        height: v.height,
+        size_bytes: v.bytes.length,
+        resized: v.resized,
+      };
       const cap = parsed.max_bytes ?? 6 * 1024 * 1024;
-      if (meta.size_bytes > cap) {
-        return { ...meta, url, embedded: false, mode: "full" as const };
+      if (v.bytes.length > cap) {
+        return { ...meta, url, embedded: false, mode: "full" as const, served };
       }
-      const bytes = images.readBytes(meta.hash, meta.ext);
       return {
         ...meta,
         url,
         embedded: true,
         mode: "full" as const,
-        data_base64: bytes.toString("base64"),
+        served,
+        data_base64: v.bytes.toString("base64"),
       };
     },
 

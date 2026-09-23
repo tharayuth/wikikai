@@ -7,9 +7,13 @@ import type { KnowledgeStore } from "../store/knowledge.js";
 import type { PageStore } from "../store/pages.js";
 import {
   type ImageStore,
+  IMAGE_MAX_BYTES,
   mimeForExt,
   parseImageSrc,
+  sniffImageMime,
 } from "../store/images.js";
+import { FILE_MAX_BYTES } from "../store/files.js";
+import type { UploadTicketStore } from "../lib/uploadTickets.js";
 import type { PromptLogStore } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
 import type { UserStore, SessionStore } from "../store/users.js";
@@ -70,6 +74,9 @@ export interface BuildAppOptions {
   webAuth?: boolean;
   /** User id used to tag MCP-source activity-log rows. */
   mcpDefaultUserId?: number | null;
+  /** Links issued by the `get_upload_url` tool. Without it the curl upload
+   *  route answers 404 for every ticket. */
+  uploadTickets?: UploadTicketStore;
 }
 
 export function buildApp(opts: BuildAppOptions): Express {
@@ -243,6 +250,83 @@ export function buildApp(opts: BuildAppOptions): Express {
       next(e);
     }
   });
+
+  // ─── Curl upload (get_upload_url) ───
+  // The bytes travel as the raw request body — `curl --data-binary @file` —
+  // so an agent never writes a file out as base64. The unguessable ticket in
+  // the path is the credential (the agent cannot see its MCP token); the
+  // login wall lets /api/upload/ through for that reason.
+  const rawBody = express.raw({ type: () => true, limit: FILE_MAX_BYTES });
+  app.post(
+    "/api/upload/:ticket/:kind",
+    (req, res, next) =>
+      rawBody(req, res, (err?: unknown) => {
+        if (!err) return next();
+        const e = err as { type?: string; message?: string };
+        res.status(e.type === "entity.too.large" ? 413 : 400).json({
+          error: e.type === "entity.too.large" ? "file too large (max 50MB)" : (e.message ?? "bad body"),
+        });
+      }),
+    async (req, res, next) => {
+      try {
+        const ticket = opts.uploadTickets?.resolve(req.params.ticket) ?? null;
+        const kind = req.params.kind;
+        if (!ticket || (kind !== "image" && kind !== "file")) {
+          res.status(404).json({
+            error: "unknown or expired upload link — call get_upload_url for a new one",
+          });
+          return;
+        }
+        const body: unknown = req.body;
+        if (!Buffer.isBuffer(body) || body.length === 0) {
+          res.status(400).json({
+            error: "empty body — send the file as the raw body: curl --data-binary @<file> '<url>'",
+          });
+          return;
+        }
+        const ctx = { source: "mcp" as const, tool_name: "get_upload_url", user_id: ticket.user_id };
+        if (kind === "image") {
+          if (body.length > IMAGE_MAX_BYTES) {
+            res.status(413).json({ error: `image too large (max ${IMAGE_MAX_BYTES / 1024 / 1024}MB)` });
+            return;
+          }
+          const mime =
+            sniffImageMime(body) ??
+            (/<svg[\s>]/i.test(body.subarray(0, 2048).toString("utf8")) ? "image/svg+xml" : null);
+          if (!mime) {
+            res.status(415).json({
+              error: "not a PNG, JPEG, GIF, WebP or SVG image — upload other files to the /file link",
+            });
+            return;
+          }
+          const alt = optional(req.query.alt) ?? null;
+          const result = await withCallContext(ctx, () => opts.handlers.store_image(body, mime, alt));
+          res.status(201).json(result);
+          return;
+        }
+        const name = optional(req.query.name);
+        if (!name) {
+          res.status(400).json({ error: "name is required: ?name=<original filename>" });
+          return;
+        }
+        // curl labels --data-binary as form data; that says nothing about the file.
+        const declared = (req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+        const mime =
+          declared && declared !== "application/x-www-form-urlencoded" && declared !== "application/octet-stream"
+            ? declared
+            : null;
+        const result = await withCallContext(ctx, () =>
+          opts.handlers.store_file(body, name, {
+            mime,
+            description: optional(req.query.description) ?? null,
+          }),
+        );
+        res.status(201).json(result);
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
 
   // ─── Server-Sent Events ───
   // One persistent text/event-stream per client; the server fans out

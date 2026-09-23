@@ -281,20 +281,16 @@ const searchShape = {
   limit: z.number().int().min(1).max(200).optional(),
 };
 
+// No `data_base64` here on purpose: an agent writing a file out as base64
+// spends output tokens by the hundred thousand. MCP clients upload through
+// `get_upload_url` + curl, or `path` for a file already on the server.
 const addImageShape = {
-  data_base64: z
-    .string()
-    .min(4)
-    .optional()
-    .describe(
-      "Image bytes, base64-encoded. Max ~10MB decoded. Raw bytes only — no `data:` URI prefix. Use only when the file is NOT on the server machine; for a local file prefer `path` (no base64 ⇒ far cheaper). Mutually exclusive with `path`.",
-    ),
   path: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Absolute path to an image file ON THE SERVER machine — the server reads it off disk, so no bytes travel through the request (the token-cheap way to import an already-local file). Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS. Mutually exclusive with `data_base64`.",
+      "Absolute path to an image file ON THE SERVER machine — the server reads it off disk, so no bytes travel through the request. Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS. For a file on YOUR machine, call `get_upload_url` and send it with curl instead.",
     ),
   mime_type: z
     .enum([
@@ -307,7 +303,7 @@ const addImageShape = {
     ])
     .optional()
     .describe(
-      "MIME type of the bytes. Required with `data_base64`. Optional with `path` (inferred from magic bytes / extension) — pass only to override. Determines the file extension.",
+      "Optional override of the detected type (magic bytes, then extension). Determines the file extension.",
     ),
   alt: z
     .string()
@@ -317,19 +313,12 @@ const addImageShape = {
 };
 
 const addFileShape = {
-  data_base64: z
-    .string()
-    .min(4)
-    .optional()
-    .describe(
-      "File bytes, base64-encoded. Max 50MB decoded. Raw bytes only — no `data:` prefix. Use only when the file is NOT on the server machine; for a local file prefer `path`. Mutually exclusive with `path`.",
-    ),
   path: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Absolute path to a file ON THE SERVER machine — read off disk, so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS, shared with add_image). Mutually exclusive with `data_base64`.",
+      "Absolute path to a file ON THE SERVER machine — read off disk, so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS, shared with add_image). For a file on YOUR machine, call `get_upload_url` and send it with curl instead.",
     ),
   name: z
     .string()
@@ -337,7 +326,7 @@ const addFileShape = {
     .max(255)
     .optional()
     .describe(
-      "Original filename (e.g. `report-q3.pdf`) — what the reader's download is saved as. Required with `data_base64`; defaults to the path's basename with `path`.",
+      "Original filename (e.g. `report-q3.pdf`) — what the reader's download is saved as. Defaults to the path's basename.",
     ),
   mime_type: z
     .string()
@@ -375,7 +364,24 @@ const getImageShape = {
     .describe(
       "`meta` = metadata only, NEVER inline bytes — cheapest, prefer it to decide what an image is. `full` = inline base64 (still capped by max_bytes). Omit for legacy behavior (inline when under the cap); the default flips to `meta` in a future major version.",
     ),
+  max_edge: z
+    .number()
+    .int()
+    .min(64)
+    .max(8192)
+    .optional()
+    .describe(
+      "Longest side, in pixels, of the inlined copy. Defaults to the server's reading size (1280 unless configured) — enough for screenshot text at a fraction of the image tokens. Larger images are scaled down to a WebP copy; smaller ones are never enlarged.",
+    ),
+  original: z
+    .boolean()
+    .optional()
+    .describe(
+      "true = inline the stored original, whatever its size. Use only when fine detail matters (tiny text, pixel-level checks) — image tokens grow with pixel count.",
+    ),
 };
+
+const getUploadUrlShape = {};
 
 const getBlockShape = {
   id: z
@@ -665,6 +671,8 @@ function imageContent(meta: {
   data_base64?: string;
   mime: string;
   embedded: boolean;
+  /** Set by get_image: the inlined bytes may be a scaled WebP copy. */
+  served?: { mime: string };
   [k: string]: unknown;
 }) {
   const content: Array<
@@ -675,7 +683,7 @@ function imageContent(meta: {
     content.push({
       type: "image",
       data: meta.data_base64,
-      mimeType: meta.mime,
+      mimeType: meta.served?.mime ?? meta.mime,
     });
   }
   // Strip the bulky base64 from the sidecar to keep the text small.
@@ -1152,9 +1160,10 @@ export function createMcpServer(
   server.registerTool(
     "add_image",
     {
-      title: "Upload an image (content-addressed)",
+      title: "Import an image from the server's disk (content-addressed)",
       description:
-        "Store raw image bytes (base64-encoded). Returns `{ src, hash, mime, size_bytes, … }` where `src` is the public path (`/img/<hash>.<ext>`). " +
+        "Register an image file that is already ON THE SERVER machine (`path`). For a file on YOUR machine — the usual case — call `get_upload_url` and send it with curl; it returns this same result. Base64 uploads are not accepted: writing a file out as base64 costs a huge number of tokens. " +
+        "Returns `{ src, markdown, hash, mime, size_bytes, width, height, warnings, url }` where `src` is the path (`/img/<hash>.<ext>`). **Put `src` (or the ready `markdown`) into pages, never `url`** — `url` carries this server's domain, and content must keep working if the domain changes. Read `warnings`: a narrow image or a JPEG screenshot looks soft on HiDPI screens. " +
         "Filenames derive from the SHA-256 of the bytes, so identical content dedupes and URLs are immutable (client-cached forever). " +
         "Supported types: image/png, image/jpeg, image/gif, image/webp, image/svg+xml. " +
         "**Default: plain markdown `![alt](<src>)`** — works in paragraphs, list items, AND markdown table cells (e.g. `| Logo | ![brand](/img/abc….png) | … |`). Size via the title slot — `![alt](<src> \"WxH\")` (`\"300x200\"` fits both, `\"300x\"` width-only, `\"x200\"` height-only, or `\"caption w=300 h=200\"` to mix with caption text); aspect ratio always preserved (max-width / max-height + auto on the other axis). The web UI gives every inline image **drag-to-resize handles** (right/bottom/corner) that persist back to the title slot, and **click opens a lightbox** with the full-resolution image — so one markdown line covers both inline-thumbnail-with-zoom and explicit-size-figure cases. Article column is ~860px wide on a typical screen; `\"720x\"` is a safe full-bleed cap. The CSS clamps any over-large image to the column as a safety net.\\n" +
@@ -1172,16 +1181,32 @@ export function createMcpServer(
   server.registerTool(
     "add_file",
     {
-      title: "Attach a downloadable file",
+      title: "Attach a downloadable file from the server's disk",
       description:
-        "Store an arbitrary file (PDF, CSV, XLSX, ZIP, …) and get back `{ src, name, size_bytes, mime, url, fence }`. " +
+        "Register a file (PDF, CSV, XLSX, ZIP, …) that is already ON THE SERVER machine (`path`) and get back `{ src, name, size_bytes, mime, url, fence }`. For a file on YOUR machine, call `get_upload_url` and send it with curl (same result). Base64 uploads are not accepted. " +
         "Bytes are content-addressed (`/file/<sha256>.<ext>`) so identical uploads dedupe and the on-disk name is opaque; the ORIGINAL `name` is what a reader's download is saved as. " +
         "Then paste the returned `fence` into a page — a ```file block whose JSON is `{ src, name, size_bytes, mime, description? }` (or an array of those for several files) — and the portal renders a card with the filename, size, type, description and a Download button. " +
         "Lifecycle: automatic and deferred. When every page that referenced the file drops the reference (edit_page / edit_lines / edit_section / replace_text / delete_page / delete_knowledge, or a human's Edit raw → Save), the file is only marked as orphaned; the bytes are deleted after it has stayed unreferenced for 7 days and no page revision mentions it. Moving a file between pages, or restoring an old revision, is therefore safe. " +
-        "Max 50MB. Prefer `path` when the file is already on the server machine (zero base64).",
+        "Max 50MB.",
       inputSchema: addFileShape,
     },
     async (input) => jsonContent(await handlers.add_file(input)),
+  );
+
+  // ─── Upload link (bytes bypass the model) ───
+  server.registerTool(
+    "get_upload_url",
+    {
+      title: "Get a short-lived link to upload images / files with curl",
+      description:
+        "The way to put a local image or file into WikiKai. Returns `{ image_url, file_url, expires_at, image_curl, file_curl }`. Send each file with the shell — the bytes go straight from disk to the server and never pass through the conversation:\n" +
+        "  image: `curl -sS --data-binary @shot.png '<image_url>?alt=Login%20screen'` → `{ src, markdown, width, height, warnings, … }` (same as add_image)\n" +
+        "  file:  `curl -sS --data-binary @report.pdf '<file_url>?name=report.pdf&description=Q3'` → `{ src, fence, … }` (same as add_file)\n" +
+        "One link takes any number of uploads for 15 minutes — fetch one per batch. Then paste `markdown` (images) or `fence` (files) into a page. Image types are detected from the bytes (PNG, JPEG, GIF, WebP, SVG; max 10MB); files max 50MB. " +
+        "For crisp figures upload PNG screenshots captured at 2x (e.g. deviceScaleFactor: 2); JPEG blurs text edges.",
+      inputSchema: getUploadUrlShape,
+    },
+    async () => jsonContent(await handlers.get_upload_url({})),
   );
 
   // ─── Encrypted credentials ───
@@ -1225,6 +1250,7 @@ export function createMcpServer(
         "Resolve an image by hash or by its `/img/<hash>.<ext>` path and return it as an MCP image content block — the assistant sees the picture rendered alongside the JSON metadata. " +
         "Use this when a page contains an ```images fence and you need to describe / edit / validate what the user is referring to. " +
         "Pass `mode: \"meta\"` for metadata only (no bytes — cheapest, use it to decide what an image is before paying for pixels); `mode: \"full\"` (or omitting mode) inlines the bytes. " +
+        "The inlined copy is scaled so its longest side is at most the server's reading size (default 1280px, WebP) — screenshot text stays legible at a fraction of the image tokens. Pass `max_edge` for another size or `original: true` for the stored file; `served` in the result reports what was sent. " +
         "If the image is larger than `max_bytes` (default ~6MB), the call still returns metadata but skips the inline bytes (`embedded: false`). The response `mode` field reports which applied.",
       inputSchema: getImageShape,
     },

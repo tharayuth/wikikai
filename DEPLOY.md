@@ -85,6 +85,10 @@ server {
   ssl_certificate     /etc/letsencrypt/live/wikikai.your-domain.tld/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/wikikai.your-domain.tld/privkey.pem;
 
+  # Agents upload images (10MB) and attachments (50MB) with curl through
+  # get_upload_url links; nginx's 1MB default would reject them with a 413.
+  client_max_body_size 50m;
+
   # SPA + static client + API + MCP all behind one origin
   location / {
     proxy_pass http://127.0.0.1:3939;

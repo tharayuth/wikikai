@@ -56,6 +56,9 @@ export interface Config {
    *  carry its own key. Never used by the web portal, which decrypts in
    *  the browser with a key the reader types. */
   secretKey: string | null;
+  /** Longest side of the copy `get_image` inlines unless the caller asks
+   *  for another size (`WIKIKAI_IMAGE_READ_MAX_EDGE`, default 1280). */
+  imageReadMaxEdge: number;
 }
 
 /**
@@ -149,6 +152,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const imageImportEnabled = imageImportRoots.length > 0;
   const secretKey = (env.WIKIKAI_SECRET_KEY ?? "").trim() || null;
 
+  const edgeRaw = Number(env.WIKIKAI_IMAGE_READ_MAX_EDGE ?? "");
+  const imageReadMaxEdge =
+    Number.isInteger(edgeRaw) && edgeRaw >= 64 && edgeRaw <= 8192 ? edgeRaw : 1280;
+
   return {
     port,
     host,
@@ -166,5 +173,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     imageImportRoots,
     imageImportEnabled,
     secretKey,
+    imageReadMaxEdge,
   };
 }

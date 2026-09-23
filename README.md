@@ -61,6 +61,8 @@ Add WikiKai to an AI client that supports **MCP over Streamable HTTP**:
 
 For a hosted instance, use its HTTPS URL followed by `/mcp`. With web authentication enabled, find your personal **MCP API token** and an example configuration in the account menu.
 
+Agents upload images and attachments with `curl` through a short-lived link from the `get_upload_url` tool, so file bytes never pass through the model as base64. Behind a reverse proxy, allow request bodies up to 50 MB (see [Deployment](DEPLOY.md)).
+
 The optional [WikiKai skill](docs/skill/SKILL.md) gives compatible agents guidance on when to save knowledge and how to work with pages and blocks.
 
 ## Under the hood

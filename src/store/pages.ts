@@ -373,6 +373,16 @@ export class PageStore {
 
   /** `searchParams` is injectable so `scripts/eval-search.ts` can sweep values
    *  against the real corpus — the defaults are measurements, not opinions. */
+  /** Origins (scheme + host) whose `/img/` and `/file/` links are this
+   *  server's own — rewritten to plain paths on every write. */
+  private assetOrigins: string[] = [];
+
+  setAssetOrigins(origins: string[]): void {
+    this.assetOrigins = origins
+      .map((o) => o.trim().replace(/\/+$/, ""))
+      .filter((o) => /^https?:\/\/[^/]+$/i.test(o));
+  }
+
   constructor(
     private db: Db,
     private itemsDir: string,
@@ -1985,7 +1995,7 @@ export class PageStore {
    * sync with what's actually on disk.
    */
   private writeContent(knowledgeId: number, pageId: number, content: string): string {
-    const annotated = this.injectBlockIds(content);
+    const annotated = this.injectBlockIds(relativizeAssetUrls(content, this.assetOrigins));
     fs.writeFileSync(this.filePath(knowledgeId, pageId), annotated, "utf8");
     return annotated;
   }
@@ -3772,3 +3782,18 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/**
+ * Rewrite `https://<own host>/img/…` and `/file/…` links to plain paths.
+ * Page content must not carry the server's domain: it would break the day
+ * the site moves, and dev (a copy of production) would link to production.
+ * Both schemes are matched, since a proxy may sit in front of either.
+ * External hosts are left alone.
+ */
+export function relativizeAssetUrls(content: string, origins: string[]): string {
+  let out = content;
+  for (const origin of origins) {
+    const host = origin.replace(/^https?:\/\//i, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(`https?://${host}(?=/(?:img|file)/[a-f0-9]{64}\\.)`, "gi"), "");
+  }
+  return out;
+}

@@ -66,11 +66,12 @@ src/
   server.ts            wires Config → Stores → MCP → Express app
   lib/config.ts        env → typed Config (incl. mcpToken, secretKey)
   lib/secret.ts        AES-GCM envelope shared by server + browser (```secret)
+  lib/uploadTickets.ts short-lived curl upload links (get_upload_url)
   store/db.ts          better-sqlite3 connection + schema.sql apply
   store/knowledge.ts   knowledge metadata CRUD
   store/pages.ts       page CRUD + line-range ops + FTS sync
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
-  mcp/server.ts        registers 41 tools on McpServer
+  mcp/server.ts        registers 42 tools on McpServer
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
   mcp/examples/*.md    markdown reference content
@@ -241,6 +242,10 @@ keeping.
   and `/`. A new endpoint that needs streaming or a long timeout needs its own
   block; the default one buffers. Dev's site mirrors production's: change the
   proxy behaviour in both, or dev stops being a faithful test of production.
+- **Uploads arrive as raw request bodies.** `/api/upload/<ticket>/{image,file}`
+  (from the `get_upload_url` tool) carries images up to 10MB and attachments up
+  to 50MB, so both sites' nginx `client_max_body_size` must allow 50m — the
+  1MB default answers 413 before the app sees the request.
 - Full runbook, including emergency rollback, lives on the production host as
   `PRODUCTION.md` (path in `CLAUDE.local.md`).
 
