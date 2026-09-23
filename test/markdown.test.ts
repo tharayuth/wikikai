@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdown } from "../src/render/markdown.js";
+import { parseCellColorMarker, renderMarkdown } from "../src/render/markdown.js";
 
 describe("renderMarkdown", () => {
   it("includes source coordinates for repeated reading blocks", async () => {
@@ -551,5 +551,47 @@ describe("```secret fence", () => {
     const bad = await renderMarkdown("```secret\n" + JSON.stringify({ v: 1, salt: "a" }) + "\n```\n");
     expect(bad).toContain("secret error");
     expect(bad).toContain("missing");
+  });
+});
+
+describe("table cell colours", () => {
+  const table = (rows: string[]) =>
+    renderMarkdown(["| A | B |", "|---|:-:|", ...rows].join("\n"));
+
+  it("turns a leading {bg=… fg=…} marker into classes and strips it", async () => {
+    const out = await table(["| {bg=green} ok | {bg=red fg=red} **Fail** |"]);
+    expect(out).toMatch(/<td class="cell-bg-green"[^>]*>ok<\/td>/);
+    expect(out).toContain('class="cell-bg-red cell-fg-red"');
+    expect(out).toContain("<strong>Fail</strong>");
+    expect(out).not.toContain("{bg=");
+  });
+
+  it("keeps alignment and works in header cells", async () => {
+    const out = await renderMarkdown("| {bg=blue} H | {color=gray} C |\n|---|:-:|\n| a | b |");
+    expect(out).toContain('<th class="cell-bg-blue"');
+    expect(out).toMatch(/<th style="text-align:center" class="cell-fg-gray"[^>]*>C<\/th>/);
+  });
+
+  it("leaves unknown keys, unknown colours and other braces as text", async () => {
+    const out = await table(["| {id} | {ok: true} |", "| {bg=pink} x | {size=big} y |"]);
+    for (const lit of ["{id}", "{ok: true}", "{bg=pink} x", "{size=big} y"]) expect(out).toContain(lit);
+    expect(out).not.toContain("cell-");
+  });
+
+  it("only applies at the start of a cell and keeps checkboxes working", async () => {
+    const out = await table(["| done {bg=green} | {fg=blue} [x] shipped |"]);
+    expect(out).toContain("done {bg=green}");
+    expect(out).toContain('class="cell-fg-blue"');
+    expect(out).toContain('data-task-index="0" checked');
+  });
+
+  it("parses the marker grammar", () => {
+    expect(parseCellColorMarker("{bg=amber fg=red}  rest")).toEqual({
+      classes: ["cell-bg-amber", "cell-fg-red"],
+      length: 19,
+    });
+    expect(parseCellColorMarker("{fg=red color=red} x")?.classes).toEqual(["cell-fg-red"]);
+    expect(parseCellColorMarker("{bg=Green} x")).toBeNull();
+    expect(parseCellColorMarker("{} x")).toBeNull();
   });
 });

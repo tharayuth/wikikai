@@ -870,6 +870,26 @@ function renderSecretBlock(raw: string, blockId: number | null, caption: string 
   // container, and emit the same hover-revealed `block-badge` button
   // that every other rich block has — so users can copy `@N` / jump to
   // editor from the table corner just like a chart or a stats card.
+  // ─── Table cell colours — `{bg=green fg=red}` at the start of a cell ───
+  // Strips the marker and puts `cell-bg-*` / `cell-fg-*` classes on the
+  // <td>/<th>; the colours are theme tokens, so light/dark both work. Only
+  // known keys and colour names count: tables already hold text such as
+  // `{id}` or `{ok: true}`, and anything unrecognised must stay literal.
+  md.core.ruler.before("task-checkboxes", "table-cell-colors", (state) => {
+    const tokens = state.tokens;
+    for (let i = 1; i < tokens.length; i++) {
+      const tok = tokens[i];
+      const cell = tokens[i - 1];
+      if (tok.type !== "inline" || (cell.type !== "td_open" && cell.type !== "th_open")) continue;
+      const first = tok.children?.[0];
+      if (!first || first.type !== "text") continue;
+      const parsed = parseCellColorMarker(first.content);
+      if (!parsed) continue;
+      first.content = first.content.slice(parsed.length);
+      for (const cls of parsed.classes) cell.attrJoin("class", cls);
+    }
+  });
+
   md.core.ruler.after("task-checkboxes", "table-block-ids", (state) => {
     const tokens = state.tokens;
     for (let i = 0; i < tokens.length; i++) {
@@ -971,4 +991,26 @@ export function buildToc(source: string): TocEntry[] {
     entries.push({ level, id: slugify(text), text });
   }
   return entries;
+}
+
+/** Colours a table cell may use — theme token names (see theme.css). */
+export const CELL_COLORS = ["red", "green", "amber", "blue", "cyan", "purple", "gray"] as const;
+
+/**
+ * Parse a leading `{bg=green fg=red}` cell marker. `color` is an alias of
+ * `fg`. Returns the classes to apply and how many characters to strip
+ * (marker plus following spaces), or null when the text does not start
+ * with a marker made only of known keys and colours.
+ */
+export function parseCellColorMarker(text: string): { classes: string[]; length: number } | null {
+  const m = /^\{([^{}]{1,60})\}[ \t]*/.exec(text);
+  if (!m) return null;
+  const classes: string[] = [];
+  for (const part of m[1].trim().split(/\s+/)) {
+    const kv = /^(bg|fg|color)=([a-z]+)$/.exec(part);
+    if (!kv || !(CELL_COLORS as readonly string[]).includes(kv[2])) return null;
+    const cls = `cell-${kv[1] === "bg" ? "bg" : "fg"}-${kv[2]}`;
+    if (!classes.includes(cls)) classes.push(cls);
+  }
+  return classes.length ? { classes, length: m[0].length } : null;
 }

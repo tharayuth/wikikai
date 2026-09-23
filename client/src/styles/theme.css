@@ -26,6 +26,9 @@
   --red: #dc2626;           --red-light: #fef2f2;
   --cyan: #0891b2;          --cyan-light: #ecfeff;
   --purple: #7c3aed;        --purple-light: #f5f3ff;
+  /* Readable text in each hue (table cell `fg=`); brighter in dark mode. */
+  --red-text: #dc2626;      --green-text: #047857;     --amber-text: #b45309;
+  --blue-text: #1d4ed8;     --cyan-text: #0e7490;      --purple-text: #6d28d9;
 
   --radius: 8px;
   --radius-sm: 5px;
@@ -62,6 +65,8 @@
   --red-light: #3a1f1f;
   --cyan-light: #173039;
   --purple-light: #2a1f3a;
+  --red-text: #f87171;      --green-text: #34d399;     --amber-text: #fbbf24;
+  --blue-text: #60a5fa;     --cyan-text: #22d3ee;      --purple-text: #a78bfa;
 
   --shadow: 0 1px 2px rgba(0,0,0,.4);
   --shadow-md: 0 2px 8px rgba(0,0,0,.5);
@@ -5515,3 +5520,22 @@ button.ki-id-badge::after {
   /* Cells never list pages at this width, so the toggle would do nothing. */
   .cal-toggle-pages { display: none; }
 }
+
+/* ───── Table cell colours — `{bg=green fg=red}` at the start of a cell ───── */
+/* Classes come from render/markdown.ts; header cells take them too. */
+.markdown-body :is(td, th).cell-bg-red    { background: var(--red-light); }
+.markdown-body :is(td, th).cell-bg-green  { background: var(--green-light); }
+.markdown-body :is(td, th).cell-bg-amber  { background: var(--amber-light); }
+.markdown-body :is(td, th).cell-bg-blue   { background: var(--blue-light); }
+.markdown-body :is(td, th).cell-bg-cyan   { background: var(--cyan-light); }
+.markdown-body :is(td, th).cell-bg-purple { background: var(--purple-light); }
+.markdown-body :is(td, th).cell-bg-gray   { background: var(--surface-2); }
+.markdown-body :is(td, th).cell-fg-red    { color: var(--red-text); }
+.markdown-body :is(td, th).cell-fg-green  { color: var(--green-text); }
+.markdown-body :is(td, th).cell-fg-amber  { color: var(--amber-text); }
+.markdown-body :is(td, th).cell-fg-blue   { color: var(--blue-text); }
+.markdown-body :is(td, th).cell-fg-cyan   { color: var(--cyan-text); }
+.markdown-body :is(td, th).cell-fg-purple { color: var(--purple-text); }
+.markdown-body :is(td, th).cell-fg-gray   { color: var(--text-3); }
+/* Bold and italic inside a coloured cell follow the cell colour, not their own. */
+.markdown-body :is(td, th)[class*="cell-fg-"] :is(strong, b, em) { color: inherit; }
