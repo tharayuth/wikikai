@@ -4138,46 +4138,322 @@ button.ki-id-badge::after {
   margin-right: 6px;
 }
 
-/* ───── Account modal ───── */
-.account-modal {
-  max-width: 620px;
-  width: 92vw;
-}
+/* ───── Dialog header (shared) ─────
+   `.account-header` is the header row of every small dialog — account,
+   users, share, tags. The close button lives here, not in the topbar,
+   so it gets its own look instead of falling back to a bare <button>. */
 .account-header {
   display: flex;
   align-items: center;
-  padding: 14px 18px;
+  gap: 12px;
+  padding: 14px 14px 14px 20px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .account-header h2 {
   flex: 1;
+  min-width: 0;
   margin: 0;
   font-size: 16px;
+  font-weight: 600;
+}
+.dialog-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dialog-title h2 { flex: none; }
+.dialog-subtitle {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.modal .account-header .icon-btn,
+.modal .activity-log-header .icon-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.modal .account-header .icon-btn:hover,
+.modal .activity-log-header .icon-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+.modal .account-header .icon-btn:focus-visible,
+.modal .activity-log-header .icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ───── Shared account / user bits ───── */
+.user-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--accent-light);
+  color: var(--accent-strong);
+}
+.user-avatar-lg { width: 52px; height: 52px; font-size: 18px; }
+.user-avatar.tone-1 { background: var(--blue-light);   color: var(--blue-text); }
+.user-avatar.tone-2 { background: var(--green-light);  color: var(--green-text); }
+.user-avatar.tone-3 { background: var(--amber-light);  color: var(--amber-text); }
+.user-avatar.tone-4 { background: var(--purple-light); color: var(--purple-text); }
+.user-avatar.tone-5 { background: var(--cyan-light);   color: var(--cyan-text); }
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+.role-badge.admin {
+  border-color: transparent;
+  background: var(--accent-light);
+  color: var(--accent-strong);
+}
+
+.account-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.account-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.account-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.account-btn.small {
+  font-size: 11.5px;
+  padding: 3px 9px;
+}
+.account-btn.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.account-btn.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.account-btn.danger {
+  color: var(--red-text);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.account-btn.danger:hover:not(:disabled) {
+  background: var(--red-light);
+  border-color: var(--red);
+}
+.account-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.segmented-opt {
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.segmented-sm .segmented-opt { font-size: 12px; padding: 2px 10px; }
+.segmented-opt:hover:not(:disabled):not(.on) { color: var(--text); }
+.segmented-opt.on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow), 0 0 0 1px var(--border);
+}
+.segmented-opt.on.tone-view { background: var(--blue-light);  color: var(--blue-text);  box-shadow: none; }
+.segmented-opt.on.tone-edit { background: var(--green-light); color: var(--green-text); box-shadow: none; }
+.segmented-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.segmented.disabled { opacity: 0.55; }
+.segmented.disabled .segmented-opt { cursor: not-allowed; }
+
+/* Password input with inline show/hide eye toggle. */
+.password-input-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 34px !important;
+}
+.password-input-wrap-invalid input {
+  border-color: var(--red) !important;
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.password-toggle:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.token-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.token-value {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  word-break: break-all;
+  color: var(--text);
+}
+.token-value.empty { font-family: var(--font); color: var(--text-3); }
+.token-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ───── Account modal ───── */
+.account-modal {
+  max-width: 640px;
+  width: 92vw;
 }
 .account-body {
-  padding: 18px 22px 24px;
+  padding: 20px 22px 24px;
   overflow-y: auto;
 }
-.account-info {
-  display: grid;
-  grid-template-columns: 80px 1fr;
-  gap: 6px 14px;
-  margin: 0 0 16px;
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.account-profile-text { min-width: 0; }
+.account-profile-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.account-profile-email {
+  color: var(--text-2);
   font-size: 13.5px;
+  overflow-wrap: anywhere;
 }
-.account-info dt {
+.account-profile-meta {
+  margin-top: 2px;
   color: var(--text-3);
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  align-self: center;
+  font-size: 12px;
 }
-.account-info dd { margin: 0; }
-.account-section {
-  margin: 18px 0 6px;
+.account-admin-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.account-admin-card > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   font-size: 13px;
+  line-height: 1.5;
+}
+.account-admin-card span { color: var(--text-2); font-size: 12.5px; }
+.account-section-block {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.account-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.account-section-row .account-section { margin: 0; }
+.account-section {
+  margin: 0 0 6px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-3);
   font-weight: 600;
 }
@@ -4185,70 +4461,31 @@ button.ki-id-badge::after {
   font-size: 12.5px;
   color: var(--text-2);
   margin: 0 0 10px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
-.account-help code {
-  background: var(--surface-2, rgba(127,127,127,0.08));
-  padding: 1px 5px;
+.account-help code,
+.ua-card-help code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0 5px;
   border-radius: 4px;
-  font-size: 12px;
-}
-.account-token-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: var(--surface-2, rgba(127,127,127,0.05));
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-}
-.account-token {
-  flex: 1;
-  min-width: 280px;
   font-family: var(--mono);
-  font-size: 12px;
-  word-break: break-all;
-  color: var(--text);
+  font-size: 11.5px;
 }
-.account-token-actions {
-  display: flex;
-  gap: 6px;
-}
-.account-btn {
-  font: inherit;
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-.account-btn:hover:not(:disabled) {
-  background: var(--surface-2, rgba(127,127,127,0.06));
-  border-color: var(--accent);
-}
-.account-btn.danger {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #b91c1c;
-}
-.account-btn.danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: #ef4444;
-  color: #991b1b;
-}
-[data-theme="dark"] .account-btn.danger { color: #fca5a5; }
-.account-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .account-code {
-  background: var(--surface-2, rgba(127,127,127,0.05));
+  margin: 0;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 12px 14px;
   font-family: var(--mono);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   overflow-x: auto;
+}
+@media (max-width: 560px) {
+  .account-body { padding: 16px; }
+  .account-admin-card { flex-direction: column; align-items: stretch; }
 }
 
 /* Make the topbar user name look like a button now that it opens the
@@ -4270,277 +4507,380 @@ button.ki-id-badge::after {
   color: var(--accent);
 }
 
-/* ───── Users admin modal ───── */
+/* ───── Users admin modal ─────
+   Master–detail: searchable user list on the left, the selected user on
+   the right with Profile / Project access / MCP token tabs. Below 760px
+   only one pane shows at a time (`.show-detail` flips it). */
 .users-admin-modal {
-  max-width: 1000px;
+  max-width: 1040px;
   width: 96vw;
-  height: 84vh;
-  max-height: 84vh;
+  height: 86vh;
+  max-height: 86vh;
 }
-.users-admin-empty {
-  padding: 32px;
-  text-align: center;
-  color: var(--text-3);
+.ua-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
 }
-.users-table {
+.ua-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.ua-list-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.ua-search {
   width: 100%;
-  border-collapse: collapse;
-  margin-top: 8px;
-}
-.users-table th,
-.users-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-faint, var(--border));
+  font: inherit;
   font-size: 13px;
-  vertical-align: middle;
-  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
 }
-.users-table th {
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-3);
-  font-weight: 600;
+.ua-search:focus { outline: none; border-color: var(--accent); }
+.ua-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1;
 }
-.users-table code {
-  font-size: 12px;
-  background: var(--surface-2, rgba(127,127,127,0.06));
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-family: var(--mono);
-}
-.users-table-meta {
-  font-size: 11.5px;
-  color: var(--text-3);
-  white-space: nowrap;
-}
-.users-table-token {
+.ua-list-item {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.users-table-token code {
+.ua-list-item:hover { background: var(--surface); }
+.ua-list-item.active {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+.ua-list-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ua-list-text {
   flex: 1;
-  min-width: 100px;
-  max-width: 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.ua-list-name,
+.ua-list-email {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* When revealed, show the whole token — break across lines instead of
-   clipping at 220px, and take the full cell width so the buttons wrap
-   neatly onto the next line. */
-.users-table-token code.token-full {
-  flex-basis: 100%;
-  max-width: none;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  word-break: break-all;
+.ua-list-name { font-size: 13.5px; font-weight: 600; }
+.ua-list-email { font-size: 12px; color: var(--text-3); }
+.ua-you {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  vertical-align: 1px;
+  background: var(--green-light);
+  color: var(--green-text);
 }
-.users-table-actions {
-  display: flex;
-  gap: 6px;
-}
-.users-table-edit-row td {
-  background: var(--surface-2, rgba(127,127,127,0.04));
-  padding: 14px 18px;
-}
-.role-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 12.5px;
-}
-.role-toggle input[disabled] {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-.account-btn.small {
-  font-size: 11.5px;
-  padding: 3px 8px;
-}
-.account-btn.primary {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-.account-btn.primary:hover:not(:disabled) {
-  background: var(--accent-strong);
+.ua-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+  list-style: none;
 }
 
-.add-user-form {
-  background: var(--surface-2, rgba(127,127,127,0.05));
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 16px 16px;
-  margin-bottom: 16px;
-}
-.add-user-form h3 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.add-user-row {
-  display: grid;
-  /* Auto-wrap into as many comfortable columns as fit. Inputs stay at
-     least ~190px wide so placeholders don't get clipped — when the
-     modal can't fit 5 across, the form gracefully drops to 2 rows. */
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px 14px;
-  align-items: end;
-}
-.add-user-row label {
+.ua-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-2);
-  min-width: 0;
 }
-.add-user-row input[type="text"],
-.add-user-row input[type="password"],
-.add-user-row input:not([type]) {
-  padding: 6px 10px;
-  font: inherit;
-  font-size: 13px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--text);
-  width: 100%;
-  box-sizing: border-box;
-}
-.add-user-row .add-user-admin {
-  flex-direction: row;
-  align-items: center;
-  gap: 5px;
-  padding-bottom: 7px;
-  min-width: 0;
-}
-.add-user-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-/* Password input with inline show/hide eye toggle. Used in both the
-   admin "Add user" and "Edit user" forms — keeps the input's existing
-   look while reserving room on the right for the toggle button. */
-.password-input-wrap {
-  position: relative;
-  display: block;
-  width: 100%;
-}
-.password-input-wrap input {
-  width: 100%;
-  padding-right: 32px !important;
-  box-sizing: border-box;
-}
-.password-input-wrap-invalid input {
-  border-color: var(--danger, #ef4444) !important;
-}
-.password-toggle {
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
+.ua-back {
+  display: none;
+  align-self: flex-start;
+  margin: 10px 12px 0;
+  padding: 4px 8px;
   border: 0;
   background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
-  border-radius: 4px;
-}
-.password-toggle:hover {
-  color: var(--text);
-  background: var(--surface-2, rgba(127, 127, 127, 0.1));
-}
-.password-toggle:focus-visible {
-  outline: 2px solid var(--accent, #3b82f6);
-  outline-offset: 1px;
-}
-.password-mismatch {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--danger, #ef4444);
-}
-
-.project-access {
-  border: 1px solid var(--border);
-  padding: 12px;
-  margin-top: 12px;
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.project-access legend {
-  font-weight: 600;
-  padding: 0 6px;
-  color: var(--text);
-}
-.project-access-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 4px 0;
-}
-.project-access-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  color: var(--accent);
+  font: inherit;
   font-size: 13px;
-  color: var(--text-2);
   cursor: pointer;
 }
-.project-access-name {
+.ua-user {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
+  min-height: 0;
 }
-.project-access-bulk {
+.ua-user-head {
   display: flex;
-  gap: 6px;
   align-items: center;
-  margin-top: 8px;
+  gap: 14px;
+  padding: 20px 24px 14px;
+}
+.ua-user-id { min-width: 0; }
+.ua-user-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.ua-user-name .ua-you { margin-left: 0; }
+.ua-user-email {
+  color: var(--text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.ua-user-meta {
+  margin-top: 2px;
   font-size: 12px;
   color: var(--text-3);
 }
-.project-access-bulk button {
-  padding: 2px 8px;
-  font: inherit;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-}
-.project-access-bulk button:hover {
-  background: var(--accent-light);
-  border-color: var(--accent);
-}
-.project-access-actions {
+.ua-tabs {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
 }
-.project-access-admin-note {
+.ua-tab {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ua-tab:hover { color: var(--text); }
+.ua-tab.active {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.ua-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ua-tab-panel {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 24px 24px;
+  display: flex;
+  flex-direction: column;
+}
+.ua-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ua-card {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ua-card-title {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.ua-card-help {
+  margin: -6px 0 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.ua-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+}
+.ua-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.ua-field-wide { grid-column: 1 / -1; align-items: flex-start; }
+.ua-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.ua-field input {
+  width: 100%;
+  font: inherit;
+  font-size: 13.5px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.ua-field input:focus { outline: none; border-color: var(--accent); }
+.ua-hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.ua-field-error {
+  font-size: 12px;
+  color: var(--red-text);
+}
+.ua-error {
   margin-top: 12px;
   padding: 8px 12px;
-  background: var(--accent-light);
+  border-radius: var(--radius-sm);
+  background: var(--red-light);
+  color: var(--red-text);
+  font-size: 12.5px;
+}
+.ua-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ua-danger {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-color: color-mix(in srgb, var(--red) 30%, var(--border));
+}
+.ua-danger-text { flex: 1; min-width: 0; }
+.ua-danger .ua-card-title { margin-bottom: 2px; }
+.ua-danger p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.ua-note {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
+  background: var(--accent-light);
   color: var(--text-2);
   font-size: 13px;
+}
+
+/* Project access editor */
+.pa {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pa-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pa-toolbar .ua-search { flex: 1 1 220px; width: auto; }
+.pa-summary { display: flex; gap: 6px; }
+.pa-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pa-count.edit { background: var(--green-light); color: var(--green-text); }
+.pa-count.view { background: var(--blue-light);  color: var(--blue-text); }
+.pa-count.none { background: var(--surface-2);   color: var(--text-3); }
+.pa-bulk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 160px;
+}
+.pa-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.pa-row:last-child { border-bottom: 0; }
+.pa-row:hover { background: var(--surface-2); }
+.pa-row.changed { box-shadow: inset 3px 0 0 var(--amber); }
+.pa-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.pa-docs {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pa-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.pa-footer-status {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+@media (max-width: 760px) {
+  .users-admin-modal { width: 100vw; max-width: none; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .ua-layout { grid-template-columns: minmax(0, 1fr); }
+  .ua-list-pane { border-right: 0; }
+  .ua-layout.show-detail .ua-list-pane { display: none; }
+  .ua-layout:not(.show-detail) .ua-detail { display: none; }
+  .ua-back { display: inline-block; }
+  .ua-user-head { padding: 12px 16px; }
+  .ua-tabs { padding: 0 10px; }
+  .ua-tab-panel { padding: 14px 16px 18px; }
+  .ua-danger { flex-direction: column; align-items: stretch; }
+  .pa-docs { display: none; }
 }
 
 /* Markdown-source rich block — ASCII diagrams, card templates, sub-

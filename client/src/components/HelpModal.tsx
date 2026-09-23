@@ -201,7 +201,8 @@ function UserGuideEn() {
       <h3>Per-project permissions</h3>
       <p>
         Admins can grant each user <code>view</code> or <code>edit</code> access to specific
-        projects via <strong>Manage users → Edit → Project access</strong>. Users without a grant
+        projects via <strong>Manage users</strong> → pick the user → <strong>Project access</strong> tab
+        (filter the list, set None / View / Edit per project, then Save access). Users without a grant
         see nothing in that project — the sidebar, search, and the MCP API all filter to what they
         are allowed to see. Admins have full access to all projects automatically.
       </p>
@@ -328,7 +329,8 @@ function UserGuideTh() {
       <h3>สิทธิ์ระดับโปรเจกต์</h3>
       <p>
         Admin สามารถกำหนดสิทธิ์ <code>view</code> หรือ <code>edit</code> ให้ user รายคนต่อ
-        โปรเจกต์ผ่านเมนู <strong>Manage users → Edit → Project access</strong>. User ที่ไม่ได้รับ
+        โปรเจกต์ผ่านเมนู <strong>Manage users</strong> → เลือก user → แท็บ <strong>Project access</strong>
+        (กรองชื่อโปรเจกต์ได้ ตั้ง None / View / Edit ทีละโปรเจกต์ แล้วกด Save access). User ที่ไม่ได้รับ
         สิทธิ์จะมองไม่เห็นเนื้อหาของโปรเจกต์นั้นเลย — sidebar, search, และ MCP API กรองให้อัตโนมัติ.
         Admin มีสิทธิ์เต็มทุกโปรเจกต์โดยอัตโนมัติ.
       </p>
