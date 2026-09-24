@@ -231,6 +231,28 @@ describe("MCP tool handlers", () => {
       expect(r.hash).toBeUndefined();
     });
 
+    it("read_page with a line range defaults to full mode, so the hash is there", async () => {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a\nb\nc" });
+      const r = await h.read_page({ page_id: p.id, line_start: 2, line_end: 2 });
+      expect(r.mode).toBe("full");
+      expect(r.content).toBe("b");
+      expect(r.hash).toBeTruthy();
+    });
+
+    it("read_page summary of a slice reports block lines against the whole page", async () => {
+      const k = await h.add_knowledge({ title: "D", project: "examples" });
+      const p = await h.add_page({
+        knowledge_id: k.id,
+        title: "P",
+        content: 'a\nb\nc\n\n```mermaid {@901}\nflowchart TD\n  A --> B\n```\n',
+      });
+      const r = await h.read_page({ page_id: p.id, line_start: 3, mode: "summary" });
+      expect(r.mode).toBe("summary");
+      if (r.mode !== "summary") return;
+      expect(r.blocks[0]).toMatchObject({ id: 901, source_line_start: 5, source_line_end: 8 });
+    });
+
     it("read_page mode:'summary' returns skeleton + blocks index", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({

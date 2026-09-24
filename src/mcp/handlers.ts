@@ -2185,13 +2185,22 @@ export function buildToolHandlers(
         },
         url: urlFor(ctx, meta.knowledge_id, parsed.page_id, r.line_start),
       };
-      // Default to summary mode when the caller didn't say — saves
-      // tokens on every navigation/probe read. AI workflows that need
-      // the full body for editing must explicitly pass `mode: "full"`.
+      // Default to summary mode for a whole-page read — saves tokens on
+      // every navigation/probe read. A line range is almost always read to
+      // be edited, so it defaults to full (verbatim + hash).
       const imgBase = ctx.publicBaseUrl.replace(/\/$/, "");
-      const mode = parsed.mode ?? "summary";
+      const ranged = parsed.line_start !== undefined || parsed.line_end !== undefined;
+      const mode = parsed.mode ?? (ranged ? "full" : "summary");
       if (mode === "summary") {
-        const { skeleton, blocks } = pages.summarizePageContent(r.content);
+        const summary = pages.summarizePageContent(r.content);
+        const { skeleton } = summary;
+        // summarizePageContent numbers from the start of the slice.
+        const shift = r.line_start - 1;
+        const blocks = summary.blocks.map((b) => ({
+          ...b,
+          source_line_start: b.source_line_start + shift,
+          source_line_end: b.source_line_end + shift,
+        }));
         const skelContent = parsed.absolute_image_urls
           ? absolutizeImgUrls(skeleton, imgBase)
           : skeleton;
