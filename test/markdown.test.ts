@@ -595,3 +595,49 @@ describe("table cell colours", () => {
     expect(parseCellColorMarker("{} x")).toBeNull();
   });
 });
+
+describe("table cell line breaks", () => {
+  const table = (rows: string[]) =>
+    renderMarkdown(["| A | B |", "|---|---|", ...rows].join("\n"));
+
+  it("turns every <br> spelling in a cell into a real line break", async () => {
+    const out = await table([
+      "| a<br>b | c<br/>d |",
+      "| e<br />f | g</br>h |",
+      "| i<BR>j | k <br> l |",
+    ]);
+    expect(out).not.toContain("&lt;");
+    for (const pair of ["a<br>\nb", "c<br>\nd", "e<br>\nf", "g<br>\nh", "i<br>\nj", "k<br>\nl"]) {
+      expect(out).toContain(pair);
+    }
+  });
+
+  it("turns an encoded newline (&#10; / &NewLine;) into a line break", async () => {
+    const out = await table(["| a&#10;b | c&NewLine;d |"]);
+    expect(out).toContain("a<br>\nb");
+    expect(out).toContain("c<br>\nd");
+  });
+
+  it("works in header cells and next to inline markup and checkboxes", async () => {
+    const out = await renderMarkdown(
+      "| Head<br>two |\n|---|\n| **bold**<br>[x] done<br>`code` |",
+    );
+    expect(out).toContain("Head<br>\ntwo");
+    expect(out).toContain("<strong>bold</strong><br>\n");
+    expect(out).toContain('data-task-index="0" checked');
+    expect(out).toContain("<code>code</code>");
+  });
+
+  it("leaves <br> literal inside code spans and outside tables", async () => {
+    const out = await table(["| `a<br>b` | x |"]);
+    expect(out).toContain("<code>a&lt;br&gt;b</code>");
+    const para = await renderMarkdown("plain a<br>b");
+    expect(para).toContain("a&lt;br&gt;b");
+  });
+
+  it("does not treat other tags as breaks", async () => {
+    const out = await table(["| <brx> | <b>r</b> |"]);
+    expect(out).toContain("&lt;brx&gt;");
+    expect(out).toContain("&lt;b&gt;r&lt;/b&gt;");
+  });
+});

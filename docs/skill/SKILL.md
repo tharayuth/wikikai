@@ -65,6 +65,7 @@ Every fine-grained edit (`edit_lines`, `edit_section`, `insert_lines`, `add_line
 - Write plain GFM task items anywhere a normal markdown list works: `- [ ] task` / `- [x] done`. They render as clickable checkboxes; clicking flips the source (version bump + revision + FTS reindex).
 - **Inside a plain markdown table**: drop `[ ]` or `[x]` anywhere in any cell (start, middle, multiple per cell) — each becomes a live checkbox sharing the same toggle-index counter as the GFM list above. The match requires the bracket pair to be bounded by whitespace or the cell separator `|`, so `[abc]`, markdown links like `[link](url)`, and bracket-heavy code references like `arr[i]` aren't mis-detected. To keep a literal `[x]` as text (e.g. when documenting the syntax inside a cell), wrap it in backticks: `` `[x]` `` becomes inline code and is skipped.
 - **Cell colours in a plain markdown table**: start a cell with `{bg=<colour>}` (background) and/or `{fg=<colour>}` (text; `color=` is an alias), e.g. `| {bg=green fg=green} Pass | {fg=red} **-1.8%** |`. Colours: `red` `green` `amber` `blue` `cyan` `purple` `gray` — theme colours, readable in light and dark mode. Works in header cells and alongside `[ ]`/`[x]`, bold and links. Only a marker at the very start of a cell with known keys and colours counts; anything else in braces (`{id}`, `{bg=pink}`) stays literal. Prefer this over converting a table to `html-embed` just to colour a few cells.
+- **Line breaks inside a table cell**: a cell must stay on one source line, so write `<br>` where it should break, e.g. `| Suvarnabhumi (BKK)<br>Don Mueang (DMK) |`. `<br/>`, `<br />`, `</br>` and `&#10;` work too. Only inside table cells; in code spans and outside tables `<br>` stays literal, and other HTML tags in a table are still escaped.
 - For checkboxes inside a custom HTML layout (gradient cards, sticky-header tables, badges, …), drop raw `<input type="checkbox">` (with or without `checked`) into an `html-embed` block — same toggle index. Prefer the plain-markdown form for ordinary tables; use `html-embed` only when you need full HTML/CSS control.
 - AI can drive the same toggle without the UI via `toggle_task({ page_id, index })`.
 - **Do not** use a `checklist` fence — that block was retired; if you see one in an old page, replace it with GFM tasks on save.
@@ -165,7 +166,7 @@ Pick by intent:
 | Numeric series / comparison / trend | ```chart (single) or ```chart-grid (multiple) |
 | KPI numbers, dashboard headline figures | ```stats |
 | Ordered procedure, how-to, deployment runbook | ```steps |
-| Tabular data | **plain markdown table** (gets `@N`, `[ ]`/`[x]` in cells, `{bg=…}`/`{fg=…}` cell colours, `find_table_rows` search, `get_table_row` random access) |
+| Tabular data | **plain markdown table** (gets `@N`, `[ ]`/`[x]` in cells, `{bg=…}`/`{fg=…}` cell colours, `<br>` line breaks in cells, `find_table_rows` search, `get_table_row` random access) |
 | 4+ side-by-side screenshots as gallery | ```images |
 | A password / token / key that belongs with the doc | ```secret via `seal_secret` — ciphertext in the page, never the value |
 | Single image inline / in prose / in a table cell | plain markdown `![alt](src "WxH")` (has drag-resize + click-lightbox) |

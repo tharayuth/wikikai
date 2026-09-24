@@ -890,6 +890,41 @@ function renderSecretBlock(raw: string, blockId: number | null, caption: string 
     }
   });
 
+  // ─── Table cell line breaks — `<br>` / `<br/>` / `</br>` / `&#10;` ───
+  // A GFM cell is one source line, so a break has to be spelled inline.
+  // `html: false` escapes raw tags everywhere; inside a cell only, turn
+  // the `<br>` spellings (and a newline decoded from `&#10;` /
+  // `&NewLine;`) into a `hardbreak` token. Runs after `text_join` so an
+  // entity's `text_special` token has been merged into plain text; code
+  // spans are separate tokens, so `` `<br>` `` stays literal.
+  md.core.ruler.after("text_join", "table-cell-breaks", (state) => {
+    const tokens = state.tokens;
+    const breakRe = /[ \t]*(?:<\/?br\s*\/?>|\r?\n)[ \t]*/gi;
+    for (let i = 1; i < tokens.length; i++) {
+      const tok = tokens[i];
+      const cell = tokens[i - 1];
+      if (tok.type !== "inline" || (cell.type !== "td_open" && cell.type !== "th_open")) continue;
+      const children = tok.children ?? [];
+      if (!children.some((c) => c.type === "text" && (breakRe.lastIndex = 0, breakRe.test(c.content)))) continue;
+      const out: Token[] = [];
+      for (const child of children) {
+        if (child.type !== "text") {
+          out.push(child);
+          continue;
+        }
+        const parts = child.content.split(breakRe);
+        parts.forEach((part, k) => {
+          if (k > 0) out.push(new state.Token("hardbreak", "br", 0));
+          if (!part) return;
+          const t = new state.Token("text", "", 0);
+          t.content = part;
+          out.push(t);
+        });
+      }
+      tok.children = out;
+    }
+  });
+
   md.core.ruler.after("task-checkboxes", "table-block-ids", (state) => {
     const tokens = state.tokens;
     for (let i = 0; i < tokens.length; i++) {
