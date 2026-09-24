@@ -37,6 +37,8 @@ export interface UpdateKnowledgeInput {
 
 export interface ListKnowledgeFilter {
   project?: string;
+  /** Restrict to these projects (the caller's ACL). Empty → no rows. */
+  projects?: string[];
   session_id?: string;
   tag?: string;
   search?: string;
@@ -308,6 +310,14 @@ export class KnowledgeStore {
     if (filter.project) {
       where.push("project = @project");
       params.project = filter.project;
+    }
+    if (filter.projects) {
+      if (filter.projects.length === 0) return [];
+      const names = filter.projects.map((name, i) => {
+        params[`proj${i}`] = name;
+        return `@proj${i}`;
+      });
+      where.push(`project IN (${names.join(", ")})`);
     }
     if (filter.session_id) {
       where.push("session_id = @session_id");

@@ -589,6 +589,50 @@ describe("MCP tool handlers", () => {
       ).rejects.toThrow(/no access/);
     });
 
+    it("search by &N / #N / @N hides documents in projects the caller cannot view", async () => {
+      knowledge.registerProject("alpha");
+      knowledge.registerProject("beta");
+      const kA = await h.add_knowledge({ title: "A", project: "alpha" });
+      const kB = await h.add_knowledge({ title: "Hidden B", project: "beta" });
+      const pA = await h.add_page({ knowledge_id: kA.id, title: "PA", content: "```mermaid\ngraph TD; a-->b\n```\n" });
+      const pB = await h.add_page({ knowledge_id: kB.id, title: "PB", content: "```mermaid\ngraph TD; c-->d\n```\n" });
+      const blockOf = (pid: number) => {
+        const m = /\{@(\d+)/.exec(pages.readLines(pid).content);
+        return Number(m![1]);
+      };
+      const alice = users.create({ email: "search-alice", password: "x", display_name: "A" });
+      permissions.replaceForUser(alice.id, [{ project: "alpha", level: "view" }], null);
+      const asAlice = (query: string) =>
+        withCallContext({ source: "mcp", tool_name: "search", user_id: alice.id }, () =>
+          h.search({ query }),
+        );
+
+      for (const q of [`&${kB.id}`, `#${pB.id}`, `@${blockOf(pB.id)}`]) {
+        expect(await asAlice(q), q).toEqual({ hits: [], total: 0 });
+      }
+      for (const q of [`&${kA.id}`, `#${pA.id}`, `@${blockOf(pA.id)}`]) {
+        const r = await asAlice(q);
+        expect(r.hits.map((x) => x.knowledge_id), q).toEqual([kA.id]);
+        expect(r.total, q).toBe(1);
+      }
+    });
+
+    it("list_knowledge pages through visible documents only", async () => {
+      knowledge.registerProject("alpha");
+      knowledge.registerProject("beta");
+      await h.add_knowledge({ title: "A1", project: "alpha" });
+      await h.add_knowledge({ title: "A2", project: "alpha" });
+      // Newer rows in a hidden project must not eat the caller's page.
+      for (let i = 0; i < 3; i++) await h.add_knowledge({ title: `B${i}`, project: "beta" });
+      const alice = users.create({ email: "list-alice", password: "x", display_name: "A" });
+      permissions.replaceForUser(alice.id, [{ project: "alpha", level: "view" }], null);
+      const out = await withCallContext(
+        { source: "mcp", tool_name: "list_knowledge", user_id: alice.id },
+        () => h.list_knowledge({ limit: 2 }),
+      );
+      expect(out.map((k) => k.title).sort()).toEqual(["A1", "A2"]);
+    });
+
     it("admin user bypasses ACL", async () => {
       const kB = await h.add_knowledge({ title: "B", project: "beta" });
       const admin2 = users.create({

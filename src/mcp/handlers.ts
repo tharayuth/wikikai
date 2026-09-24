@@ -1900,13 +1900,13 @@ export function buildToolHandlers(
 
     async list_knowledge(input) {
       const parsed = ListKnowledgeSchema.parse(input);
+      // Filter inside the query so LIMIT/OFFSET page through what the caller
+      // can see — filtering afterwards returned short or empty pages.
       const visible = visibleProjectsForCaller();
-      const rows = knowledge.list(parsed);
-      const filtered =
-        visible === null
-          ? rows
-          : rows.filter((k) => k.project != null && visible.has(k.project));
-      return filtered.map((k) => withUrl(ctx, k));
+      const rows = knowledge.list(
+        visible === null ? parsed : { ...parsed, projects: [...visible] },
+      );
+      return rows.map((k) => withUrl(ctx, k));
     },
 
     async get_knowledge(input) {
@@ -2435,6 +2435,20 @@ export function buildToolHandlers(
         knowledge_id: parsed.knowledge_id,
         includeArchived: parsed.include_archived,
       };
+      // `&N` / `#N` / `@N` are direct lookups that ignore the project filter
+      // on purpose — but never the ACL, so they are gated here per hit.
+      if (/^[&#@]\d+$/.test(parsed.query.trim())) {
+        const hits = pages
+          .search(parsed.query, { limit: parsed.limit })
+          .filter((h) => visible === null || !h.project || visible.has(h.project));
+        return {
+          hits: hits.map((h) => ({
+            ...h,
+            url: urlFor(ctx, h.knowledge_id, h.page_id, h.line),
+          })),
+          total: hits.length,
+        };
+      }
       const hits = pages.search(parsed.query, { ...scope, limit: parsed.limit });
       return {
         hits: hits.map((h) => ({
