@@ -986,6 +986,15 @@ describe("PageStore", () => {
       expect(b!.source).toContain("```");
     });
 
+    it("getBlock finds @1 even when an earlier page holds @12 (shared FTS prefix)", () => {
+      pages.add({ knowledge_id: kid, title: "a", content: "```mermaid {@12}\ngraph TD; a-->b\n```\n" });
+      const b = pages.add({ knowledge_id: kid, title: "b", content: "```mermaid {@1}\ngraph TD; c-->d\n```\n" });
+      const got = pages.getBlock(1);
+      expect(got?.page_id).toBe(b.id);
+      expect(got?.inner).toBe("graph TD; c-->d");
+      expect(pages.getBlock(12)?.inner).toBe("graph TD; a-->b");
+    });
+
     it("getBlockSummary returns schema+row_count without source/inner for tables", () => {
       const p = pages.add({
         knowledge_id: kid,

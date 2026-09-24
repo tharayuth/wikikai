@@ -570,24 +570,34 @@ export class PageStore {
   } | null {
     const annotation = `{@${blockId}`; // trigram FTS treats `{` / `@` as
     // continuation, so the bare `{@N` prefix matches both `{@N}` and
-    // `{@N "..."}`. Subsequent in-page scan re-parses precisely.
-    const row = this.db
+    // `{@N "..."}` — and also `{@N0}`, `{@N12}`, … on other pages. Every
+    // candidate is scanned until one really holds the id; stopping at the
+    // first FTS hit left `@1` unreachable whenever a page with `@12` sorted
+    // ahead of it.
+    const rows = this.db
       .prepare(
         `SELECT pages_fts.rowid AS page_id FROM pages_fts
-         WHERE pages_fts MATCH @q LIMIT 1`,
+         WHERE pages_fts MATCH @q`,
       )
-      .get({ q: `"${annotation}"` }) as { page_id: number } | undefined;
-    if (!row) return null;
-    const meta = this.getMetadata(row.page_id);
+      .all({ q: `"${annotation}"` }) as Array<{ page_id: number }>;
+    for (const row of rows) {
+      const found = this.findBlockInPage(row.page_id, blockId);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  private findBlockInPage(pageId: number, blockId: number): ReturnType<PageStore["getBlock"]> {
+    const meta = this.getMetadata(pageId);
     if (!meta) return null;
-    const content = this.readContent(meta.knowledge_id, row.page_id);
+    const content = this.readContent(meta.knowledge_id, pageId);
     const lines = content.split("\n");
     const knowledge = this.db
       .prepare(`SELECT title, project FROM knowledge WHERE id = ?`)
       .get(meta.knowledge_id) as { title: string; project: string | null } | undefined;
     const ctx = {
       block_id: blockId,
-      page_id: row.page_id,
+      page_id: pageId,
       page_position: meta.position,
       page_title: meta.title,
       knowledge_id: meta.knowledge_id,
