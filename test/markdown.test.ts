@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCellColorMarker, renderMarkdown } from "../src/render/markdown.js";
+import { enumeratePageTasks } from "../src/store/pages.js";
 
 describe("renderMarkdown", () => {
   it("includes source coordinates for repeated reading blocks", async () => {
@@ -101,6 +102,32 @@ describe("renderMarkdown", () => {
     expect(out).toMatch(/data-task-index="3"[^>]*checked[^>]*>\s*two/);
     // disabled is gone everywhere
     expect(out).not.toMatch(/disabled/);
+  });
+
+  it("numbers checkboxes exactly like the server's toggle counter", async () => {
+    // The UI sends data-task-index to toggle_task, so both sides must see
+    // the same boxes in the same order — ordered-list tasks included.
+    const md = [
+      "1. [ ] ordered one",
+      "2. [x] ordered two",
+      "- [ ] bullet",
+      "- [ ]",
+      "- [x]tight",
+      "",
+      "> - [x] quoted",
+      "",
+      "| Task | Done |",
+      "|---|---|",
+      "| a | [ ] |",
+    ].join("\n");
+    const out = await renderMarkdown(md);
+    const rendered = [...out.matchAll(/<input[^>]*data-task-index="(\d+)"[^>]*>/g)].map((m) => ({
+      index: Number(m[1]),
+      checked: /\bchecked\b/.test(m[0]),
+    }));
+    const server = enumeratePageTasks(md).map((t) => ({ index: t.task_index, checked: t.checked }));
+    expect(server).toEqual(rendered);
+    expect(server.map((t) => t.checked)).toEqual([false, true, false, true, false]);
   });
 
   it("does not treat fenced code block lines as task items", async () => {

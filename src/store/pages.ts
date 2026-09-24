@@ -2213,7 +2213,7 @@ export class PageStore {
     }
     const content = this.readContent(meta.knowledge_id, pageId);
     const lines = content.split("\n");
-    const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
+    const taskRe = GFM_TASK_RE;
     const tableRowRe = /^\s*\|.*\|\s*$/;
     // Match `[ ]` / `[x]` / `[X]` anywhere inside a table-row cell.
     // The boundary lookahead `(?=\s|\|)` keeps us from matching
@@ -3688,6 +3688,15 @@ export interface PageTask {
 }
 
 /**
+ * A task-list item line, as the renderer sees one: a bullet or ordered
+ * marker (optionally inside a blockquote), `[ ]`/`[x]`, then whitespace and
+ * some text. Keep this in step with the GFM task rule in render/markdown.ts —
+ * the UI sends its `data-task-index` to `toggleTaskAtIndex`, so any line one
+ * side counts and the other doesn't makes a click flip the wrong box.
+ */
+const GFM_TASK_RE = /^((?:\s*>)*\s*(?:[-*+]|\d{1,9}[.)])\s+)\[([ xX])\](?=\s+\S)/;
+
+/**
  * Enumerate every interactive checkbox on a page in the EXACT order
  * `toggleTaskAtIndex` counts them: GFM task items, then `[ ]`/`[x]` cells
  * inside markdown tables, then `<input type="checkbox">` in html-embed
@@ -3697,7 +3706,7 @@ export interface PageTask {
  */
 export function enumeratePageTasks(content: string): PageTask[] {
   const lines = content.split("\n");
-  const taskRe = /^(\s*[-*+]\s+)\[([ xX])\]/;
+  const taskRe = GFM_TASK_RE;
   const tableRowRe = /^\s*\|.*\|\s*$/;
   const cellTaskRe = /\[([ xX])\](?=\s|\|)/g;
   const htmlCheckboxRe = /<input\b([^>]*)>/gi;

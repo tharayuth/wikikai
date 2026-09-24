@@ -709,6 +709,18 @@ describe("PageStore", () => {
       expect(after).toBe("- [x] one\n- [ ] two\n- [ ] three");
     });
 
+    it("counts and flips ordered-list and quoted tasks like the renderer", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "tasks",
+        content: "1. [ ] first\n2) [ ] second\n\n> - [ ] quoted\n- [ ] last",
+      });
+      pages.toggleTaskAtIndex(p.id, 1);
+      pages.toggleTaskAtIndex(p.id, 3);
+      const after = fs.readFileSync(path.join(tmpDir, String(kid), `${p.id}.md`), "utf8");
+      expect(after).toBe("1. [ ] first\n2) [x] second\n\n> - [ ] quoted\n- [x] last");
+    });
+
     it("flips <input type=checkbox> inside html-embed, round-trips both ways", () => {
       const initial =
         "- [ ] before\n\n```html-embed\n<input type=\"checkbox\" checked disabled>\n<input type=\"checkbox\" disabled>\n```\n\n- [x] after";
