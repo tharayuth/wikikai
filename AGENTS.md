@@ -74,7 +74,7 @@ src/
   mcp/server.ts        registers 42 tools on McpServer
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
-  mcp/examples/*.md    markdown reference content
+  examples/*.md        markdown reference content (copied to dist/ by build:assets)
   web/app.ts           Express routes — /api, /mcp (auth-gated), /mermaid, /chart, static
   web/mcpRoute.ts      MCP transport handler + session map
   web/mermaidViewer.ts standalone fullscreen Mermaid HTML (pan/zoom/export PNG)

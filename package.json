@@ -16,7 +16,7 @@
     "start": "tsx src/index.ts",
     "seed": "tsx scripts/seed.ts",
     "build": "npm run build:client && tsc -p . && npm run build:assets",
-    "build:assets": "mkdir -p dist/store && cp src/store/schema.sql dist/store/schema.sql",
+    "build:assets": "mkdir -p dist/store dist/examples && cp src/store/schema.sql dist/store/schema.sql && cp src/examples/*.md dist/examples/",
     "build:client": "vite build --config client/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
