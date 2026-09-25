@@ -3058,8 +3058,19 @@ export class PageStore {
   // ─────────── Search (FTS5) ───────────
 
   search(query: string, opts: SearchFilters = {}): SearchHit[] {
+    return this.searchWithTotal(query, opts).hits;
+  }
+
+  /**
+   * Ranked search plus `total`: how many pages clear the relevance floor,
+   * before `limit` cuts the list. Raising `limit` (up to 200) returns more of
+   * exactly those pages — a count of every page sharing any term would promise
+   * results the caller can never page to.
+   */
+  searchWithTotal(query: string, opts: SearchFilters = {}): { hits: SearchHit[]; total: number } {
+    const none = { hits: [], total: 0 };
     const trimmed = query.trim();
-    if (!trimmed) return [];
+    if (!trimmed) return none;
     // ─── Special case: id lookup ────────────────────────────────────
     // `&N` → list all pages of knowledge N.
     // `#N` → return that single page.
@@ -3068,15 +3079,17 @@ export class PageStore {
     // user expects the exact thing they asked for.
     const idMatch = /^([&#])(\d+)$/.exec(trimmed);
     if (idMatch) {
-      return this.lookupById(idMatch[1] as "&" | "#", Number(idMatch[2]));
+      const hits = this.lookupById(idMatch[1] as "&" | "#", Number(idMatch[2]));
+      return { hits, total: hits.length };
     }
     const blockMatch = /^@(\d+)$/.exec(trimmed);
     if (blockMatch) {
-      return this.lookupByBlockId(Number(blockMatch[1]));
+      const hits = this.lookupByBlockId(Number(blockMatch[1]));
+      return { hits, total: hits.length };
     }
     const p = this.searchParams;
     const planned = planTerms(query, p);
-    if (planned.length === 0) return []; // nothing long enough to index
+    if (planned.length === 0) return none; // nothing long enough to index
     const limit = Math.min(opts.limit ?? 50, 200);
     const { where, params } = this.searchFilterClause(opts);
 
@@ -3091,7 +3104,7 @@ export class PageStore {
       this.stats.corpusSize(),
       p,
     );
-    if (terms.length === 0) return [];
+    if (terms.length === 0) return none;
 
     const { content: wc, title: wt, keywords: wk } = p.fieldWeights;
     const perTermQuery = this.db.prepare(
@@ -3125,12 +3138,13 @@ export class PageStore {
     }
 
     const ranked = fuse(perTerm, terms.length, p);
-    if (ranked.length === 0) return [];
+    if (ranked.length === 0) return none;
     // Trim the tail before reading any files: everything below a fraction of
     // the best score matched something incidental, and each one costs the
     // caller a read.
     const floor = ranked[0].score * p.minScoreRatio;
-    const fused = ranked.filter((f) => f.score >= floor).slice(0, limit);
+    const relevant = ranked.filter((f) => f.score >= floor);
+    const fused = relevant.slice(0, limit);
 
     const meta = this.searchRowMeta(fused.map((f) => f.pageId));
     const hits: SearchHit[] = [];
@@ -3156,7 +3170,7 @@ export class PageStore {
         match_ratio: f.matchRatio,
       });
     }
-    return hits;
+    return { hits, total: relevant.length };
   }
 
   /** Build the shared `AND …` tail every search query appends, so the ranked
@@ -3216,45 +3230,10 @@ export class PageStore {
     return out;
   }
 
-  /**
-   * How many pages match a query in total, ignoring any `limit`.
-   *
-   * The ranked path caps each term's result set for speed, so counting the
-   * rows it returns would report the cap rather than the truth. This asks the
-   * index the plain question — how many pages match any selected term — in one
-   * query, so a caller can say "20 of 340" instead of implying there were 20.
-   */
+  /** How many relevant pages a query finds, ignoring `limit` — the `total`
+   *  of {@link searchWithTotal}. */
   countMatches(query: string, opts: SearchFilters = {}): number {
-    const trimmed = query.trim();
-    if (!trimmed) return 0;
-    if (/^([&#]|@)\d+$/.test(trimmed)) return this.search(trimmed, opts).length;
-    const planned = planTerms(query, this.searchParams);
-    if (planned.length === 0) return 0;
-    const terms = selectTerms(
-      planned,
-      (t) => this.stats.documentFrequency(t),
-      this.stats.corpusSize(),
-      this.searchParams,
-    );
-    if (terms.length === 0) return 0;
-    const { where, params } = this.searchFilterClause(opts);
-    try {
-      const row = this.db
-        .prepare(
-          `SELECT count(*) AS c
-           FROM pages_fts
-           JOIN pages p ON p.id = pages_fts.rowid
-           JOIN knowledge k ON k.id = p.knowledge_id
-           WHERE pages_fts MATCH @term ${where}`,
-        )
-        .get({
-          ...params,
-          term: terms.map((t) => quote(t.text)).join(" OR "),
-        }) as { c: number };
-      return row.c;
-    } catch {
-      return 0;
-    }
+    return this.searchWithTotal(query, opts).total;
   }
 
   /** Direct id lookup used by `search()` when the query is `&N` or `#N`. */

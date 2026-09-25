@@ -272,6 +272,20 @@ describe("PageStore.search", () => {
       expect(pages.countMatches("telemetry", { project: "docs" })).toBe(1);
     });
 
+    it("never promises more than a larger limit can return", () => {
+      // One page is about the query; four only mention one of its words in
+      // passing and fall under the relevance floor.
+      add(kid, "Zephyr quasar design", "zephyr quasar zephyr quasar notes on the zephyr quasar engine");
+      for (let i = 0; i < 4; i++) {
+        add(kid, `Note ${i}`, `a long page about other topics ${"filler words here ".repeat(30)} quasar`);
+      }
+      for (let i = 0; i < 25; i++) add(kid, `Other ${i}`, `unrelated content number ${i}`);
+      const all = pages.search("zephyr quasar", { limit: 200 });
+      expect(all).toHaveLength(1);
+      expect(pages.countMatches("zephyr quasar")).toBe(1);
+      expect(pages.searchWithTotal("zephyr quasar", { limit: 1 }).total).toBe(1);
+    });
+
     it("counts an id lookup as the one thing it resolves to", () => {
       const p = add(kid, "Anything", "body");
       expect(pages.countMatches(`#${p.id}`)).toBe(1);

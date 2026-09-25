@@ -2469,13 +2469,13 @@ export function buildToolHandlers(
           total: hits.length,
         };
       }
-      const hits = pages.search(parsed.query, { ...scope, limit: parsed.limit });
+      const { hits, total } = pages.searchWithTotal(parsed.query, { ...scope, limit: parsed.limit });
       return {
         hits: hits.map((h) => ({
           ...h,
           url: urlFor(ctx, h.knowledge_id, h.page_id, h.line),
         })),
-        total: pages.countMatches(parsed.query, scope),
+        total,
       };
     },
 
