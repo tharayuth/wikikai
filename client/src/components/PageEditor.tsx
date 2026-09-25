@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { RawSelection } from "../lib/rawSelection";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, StateEffect, StateField } from "@codemirror/state";
 import {
+  Decoration,
+  type DecorationSet,
   EditorView,
   keymap,
   lineNumbers,
@@ -73,48 +75,105 @@ const darkHighlight = HighlightStyle.define([
   { tag: t.processingInstruction, color: "#7a7a7a" },
 ]);
 
+/**
+ * The text a reader selected on the rendered page before pressing Edit raw.
+ * CodeMirror's own selection is gone at the first click and was drawn in
+ * a tint barely distinguishable from the background, so the carried text is
+ * also marked with a persistent highlight. It stays until the reader edits
+ * inside it or presses Escape.
+ */
+const setCarried = StateEffect.define<{ from: number; to: number } | null>();
+const carriedMark = Decoration.mark({ class: "cm-carried-selection" });
+const carriedLine = Decoration.line({ class: "cm-carried-line" });
+const carriedField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (!e.is(setCarried)) continue;
+      if (!e.value || e.value.from >= e.value.to) return Decoration.none;
+      const { from, to } = e.value;
+      const doc = tr.state.doc;
+      const ranges = [carriedMark.range(from, to)];
+      for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
+        ranges.push(carriedLine.range(doc.line(n).from));
+      }
+      return Decoration.set(ranges, true);
+    }
+    if (!tr.docChanged || deco.size === 0) return deco;
+    let touched = false;
+    tr.changes.iterChangedRanges((fromA, toA) => {
+      deco.between(fromA, toA, () => {
+        touched = true;
+        return false;
+      });
+    });
+    return touched ? Decoration.none : deco.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+const clearCarriedOnEscape = keymap.of([
+  {
+    key: "Escape",
+    run: (view) => {
+      if (view.state.field(carriedField).size === 0) return false;
+      view.dispatch({ effects: setCarried.of(null) });
+      return true;
+    },
+  },
+]);
+
+// Colours come from the theme tokens in theme.css, which switch with
+// [data-theme]; `dark` only tells CodeMirror which base styles to pick.
 function buildTheme(mode: "light" | "dark") {
-  const isDark = mode === "dark";
   return EditorView.theme(
     {
       "&": {
         fontSize: "13.5px",
         height: "100%",
-        backgroundColor: isDark ? "#232323" : "#ffffff",
-        color: isDark ? "#ececec" : "#1c1c1b",
+        backgroundColor: "var(--surface)",
+        color: "var(--text)",
       },
       ".cm-scroller": {
-        fontFamily:
-          "JetBrains Mono, SF Mono, Consolas, monospace",
+        fontFamily: "var(--mono)",
         lineHeight: "1.55",
       },
       ".cm-content": { padding: "16px 4px 80px" },
       ".cm-gutters": {
-        backgroundColor: isDark ? "#1a1a1a" : "#fafaf9",
-        color: isDark ? "#7a7a7a" : "#a0a0a0",
+        backgroundColor: "var(--surface-2)",
+        color: "var(--text-3)",
         border: "none",
-        borderRight: isDark ? "1px solid #333" : "1px solid #e5e5e3",
+        borderRight: "1px solid var(--border)",
       },
       ".cm-activeLine": {
-        backgroundColor: isDark
-          ? "rgba(129,140,248,0.07)"
-          : "rgba(99,102,241,0.05)",
+        backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)",
       },
       ".cm-activeLineGutter": {
-        backgroundColor: isDark
-          ? "rgba(129,140,248,0.12)"
-          : "rgba(99,102,241,0.08)",
-        color: isDark ? "#a5b4fc" : "#4f46e5",
+        backgroundColor: "color-mix(in srgb, var(--accent) 12%, transparent)",
+        color: "var(--accent-strong)",
       },
-      ".cm-selectionBackground, ::selection": {
-        backgroundColor: isDark ? "#2b2d50" : "#eef0ff !important",
+      // Both forms: CodeMirror's base theme styles the focused selection
+      // with a more specific selector than a plain `.cm-selectionBackground`.
+      ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+        {
+          backgroundColor: "color-mix(in srgb, var(--accent) 32%, transparent) !important",
+        },
+      ".cm-selectionMatch": {
+        backgroundColor: "color-mix(in srgb, var(--accent) 12%, transparent)",
+      },
+      ".cm-carried-selection": {
+        backgroundColor: "color-mix(in srgb, var(--amber) 32%, transparent)",
+        boxShadow: "0 0 0 1px var(--amber-text)",
+        borderRadius: "2px",
+      },
+      ".cm-carried-line": {
+        boxShadow: "inset 3px 0 0 var(--amber-text)",
       },
       ".cm-cursor": {
-        borderLeftColor: isDark ? "#a5b4fc" : "#4f46e5",
+        borderLeftColor: "var(--accent-strong)",
       },
       ".cm-line": { padding: "0 12px" },
     },
-    { dark: isDark },
+    { dark: mode === "dark" },
   );
 }
 
@@ -168,6 +227,8 @@ export const PageEditor = forwardRef<PageEditorHandle, Props>(function PageEdito
         crosshairCursor(),
         highlightActiveLine(),
         highlightSelectionMatches(),
+        carriedField,
+        clearCarriedOnEscape,
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -192,7 +253,7 @@ export const PageEditor = forwardRef<PageEditorHandle, Props>(function PageEdito
       const { from, to } = initialSelection;
       view.dispatch({
         selection: { anchor: from, head: to },
-        effects: EditorView.scrollIntoView(from, { y: "center" }),
+        effects: [EditorView.scrollIntoView(from, { y: "center" }), setCarried.of({ from, to })],
       });
       view.focus();
     }
