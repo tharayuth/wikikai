@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   portalApi,
   useDeletePageMutation,
@@ -100,7 +100,16 @@ export function PageContent({ pageId, line, block }: Props) {
   const [setPageArchived] = useSetPageArchivedMutation();
   const dispatch = useAppDispatch();
   const theme = useAppSelector((s) => s.ui.theme);
-  const bodyRef = useRef<HTMLDivElement>(null);
+  // The article element is tracked as state as well as a ref: the hooks
+  // below must re-run when it is replaced (Edit raw → Cancel, or the
+  // loading placeholder giving way to the article), even when the HTML
+  // they render is unchanged.
+  const bodyRef = useRef<HTMLElement | null>(null);
+  const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null);
+  const setBody = useCallback((el: HTMLElement | null) => {
+    bodyRef.current = el;
+    setBodyEl(el);
+  }, []);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>("");
   const [diffOpen, setDiffOpen] = useState(false);
@@ -110,26 +119,21 @@ export function PageContent({ pageId, line, block }: Props) {
   const editorRef = useRef<PageEditorHandle | null>(null);
 
   useMermaidCharts(
-    bodyRef,
-    // `editing` must be in the dep list: toggling Edit raw → Cancel
-    // unmounts + remounts the article element without changing any of
-    // the other deps, so without this the badge/click handlers would
-    // stay bound to the destroyed DOM and the @N menu would never
-    // open again until a full reload.
-    [rendered.data ?? "", theme, pageId, viewVersion, editing],
+    bodyEl,
+    [rendered.data ?? "", theme, pageId, viewVersion],
     theme,
     pageId,
   );
   useChecklistToggles();
   useImageResize(
-    bodyRef,
+    bodyEl,
     viewVersion == null && !editing ? pageId : null,
     rendered.data ?? "",
   );
   // Same gate as images: no resize handles while viewing an old revision or
   // editing, since neither writes back to the live page source.
   useBlockResize(
-    bodyRef,
+    bodyEl,
     viewVersion == null && !editing ? pageId : null,
     rendered.data ?? "",
   );
@@ -224,11 +228,10 @@ export function PageContent({ pageId, line, block }: Props) {
   }, [pageId, dispatch]);
 
   useEffect(() => {
-    if (!rendered.data) return;
+    if (!rendered.data || !bodyEl) return;
     if (block == null && !line) return;
     const t = setTimeout(() => {
-      const root = bodyRef.current;
-      if (!root) return;
+      const root = bodyEl;
       if (block != null) {
         const el = root.querySelector<HTMLElement>(
           `[data-block-id="${block}"]`,
@@ -249,11 +252,11 @@ export function PageContent({ pageId, line, block }: Props) {
       dispatch(showToast(`jumped near line ${line}`));
     }, 200);
     return () => clearTimeout(t);
-  }, [line, block, rendered.data, dispatch]);
+  }, [line, block, rendered.data, bodyEl, dispatch]);
 
   if (meta.isLoading || rendered.isLoading) {
     return (
-      <article className="markdown-body" ref={bodyRef}>
+      <article className="markdown-body">
         <p style={{ color: "var(--text-3)", padding: 24 }}>
           Loading page #{pageId}…
         </p>
@@ -668,7 +671,7 @@ export function PageContent({ pageId, line, block }: Props) {
       ) : (
         <article
           className="markdown-body"
-          ref={bodyRef}
+          ref={setBody}
           // Rendered HTML comes from server-side markdown-it (html: false) with
           // fenced JSON blocks HTML-attr-escaped — safe to inject.
           dangerouslySetInnerHTML={{ __html: rendered.data ?? "" }}

@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect } from "react";
 import { useResizeBlockMutation } from "../store/api";
 import { showSizeReadout, type SizeReadout } from "../lib/sizeReadout";
 
@@ -22,7 +22,8 @@ const MAX_H = 1600;
  * that otherwise clips tall diagrams.
  */
 export function useBlockResize(
-  bodyRef: RefObject<HTMLElement | null>,
+  /** The article element (from a callback ref) — re-binds when it is replaced. */
+  root: HTMLElement | null,
   pageId: number | null,
   /** Changes whenever the rendered article HTML does, so blocks that appear
    *  after a refetch get handles too. */
@@ -31,7 +32,6 @@ export function useBlockResize(
   const [resizeBlock] = useResizeBlockMutation();
 
   useEffect(() => {
-    const root = bodyRef.current;
     if (!root || pageId == null) return;
 
     const blocks = Array.from(
@@ -165,5 +165,5 @@ export function useBlockResize(
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
     };
-  }, [bodyRef, pageId, renderKey, resizeBlock]);
+  }, [root, pageId, renderKey, resizeBlock]);
 }

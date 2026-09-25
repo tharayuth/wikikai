@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect } from "react";
 import mermaid from "mermaid";
 import Chart from "chart.js/auto";
 import { openBadgeMenu } from "../lib/badgeMenu.js";
@@ -133,10 +133,15 @@ function queueMermaidRun(nodes: HTMLElement[]): Promise<void> {
  * After mounting rendered HTML, find <pre class="mermaid"> blocks and process them,
  * and <canvas class="chart" data-chart="..."> blocks and instantiate Chart.js.
  *
- * Re-runs whenever `deps` changes (typically: html string + theme).
+ * Re-runs whenever `deps` changes (typically: html string + theme) and
+ * whenever `root` is a different element. Pass the element itself (from a
+ * callback ref), not a ref object: the article can be replaced while every
+ * dep stays equal — a loading placeholder swapped for the real article that
+ * got the same HTML — and a ref change triggers nothing, which left diagrams
+ * as raw source until a refresh.
  */
 export function useMermaidCharts(
-  containerRef: RefObject<HTMLElement>,
+  root: HTMLElement | null,
   deps: ReadonlyArray<unknown>,
   theme: "light" | "dark",
   pageId?: number,
@@ -150,7 +155,6 @@ export function useMermaidCharts(
   },
 ): void {
   useEffect(() => {
-    const root = containerRef.current;
     if (!root) return;
 
     ensureMermaid(theme === "dark" ? "dark" : "default");
@@ -327,5 +331,5 @@ export function useMermaidCharts(
       detachSecrets();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [root, ...deps]);
 }

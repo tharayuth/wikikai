@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { attachInlineImageLightbox } from "../lib/imageLightbox";
 import { ArticleResizeHandle } from "./ArticleResizeHandle";
@@ -52,7 +52,8 @@ export function PublicView({ token }: { token: string }): JSX.Element {
   const [activePid, setActivePid] = useState<number | null>(null);
   const [html, setHtml] = useState<string>("");
   const [theme, setTheme] = useState<"light" | "dark">(readTheme());
-  const bodyRef = useRef<HTMLDivElement>(null);
+  // State, not a ref, so the effects below re-run when the article mounts.
+  const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null);
 
   // Apply the chosen theme to the root so theme.css variables resolve.
   useEffect(() => {
@@ -135,7 +136,7 @@ export function PublicView({ token }: { token: string }): JSX.Element {
   // Render mermaid + charts + image lightbox. `readOnly` skips the @N
   // block-badge edit menus (which hit gated endpoints).
   useMermaidCharts(
-    bodyRef,
+    bodyEl,
     [html, theme, activePid],
     theme,
     activePid ?? undefined,
@@ -146,10 +147,9 @@ export function PublicView({ token }: { token: string }): JSX.Element {
   // it from useImageResize, which a public reader cannot use — it needs the
   // Redux store for the resize mutation, and resizing is an edit anyway.
   useEffect(() => {
-    const root = bodyRef.current;
-    if (!root || !html) return undefined;
-    return attachInlineImageLightbox(root);
-  }, [html, activePid]);
+    if (!bodyEl || !html) return undefined;
+    return attachInlineImageLightbox(bodyEl);
+  }, [bodyEl, html, activePid]);
 
   if (error === "not-found") {
     return (
@@ -249,7 +249,7 @@ export function PublicView({ token }: { token: string }): JSX.Element {
             <div className="article-frame">
               <article
                 className="markdown-body"
-                ref={bodyRef}
+                ref={setBodyEl}
                 dangerouslySetInnerHTML={{ __html: html }}
               />
               <ArticleResizeHandle />

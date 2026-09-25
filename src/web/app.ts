@@ -1760,7 +1760,10 @@ export function buildApp(opts: BuildAppOptions): Express {
   // client/dist/ and Express serves it (with SPA fallback for hash routes).
   if (fs.existsSync(clientDistDir)) {
     app.use(express.static(clientDistDir, { index: false, maxAge: "1h" }));
-    app.get(/^(?!\/api|\/mcp).*/, (_req, res, next) => {
+    // A missing /assets/ file must stay a 404: answering index.html (200,
+    // text/html) for an old build's chunk hides the real error from the
+    // client's stale-build reload.
+    app.get(/^(?!\/api|\/mcp|\/assets\/).*/, (_req, res, next) => {
       const indexHtml = path.join(clientDistDir, "index.html");
       if (!fs.existsSync(indexHtml)) return next();
       res.type("text/html").sendFile(indexHtml);

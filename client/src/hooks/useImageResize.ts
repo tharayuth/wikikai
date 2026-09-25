@@ -1,11 +1,11 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect } from "react";
 import { useResizeInlineImageMutation } from "../store/api";
 import { openImageLightbox } from "../lib/imageLightbox";
 import { showSizeReadout, type SizeReadout } from "../lib/sizeReadout";
 
 /**
  * Wire up drag-to-resize handles + click-to-lightbox on every inline
- * markdown `<img>` rendered inside `bodyRef`. Handles live in three
+ * markdown `<img>` rendered inside `root`. Handles live in three
  * spots: right edge (width), bottom edge (height), bottom-right corner
  * (both). On mouseup, the new max-width / max-height is persisted to
  * the source markdown's title slot via the resize-image API endpoint.
@@ -20,7 +20,8 @@ import { showSizeReadout, type SizeReadout } from "../lib/sizeReadout";
  * binding new ones.
  */
 export function useImageResize(
-  bodyRef: RefObject<HTMLElement | null>,
+  /** The article element (from a callback ref) — re-binds when it is replaced. */
+  root: HTMLElement | null,
   pageId: number | null,
   /** A value that changes whenever the rendered article HTML changes
    *  (typically `rendered.data ?? ""`). The hook re-runs on every
@@ -33,7 +34,6 @@ export function useImageResize(
   const [resize] = useResizeInlineImageMutation();
 
   useEffect(() => {
-    const root = bodyRef.current;
     if (!root || pageId == null) return;
 
     type Wrap = {
@@ -260,5 +260,5 @@ export function useImageResize(
         }
       }
     };
-  }, [bodyRef, pageId, resize, renderKey]);
+  }, [root, pageId, resize, renderKey]);
 }

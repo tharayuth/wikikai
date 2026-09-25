@@ -4,7 +4,10 @@ import { Provider } from "react-redux";
 import { App } from "./App";
 import { PublicView } from "./components/PublicView";
 import { store } from "./store";
+import { reloadOnStaleBuild } from "./lib/staleBuild";
 import "./styles/theme.css";
+
+reloadOnStaleBuild();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root element");
