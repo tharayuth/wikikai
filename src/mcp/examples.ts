@@ -14,6 +14,8 @@ export const EXAMPLE_KINDS = [
   "steps",
   "er",
   "html",
+  "images",
+  "tasks",
 ] as const;
 
 export type ExampleKind = (typeof EXAMPLE_KINDS)[number];

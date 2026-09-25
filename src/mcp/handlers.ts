@@ -175,12 +175,6 @@ function readLocalBytes(
   return { buffer, resolved };
 }
 
-const USER_PROMPT_EDIT_NOTE =
-  "Optional. The user's verbatim message that triggered this edit. " +
-  "Stored as a row in the prompt-log so the UI can show 'why each revision happened'. " +
-  "Capped at 500 chars on insert. Send only when the prompt carries intent — " +
-  "skip for trivial retries / follow-ups.";
-
 function urlFor(ctx: HandlerContext, kid: number, pid?: number, line?: number): string {
   const base = ctx.publicBaseUrl.replace(/\/$/, "");
   // Symbol convention (self-documenting URL):
@@ -225,35 +219,48 @@ function pageWithUrl<T extends { id: number; knowledge_id: number }>(
 }
 
 // ─────────── Knowledge schemas ───────────
+//
+// These schemas are also the MCP input schemas (server.ts registers their
+// shapes), so every `.describe()` here is text an agent pays for on each
+// session. Describe only what the name and type don't already say.
 
-const SESSION_NOTE =
-  "Claude Code chat session UUID (the value used by `claude --resume <id>`). " +
-  "Available to hooks as session_id in their JSON input. Optional if unknown.";
+const SESSION_NOTE = "Claude Code session UUID (`claude --resume <id>`), if known.";
 
-const USER_PROMPT_NOTE =
-  "The user's original message/question that triggered this knowledge — verbatim if possible. " +
-  "Shown in the UI's info popover so people know why the doc exists.";
+const TOKENS_NOTE = "Tokens spent producing this document, if known.";
 
-const TOKENS_NOTE =
-  "Optional: number of tokens AI consumed producing this knowledge (input + output combined). " +
-  "Surfaced in the UI info popover for cost tracking.";
+const VERSION_NOTE =
+  "Page `version` from read_page, get_block, get_knowledge or a previous edit. The call fails (STALE) if the page changed since.";
+
+const TABLE_ROWS_NOTE = "Raw table rows like `| a | b |`: each starts and ends with `|`, one line each.";
+
+const TABLE_ID_NOTE = "Table block id (the N of `@N`).";
+
+const FirstPageSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    content: z.string(),
+    summary: z.string().max(500).optional(),
+    keywords: z.array(z.string().max(60)).max(20).optional(),
+  })
+  .describe("Create the first page in the same call (same fields as add_page).");
 
 export const AddKnowledgeSchema = z.object({
   title: z.string().min(1).max(200),
-  project: z.string().min(1, "project is required").max(100),
+  project: z
+    .string()
+    .min(1, "project is required")
+    .max(100)
+    .describe("Group name, e.g. the repo. Access control is per project."),
   session_id: z.string().max(200).optional().describe(SESSION_NOTE),
-  user_prompt: z.string().max(8000).optional().describe(USER_PROMPT_NOTE),
+  user_prompt: z
+    .string()
+    .max(8000)
+    .optional()
+    .describe("The user's request that led to this document, verbatim. Shown in the portal."),
   tokens_used: z.number().int().min(0).optional().describe(TOKENS_NOTE),
   tags: z.array(z.string().max(60)).max(20).optional(),
   author: z.string().max(100).optional(),
-  first_page: z
-    .object({
-      title: z.string().min(1).max(200),
-      content: z.string(),
-      summary: z.string().max(500).optional(),
-      keywords: z.array(z.string().max(60)).max(20).optional(),
-    })
-    .optional(),
+  first_page: FirstPageSchema.optional(),
 });
 
 export const EditKnowledgeSchema = z
@@ -262,9 +269,13 @@ export const EditKnowledgeSchema = z
     title: z.string().min(1).max(200).optional(),
     project: z.string().min(1, "project is required").max(100).optional(),
     session_id: z.string().max(200).optional().describe(SESSION_NOTE),
-    user_prompt: z.string().max(8000).optional().describe(USER_PROMPT_NOTE),
+    user_prompt: z
+      .string()
+      .max(8000)
+      .optional()
+      .describe("Replaces the document's stored origin prompt — omit unless you mean to change it."),
     tokens_used: z.number().int().min(0).optional().describe(TOKENS_NOTE),
-    tags: z.array(z.string().max(60)).max(20).optional(),
+    tags: z.array(z.string().max(60)).max(20).optional().describe("Replaces the whole tag list."),
   })
   .refine(
     (v) =>
@@ -281,14 +292,17 @@ export const ListKnowledgeSchema = z.object({
   project: z.string().optional(),
   session_id: z.string().optional(),
   tag: z.string().optional(),
-  search: z.string().optional(),
-  limit: z.number().int().min(1).max(500).optional(),
+  search: z
+    .string()
+    .optional()
+    .describe("Substring of title, project, tags or user_prompt. For page content use the search tool."),
+  limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
   offset: z.number().int().min(0).optional(),
 });
 
 export const GetKnowledgeSchema = z.object({
   id: z.number().int().positive(),
-  include_pages: z.boolean().optional().describe("Include page list with line counts (default true)"),
+  include_pages: z.boolean().optional().describe("Default true."),
 });
 
 export const DeleteKnowledgeSchema = z.object({
@@ -297,18 +311,31 @@ export const DeleteKnowledgeSchema = z.object({
 
 export const GetOutlineSchema = z.object({
   knowledge_id: z.number().int().positive(),
-  include_blocks: z.boolean().optional(),
+  include_blocks: z.boolean().optional().describe("Default true. false = headings only."),
 });
 
 // ─────────── Page schemas ───────────
 
+const USER_PROMPT_EDIT_NOTE =
+  "The user's request behind this edit, verbatim, if it says why; kept in the prompt log.";
+
+const PAGE_CONTENT_NOTE = [
+  "Page markdown (GFM). Fences that render specially:",
+  "```mermaid diagram · ```chart / ```chart-grid (Chart.js) · ```stats KPI cards · ```steps numbered steps · ```images grid · ```file (from add_file) · ```secret (from seal_secret) · ```html-embed raw HTML, only when nothing else fits (its inline styles cost tokens).",
+  "stats, steps, chart, chart-grid and images take a JSON body. Anything else still saves but renders as a red error box that reading the page back won't reveal:",
+  'stats `[{"num":"1,247","label":"Users","color":"green"}]` (color: purple|blue|green|amber|red|cyan) · steps `[{"title":"…","body":"markdown"}]` · chart `{"type":"bar","data":{"labels":[…],"datasets":[…]}}` · chart-grid `[<chart>,…]` · images `[{"src":"/img/…","alt":"…","caption":"…"}]`.',
+  "Use plain markdown tables for tabular data; the table tools work on them.",
+  'Every fence and table gets a global id `@N`, stamped on save (```mermaid {@N}, or a `{@N}` line under a table). Caption each block so summaries can say what it is: write `{@0 "caption"}` on a new block (```mermaid {@0 "Login flow"}, or `{@0 "…"}` on its own line after a table) and the server assigns the id. When rewriting, keep existing `{@N …}` annotations as they are.',
+  "Images: paste the `markdown` from get_upload_url. Checkboxes: `- [ ]` items or `[ ]` in table cells. get_example has a template for each.",
+].join("\n");
+
 export const AddPageSchema = z.object({
   knowledge_id: z.number().int().positive(),
-  title: z.string().min(1).max(200),
-  content: z.string(),
-  position: z.number().int().min(1).optional(),
-  summary: z.string().max(500).optional(),
-  keywords: z.array(z.string().max(60)).max(20).optional(),
+  title: z.string().min(1).max(200).describe("Tab label."),
+  content: z.string().describe(PAGE_CONTENT_NOTE),
+  position: z.number().int().min(1).optional().describe("1-based; default last."),
+  summary: z.string().max(500).optional().describe("One-line tab tooltip."),
+  keywords: z.array(z.string().max(60)).max(20).optional().describe("Extra search terms."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
@@ -316,7 +343,12 @@ export const EditPageSchema = z
   .object({
     page_id: z.number().int().positive(),
     title: z.string().min(1).max(200).optional(),
-    content: z.string().optional(),
+    content: z
+      .string()
+      .optional()
+      .describe(
+        "The whole new page (rules as in add_page). Copy every `{@N …}` annotation you keep — blocks written without theirs get new ids and lose captions.",
+      ),
     summary: z.string().max(500).optional(),
     keywords: z.array(z.string().max(60)).max(20).optional(),
     user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
@@ -330,140 +362,112 @@ export const EditPageSchema = z
     { message: "at least one field" },
   );
 
-export const AppendPageSchema = z.object({
-  page_id: z.number().int().positive(),
-  text: z.string().min(1),
-  user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
-});
-
 export const DeletePageSchema = z.object({
   page_id: z.number().int().positive(),
 });
 
-export const ListPagesSchema = z.object({
-  knowledge_id: z.number().int().positive(),
-});
-
 export const ReorderPagesSchema = z.object({
   knowledge_id: z.number().int().positive(),
-  order: z.array(z.number().int().positive()).min(1),
+  order: z.array(z.number().int().positive()).min(1).describe("Every page id of the document, in the new order."),
 });
 
 export const MovePageSchema = z
   .object({
     page_id: z.number().int().positive(),
-    before: z.number().int().positive().optional(),
-    after: z.number().int().positive().optional(),
-    user_prompt: z.string().max(2000).optional(),
+    before: z.number().int().positive().optional().describe("Put it right before this page id."),
+    after: z.number().int().positive().optional().describe("Put it right after this page id."),
+    position: z.number().int().min(1).optional().describe("1-based slot (1 = first)."),
+    knowledge_id: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Target document, to move the page to another one."),
+    user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
+  })
+  .refine((v) => [v.before, v.after, v.position].filter((x) => x !== undefined).length <= 1, {
+    message: "pass only one of `before`, `after` or `position`",
   })
   .refine(
-    (v) => (v.before === undefined) !== (v.after === undefined),
-    { message: "Provide either `before` or `after`, not both" },
+    (v) =>
+      v.knowledge_id !== undefined ||
+      v.before !== undefined ||
+      v.after !== undefined ||
+      v.position !== undefined,
+    { message: "pass `before`, `after` or `position`, or `knowledge_id` to move to another document" },
   );
 
-export const MovePageToSchema = z.object({
-  page_id: z.number().int().positive(),
-  position: z.number().int().min(1),
-  user_prompt: z.string().max(2000).optional(),
-});
-
+/** Portal drag-to-another-document route; MCP reaches this via move_page. */
 export const MovePageToKnowledgeSchema = z.object({
   page_id: z.number().int().positive(),
-  knowledge_id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Target knowledge id to move the page into"),
-  position: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("1-based slot in the target knowledge; defaults to the end"),
+  knowledge_id: z.number().int().positive(),
+  position: z.number().int().min(1).optional(),
   user_prompt: z.string().max(2000).optional(),
 });
 
 export const ReadPageSchema = z.object({
   page_id: z.number().int().positive(),
-  line_start: z.number().int().min(1).optional(),
-  line_end: z.number().int().min(1).optional(),
+  line_start: z.number().int().min(1).optional().describe("1-based, inclusive."),
+  line_end: z.number().int().min(1).optional().describe("Inclusive; default last line."),
   mode: z
     .enum(["full", "summary"])
     .optional()
-    .describe(
-      "How to return the page body. `summary` (DEFAULT) returns a compact skeleton where every rich fenced block AND every annotated markdown table is replaced with a single placeholder line of the form `[@N kind 25 lines: caption]` (or `[@N table 12r × 3c: caption]`). The page reads as headings + prose + 1-line-per-block. Use this for first reads, navigation, and 'tell me what's on this page' / 'find @47' probes — typical 5-10× token saving on pages with diagrams or large tables. **`hash` is OMITTED in summary mode** — switch to `mode: \"full\"` (or pass `line_start`/`line_end`) before any `edit_lines` call. `full` returns verbatim markdown with hash, line numbers matching source — use when you're about to edit. " +
-        "Tip: use ```md``` fences (with optional `{@N \"caption\"}`) for ASCII diagrams, card templates, and simple structural examples — cheaper than mermaid and shows up as `[@N md N lines: caption]` in summary mode just like other rich blocks.",
-    ),
+    .describe("Default: summary for a whole page, full for a line range."),
   include_styles: z
     .boolean()
     .optional()
     .describe(
-      "By DEFAULT every `style=\"...\"` attribute inside `html-embed` fence bodies is stripped from the returned `content` — inline styles bloat token cost (60-70% of a typical card/grid block) and add nothing when you're reading text/structure. Pass `true` when you need to see the presentation (recolouring, redesigning a layout). Only affects html-embed bodies; the rest of the markdown is untouched. Has no effect in `summary` mode (blocks are already collapsed to placeholder lines).",
+      "Keep `style` attributes in html-embed blocks (stripped by default to save tokens). Needed to edit such a page without losing its styles.",
     ),
   absolute_image_urls: z
     .boolean()
     .optional()
-    .describe(
-      "When `true`, every internal `/img/<hash>.<ext>` reference in the returned `content` is rewritten to an absolute URL against the server's public base URL, so the image renders anywhere that can reach the server (a relative `/img/...` only resolves inside the same-origin web portal). Use when surfacing the page's images to a human or pasting the markdown outside the portal. Note: this changes `content`, so `hash` is omitted — do NOT use the rewritten content for `edit_lines`. The per-image absolute URL is always available in `images_referenced[].url` regardless of this flag.",
-    ),
+    .describe("Rewrite `/img/…` as absolute URLs, for showing images outside the portal. Omits `hash`."),
 });
+
+const CARRY_IDS_NOTE =
+  "`{@N}` annotations in the replaced text carry over to the first fence or table in the new text that lacks one, so a converted block keeps its id.";
 
 export const EditLinesSchema = z.object({
   page_id: z.number().int().positive(),
   line_start: z.number().int().min(1),
   line_end: z.number().int().min(1),
-  new_text: z
+  new_text: z.string().describe(`Replacement lines; "" deletes the range. ${CARRY_IDS_NOTE}`),
+  expected_hash: z
     .string()
-    .describe(
-      "Lines replacing [line_start..line_end]. Block-id preservation: every `{@N}` from the replaced region is auto-carried into the first eligible slot (fence info / table-trailing line) in `new_text` when missing — so converting a block from one type to another (markdown table → html-embed, stats → mermaid, etc.) keeps the same `@N` even if you don't write the annotation yourself.",
-    ),
-  expected_hash: z.string().optional().describe("Hash of the line range from read_page — gate against stale edits"),
+    .optional()
+    .describe("`hash` of exactly this line range from read_page, or the previous edit's `changed_range_hash`."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const EditSectionSchema = z.object({
   page_id: z.number().int().positive(),
-  heading: z.string().min(1).describe("Heading line exactly as it appears, e.g. '## 3. Performance'"),
+  heading: z.string().min(1).describe('The heading line exactly, e.g. "## 3. Performance".'),
   new_content: z
     .string()
-    .describe(
-      "Body to put under the heading. The heading itself is preserved automatically; if you accidentally include it as the first line of new_content, the server strips it (and one optional blank line after) so the heading isn't emitted twice. Block-id preservation: every `{@N}` from the replaced section is auto-carried into the first eligible slot in `new_content` (fence info / table-trailing line), so block-type conversions keep their `@N`.",
-    ),
+    .describe(`New body under the heading (a repeated heading line at the top is dropped). ${CARRY_IDS_NOTE}`),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const ReplaceTextSchema = z.object({
   knowledge_id: z.number().int().positive(),
-  page_id: z.number().int().positive().optional(),
-  find: z.string().min(1),
+  page_id: z.number().int().positive().optional().describe("Only this page (must belong to knowledge_id)."),
+  find: z.string().min(1).describe("Literal text, not a regex."),
   replace: z.string(),
-  count: z.number().int().min(1).optional(),
+  count: z.number().int().min(1).optional().describe("Most replacements in total; default all."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const GetPromptLogSchema = z.object({
   knowledge_id: z.number().int().positive(),
-  limit: z.number().int().min(1).max(500).optional().describe("Default 100; max 500."),
+  limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
   offset: z.number().int().min(0).optional(),
 });
 
 export const ToggleTaskSchema = z.object({
   page_id: z.number().int().positive(),
-  index: z
-    .number()
-    .int()
-    .min(0)
-    .describe(
-      "0-based index of the checkbox on the page, counted top-down in source order across all surfaces — GFM `- [ ]`/`- [x]` task items, `[ ]`/`[x]` inside markdown-table cells, and `<input type=\"checkbox\">` inside `html-embed` fences. Tasks inside any non-`html-embed` fenced code block are skipped.",
-    ),
-  expected_version: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      "Optional. The `version` value returned by the most recent `read_page` / `get_block` for this page. When provided, the server rejects the toggle if the page's current version doesn't match — guards against index drift if another tool inserted/removed a checkbox earlier in the document between read and toggle. Web UI clicks omit this (no race window). AI workflows that read → think → toggle SHOULD pass it.",
-    ),
+  index: z.number().int().min(0).describe("0-based position of the checkbox among all checkboxes on the page."),
+  expected_version: z.number().int().positive().optional().describe(VERSION_NOTE),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
@@ -471,34 +475,16 @@ export const SearchSchema = z.object({
   query: z
     .string()
     .min(1)
-    .describe(
-      "What you are looking for. Ask in whole sentences — terms are weighted by rarity, so the words that identify your subject decide the ranking and filler words cost nothing. Words shorter than three characters cannot be indexed and are ignored. Thai and CJK work without word segmentation.",
-    ),
-  project: z
-    .string()
-    .optional()
-    .describe(
-      "Optional single project name. Omit to search across every project. " +
-        "Use `projects` for multi-project filtering.",
-    ),
-  projects: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Optional list of project names to restrict the search to. Combined with `project` as a union.",
-    ),
-  knowledge_id: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe("Optional. Restrict the search to a single knowledge document."),
-  limit: z.number().int().min(1).max(200).optional(),
-  include_archived: z
-    .boolean()
-    .optional()
-    .describe("Include soft-archived pages in results. Default false."),
+    .describe("A whole-sentence question works best, in Thai, English or both. `&N`, `#N` or `@N` jumps to that document, page or block."),
+  project: z.string().optional(),
+  projects: z.array(z.string()).optional().describe("Several projects (combined with `project`)."),
+  knowledge_id: z.number().int().positive().optional(),
+  limit: z.number().int().min(1).max(200).optional().describe("Default 50."),
+  include_archived: z.boolean().optional().describe("Include archived pages."),
 });
+
+const IMPORT_PATH_NOTE =
+  "Absolute path of a file already on the server, under WIKIKAI_IMAGE_IMPORT_ROOTS. Files on your machine: use get_upload_url.";
 
 export const AddImageSchema = z
   .object({
@@ -506,16 +492,8 @@ export const AddImageSchema = z
       .string()
       .min(4)
       .optional()
-      .describe(
-        "Internal only: the browser upload route passes base64 here. Not part of the MCP tool — agents upload with get_upload_url + curl.",
-      ),
-    path: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
-        "Absolute path to an image file ON THE SERVER machine. The server reads it off disk — no bytes travel through the request. Must resolve under a configured import root; disabled unless the server sets WIKIKAI_IMAGE_IMPORT_ROOTS.",
-      ),
+      .describe("Internal: the portal's upload route. Not exposed over MCP."),
+    path: z.string().min(1).optional().describe(IMPORT_PATH_NOTE),
     mime_type: z
       .enum([
         "image/png",
@@ -526,16 +504,12 @@ export const AddImageSchema = z
         "image/svg+xml",
       ])
       .optional()
-      .describe(
-        "MIME type of the bytes. Required with `data_base64`. Optional with `path` (inferred from magic bytes / file extension) — pass it only to override.",
-      ),
+      .describe("Override the type detected from the bytes."),
     alt: z
       .string()
       .max(500)
       .optional()
-      .describe(
-        "Optional default alt text. Stored with the image record; rendering fences can override per-image.",
-      ),
+      .describe("Alt text for the returned markdown — shown as the caption when the image stands alone in a paragraph."),
   })
   .superRefine((v, ctx) => {
     const hasPath = typeof v.path === "string" && v.path.length > 0;
@@ -566,36 +540,16 @@ export const AddFileSchema = z
       .string()
       .min(4)
       .optional()
-      .describe(
-        "Internal only (tests / server-side callers). Not part of the MCP tool — agents upload with get_upload_url + curl.",
-      ),
-    path: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
-        "Absolute path to a file ON THE SERVER machine; read off disk so no bytes travel through the request. Must resolve under a configured import root (WIKIKAI_IMAGE_IMPORT_ROOTS — the same roots as add_image).",
-      ),
+      .describe("Internal: tests and server-side callers. Not exposed over MCP."),
+    path: z.string().min(1).optional().describe(IMPORT_PATH_NOTE),
     name: z
       .string()
       .min(1)
       .max(255)
       .optional()
-      .describe(
-        "Original filename, e.g. `report-q3.pdf`. This is what a reader's download is saved as. Required with `data_base64`; defaults to the path's basename with `path`.",
-      ),
-    mime_type: z
-      .string()
-      .max(200)
-      .optional()
-      .describe("MIME type. Optional — inferred from the filename extension when omitted."),
-    description: z
-      .string()
-      .max(1000)
-      .optional()
-      .describe(
-        "Optional one-line description shown on the block under the filename. Only echoed back inside the returned `fence` snippet — not stored.",
-      ),
+      .describe("Download filename; default the path's basename."),
+    mime_type: z.string().max(200).optional().describe("Default: from the filename extension."),
+    description: z.string().max(1000).optional().describe("One line shown on the card."),
   })
   .superRefine((v, ctx) => {
     const hasPath = typeof v.path === "string" && v.path.length > 0;
@@ -627,45 +581,35 @@ export const SealSecretSchema = z.object({
     .string()
     .min(1)
     .max(64_000)
-    .describe("The credential to encrypt — a password, token, key file, or a short `user: x / pass: y` block. Never stored in the clear."),
+    .describe("The credential: a password, token, key file, or a short `user: x / pass: y` block."),
   label: z
     .string()
     .max(200)
     .optional()
-    .describe("Shown on the locked button in the clear — what the secret IS (e.g. \"prod DB password\"), never the secret itself."),
+    .describe('Shown in the clear on the button: what the secret is (e.g. "prod DB password"), never its value.'),
   hint: z
     .string()
     .max(200)
     .optional()
-    .describe("Optional reminder of which key unlocks it (e.g. \"team vault passphrase\"), shown beside the key prompt in the clear."),
+    .describe('Shown in the clear: which key unlocks it (e.g. "team vault passphrase").'),
   key: z
     .string()
     .min(1)
     .optional()
-    .describe("Encryption passphrase. Omit to use the server's `WIKIKAI_SECRET_KEY` (error if that is unset). Ask the user for it when unsure — do not invent one."),
+    .describe("Passphrase from the user. Omit to use the server's WIKIKAI_SECRET_KEY. Never invent one."),
 });
 
 export const RevealSecretSchema = z
   .object({
-    block_id: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe("The `@N` id of a ```secret block — the most direct selector."),
-    page_id: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe("Page to look on when you have no block id. With one secret on the page nothing else is needed; with several pass `label` or `index`."),
-    label: z.string().optional().describe("Pick the secret whose label matches (case-insensitive) when the page holds several."),
-    index: z.number().int().min(0).optional().describe("0-based position among the page's secrets, in source order."),
+    block_id: z.number().int().positive().optional().describe("The secret block's `@N`."),
+    page_id: z.number().int().positive().optional().describe("Or the page holding it."),
+    label: z.string().optional().describe("With page_id: pick by label (case-insensitive)."),
+    index: z.number().int().min(0).optional().describe("With page_id: 0-based position among the page's secrets."),
     key: z
       .string()
       .min(1)
       .optional()
-      .describe("Decryption passphrase. Omit to try the server's `WIKIKAI_SECRET_KEY`. Ask the user when neither works."),
+      .describe("Passphrase (the block's hint says which). Omit to try the server's WIKIKAI_SECRET_KEY."),
   })
   .refine((v) => v.block_id != null || v.page_id != null, {
     message: "pass block_id or page_id",
@@ -673,334 +617,125 @@ export const RevealSecretSchema = z
 
 export const GetImageSchema = z
   .object({
-    hash: z
-      .string()
-      .regex(/^[a-f0-9]{64}$/i)
-      .optional()
-      .describe("Image SHA-256 (64-hex). Mutually exclusive with `src`."),
-    src: z
-      .string()
-      .optional()
-      .describe(
-        "Image path (`/img/<hash>.<ext>`). Mutually exclusive with `hash`.",
-      ),
+    hash: z.string().regex(/^[a-f0-9]{64}$/i).optional().describe("SHA-256 of the image. Or pass `src`."),
+    src: z.string().optional().describe("`/img/<hash>.<ext>`."),
     max_bytes: z
       .number()
       .int()
       .positive()
       .optional()
-      .describe(
-        "If set and the image exceeds this size, the call still returns metadata but omits the inline base64 (`embedded: false`).",
-      ),
+      .describe("Send metadata only when the inline copy is bigger; default 6MB."),
     mode: z
       .enum(["meta", "full"])
       .optional()
-      .describe(
-        "`meta` = metadata only, NEVER inline bytes (cheapest — prefer this to decide what an image is). `full` = inline base64 (still capped by max_bytes). Omit for legacy behavior (inline when under the size cap). Default will switch to `meta` in a future major version.",
-      ),
+      .describe("meta = metadata only, no pixels (cheapest). Default full."),
     max_edge: z
       .number()
       .int()
       .min(64)
       .max(8192)
       .optional()
-      .describe(
-        "Longest side, in pixels, of the inlined copy. Defaults to the server's reading size (1280 unless configured). Never enlarges.",
-      ),
-    original: z
-      .boolean()
-      .optional()
-      .describe("true = inline the stored original, whatever its size."),
+      .describe("Longest side of the inline copy in px; default 1280. Never enlarges a raster."),
+    original: z.boolean().optional().describe("Send the stored file at full size (SVG is still rasterized)."),
   })
   .refine((v) => !!v.hash !== !!v.src, {
     message: "pass exactly one of hash or src",
   });
 
 export const GetBlockSchema = z.object({
-  id: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "Global block id (the `N` in `@N`). Returns the block's source + inner body + parent page/knowledge context in one call. `kind` is the fence language for rich blocks, or `\"table\"` when `@N` annotates a plain markdown table. " +
-        "Tip: ```md``` fences (with optional `{@N \"caption\"}`) are first-class rich blocks like mermaid/chart/stats — prefer them for ASCII diagrams, card templates, and simple structural examples (cheaper than mermaid, no client-side compile).",
-    ),
+  id: z.number().int().positive().describe("The N of `@N`."),
   summary: z
     .boolean()
     .optional()
-    .describe(
-      "When true, omit `source` and `inner` (no body bytes). For table blocks the response gains `columns: string[]` + `row_count: number` so you can probe a table's schema cheaply before deciding whether to fetch the full source or slice rows via get_table_row / find_table_rows. Use for large tables where the body would be expensive.",
-    ),
+    .describe("Skip the body; tables add `columns` and `row_count`."),
   include_styles: z
     .boolean()
     .optional()
-    .describe(
-      "Only meaningful for `kind: \"html-embed\"` blocks. By DEFAULT every `style=\"...\"` attribute is stripped from the returned `source` and `inner` — inline styles eat 60-70% of a typical card/grid block's tokens and add nothing when you're editing text or structure. Pass `true` when you need to see the presentation (recolouring a card, redesigning the layout). Other attributes (src, href, alt, title, data-*, class) are always preserved.",
-    ),
-});
-
-export const GetTableRowSchema = z.object({
-  block_id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Table block id (`@N`)."),
-  index: z
-    .number()
-    .int()
-    .describe(
-      "0-based data-row index (header + separator excluded). Negative wraps from the end: -1 = last row.",
-    ),
+    .describe("Keep html-embed `style` attributes (stripped by default). Writing back stripped HTML deletes the styles."),
 });
 
 export const SetBlockCaptionSchema = z.object({
-  id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Block id (the N in @N)."),
-  caption: z
-    .string()
-    .max(500)
-    .nullable()
-    .describe(
-      "Caption text — short human description of what the block IS (like an HTML `<figcaption>` / a Word figure caption). Pass an empty string or null to remove the caption. Max 500 chars.",
-    ),
+  id: z.number().int().positive().describe("The N of `@N`."),
+  caption: z.string().max(500).nullable().describe('null or "" removes it.'),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const FindTableRowsSchema = z.object({
-  block_id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Table block id (`@N`)."),
-  q: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Substring search (case-insensitive). Matched against each cell of every row; restrict to specific columns via `columns`. Cheaper than pulling the whole table when you just need rows containing some text.",
-    ),
-  where: z
-    .record(z.string())
-    .optional()
-    .describe(
-      "Exact column=value match. Multiple keys are AND-ed. Case-sensitive (use `q` for fuzzy text search).",
-    ),
-  columns: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Restrict the `q` substring search to these column names. Has no effect on `where`. Omit to search all columns.",
-    ),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(500)
-    .optional()
-    .describe("Cap on returned rows. Default 50, max 500. `total_matched` always reflects the full match count so callers know when results were truncated."),
+  block_id: z.number().int().positive().describe(TABLE_ID_NOTE),
+  q: z.string().min(1).optional().describe("Case-insensitive substring of any cell."),
+  where: z.record(z.string()).optional().describe("Exact, case-sensitive `{column: value}` matches, all required."),
+  columns: z.array(z.string()).optional().describe("Search `q` in these columns only."),
+  limit: z.number().int().min(1).max(500).optional().describe("Default 50."),
 });
 
 export const GetTableRowsSchema = z.object({
-  block_id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Table block id (`@N`)."),
-  start: z
-    .number()
-    .int()
-    .describe(
-      "0-based start row index. Negative wraps from the end (-1 = last row).",
-    ),
-  end: z
-    .number()
-    .int()
-    .optional()
-    .describe(
-      "Inclusive end row index, 0-based. Negative wraps from end. Mutually exclusive with `offset`.",
-    ),
-  offset: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe(
-      "Count of rows to take from `start` (so `start=2, offset=3` returns rows 2,3,4). Mutually exclusive with `end`.",
-    ),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(500)
-    .optional()
-    .describe("Safety cap on returned rows. Default 100, max 500."),
+  block_id: z.number().int().positive().describe(TABLE_ID_NOTE),
+  start: z.number().int().describe("0-based data row; negative counts from the end (-1 = last)."),
+  end: z.number().int().optional().describe("Inclusive; negative counts from the end. Or pass `offset`."),
+  offset: z.number().int().min(1).optional().describe("Number of rows from `start`."),
+  limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
 });
 
 export const GetTableRowsWithCheckboxSchema = z.object({
-  block_id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Table block id (`@N`)."),
+  block_id: z.number().int().positive().describe(TABLE_ID_NOTE),
   checked: z
     .boolean()
     .optional()
-    .describe(
-      "Filter by checkbox state. `true` = rows where EVERY checkbox is `[x]`. `false` = rows where EVERY checkbox is `[ ]`. Omit to return any row containing at least one `[ ]`/`[x]` checkbox (mixed-state rows included).",
-    ),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(500)
-    .optional()
-    .describe("Cap on returned rows. Default 100, max 500."),
+    .describe("true = every box ticked, false = none ticked (mixed rows excluded). Omit for all rows with a box."),
+  limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
 });
 
 export const UpdateTableRowsSchema = z.object({
-  block_id: z
-    .number()
-    .int()
-    .positive()
-    .describe("Table block id (`@N`)."),
-  start: z
-    .number()
-    .int()
-    .describe(
-      "0-based start row index. Negative wraps from end (-1 = last data row).",
-    ),
-  end: z
-    .number()
-    .int()
-    .optional()
-    .describe("Inclusive end. Mutually exclusive with `offset`."),
-  offset: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("Number of rows to replace from `start`. Mutually exclusive with `end`."),
-  new_rows: z
-    .array(z.string())
-    .describe(
-      "Replacement rows — each a raw markdown table row like `| a | b |`. Length may differ from the range size (shrink/expand the table). Each entry must start and end with `|` and contain no newlines.",
-    ),
-  expected_version: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      "Page `version` from the most recent read. The server rejects the update with a `STALE` error when the page has changed since.",
-    ),
+  block_id: z.number().int().positive().describe(TABLE_ID_NOTE),
+  start: z.number().int().describe("0-based data row; negative counts from the end."),
+  end: z.number().int().optional().describe("Inclusive. Or pass `offset`."),
+  offset: z.number().int().min(1).optional().describe("Number of rows from `start`."),
+  new_rows: z.array(z.string()).describe(`${TABLE_ROWS_NOTE} Any count; [] deletes the range.`),
+  expected_version: z.number().int().positive().optional().describe(VERSION_NOTE),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
-export const AppendTableRowSchema = z.object({
-  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
-  new_rows: z
-    .array(z.string())
-    .min(1)
-    .describe(
-      "Rows to append, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines. Validated up-front so nothing is half-written on bad input.",
-    ),
-  expected_version: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      "Page `version` from the most recent read. The server returns a `STALE` error if the page changed since.",
-    ),
+export const AppendTableRowsSchema = z.object({
+  block_id: z.number().int().positive().describe(TABLE_ID_NOTE),
+  new_rows: z.array(z.string()).min(1).describe(TABLE_ROWS_NOTE),
+  expected_version: z.number().int().positive().optional().describe(VERSION_NOTE),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
-export const InsertTableRowSchema = z.object({
-  block_id: z.number().int().positive().describe("Table block id (`@N`)."),
-  at: z
-    .number()
-    .int()
-    .min(0)
-    .describe(
-      "0-based row index. The new rows are inserted BEFORE this row; existing rows from `at` onward shift down. `at = 0` → top; `at = row_count` → equivalent to `append_table_row`. Negative not allowed (throws).",
-    ),
-  new_rows: z
-    .array(z.string())
-    .min(1)
-    .describe(
-      "Rows to insert, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines.",
-    ),
-  expected_version: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      "Page `version` from the most recent read. The server returns a `STALE` error if the page changed since.",
-    ),
+export const InsertTableRowsSchema = z.object({
+  block_id: z.number().int().positive().describe(TABLE_ID_NOTE),
+  at: z.number().int().min(0).describe("0-based data row to insert before; row_count appends."),
+  new_rows: z.array(z.string()).min(1).describe(TABLE_ROWS_NOTE),
+  expected_version: z.number().int().positive().optional().describe(VERSION_NOTE),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const InsertLinesSchema = z.object({
   page_id: z.number().int().positive(),
-  at: z
-    .number()
-    .int()
-    .min(1)
-    .describe(
-      "1-based line number (matches `read_page` / `edit_lines`). Insert BEFORE this line; original line `at` shifts to `at + N`. `at = total_lines + 1` appends (prefer `add_lines` for that).",
-    ),
-  new_text: z
-    .string()
-    .describe(
-      "Lines to insert. May span multiple lines via `\\n`. If `new_text` doesn't end with `\\n`, one is appended automatically so the next line isn't joined.",
-    ),
+  at: z.number().int().min(1).describe("1-based line to insert before; total_lines + 1 appends."),
+  new_text: z.string(),
   expected_hash: z
     .string()
     .optional()
-    .describe(
-      "Optional. Hash of the single line at `at` from a recent `read_page({ line_start: at, line_end: at })`. Empty-line hash when `at = total_lines + 1`. Server rejects on mismatch.",
-    ),
+    .describe("`hash` of line `at` from read_page({ line_start: at, line_end: at })."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const AddLinesSchema = z.object({
   page_id: z.number().int().positive(),
-  new_text: z
-    .string()
-    .describe(
-      "Text to append at the END of the page. A newline is prepended to existing content if it doesn't already end with one. `new_text` itself may or may not end with `\\n` — both are fine.",
-    ),
-  expected_hash: z
-    .string()
-    .optional()
-    .describe(
-      "Optional. Hash of the LAST line of the page (line_start = line_end = total_lines from a recent read_page).",
-    ),
+  new_text: z.string(),
+  expected_hash: z.string().optional().describe("`hash` of the page's last line from read_page."),
   user_prompt: z.string().max(2000).optional().describe(USER_PROMPT_EDIT_NOTE),
 });
 
 export const GetExampleSchema = z.object({
-  kind: z.enum(EXAMPLE_KINDS).optional(),
-  outline_only: z
-    .boolean()
+  kind: z
+    .enum(EXAMPLE_KINDS)
     .optional()
-    .describe("Return just the heading outline + total_lines, no body (cheapest)"),
-  line_start: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("Read from this line (1-based, inclusive)"),
-  line_end: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("Read up to this line (inclusive); default = last line"),
+    .describe("Default full: a sample page mixing several blocks."),
+  outline_only: z.boolean().optional().describe("Headings and line numbers only."),
+  line_start: z.number().int().min(1).optional(),
+  line_end: z.number().int().min(1).optional(),
 });
 
 // ─────────── Types ───────────
@@ -1014,12 +749,9 @@ export type ToolInputs = {
   get_outline: z.infer<typeof GetOutlineSchema>;
   add_page: z.infer<typeof AddPageSchema>;
   edit_page: z.infer<typeof EditPageSchema>;
-  append_page: z.infer<typeof AppendPageSchema>;
   delete_page: z.infer<typeof DeletePageSchema>;
-  list_pages: z.infer<typeof ListPagesSchema>;
   reorder_pages: z.infer<typeof ReorderPagesSchema>;
   move_page: z.infer<typeof MovePageSchema>;
-  move_page_to: z.infer<typeof MovePageToSchema>;
   move_page_to_knowledge: z.infer<typeof MovePageToKnowledgeSchema>;
   read_page: z.infer<typeof ReadPageSchema>;
   edit_lines: z.infer<typeof EditLinesSchema>;
@@ -1027,13 +759,12 @@ export type ToolInputs = {
   replace_text: z.infer<typeof ReplaceTextSchema>;
   search: z.infer<typeof SearchSchema>;
   get_block: z.infer<typeof GetBlockSchema>;
-  get_table_row: z.infer<typeof GetTableRowSchema>;
   find_table_rows: z.infer<typeof FindTableRowsSchema>;
   get_table_rows: z.infer<typeof GetTableRowsSchema>;
   get_table_rows_with_checkbox: z.infer<typeof GetTableRowsWithCheckboxSchema>;
   update_table_rows: z.infer<typeof UpdateTableRowsSchema>;
-  append_table_row: z.infer<typeof AppendTableRowSchema>;
-  insert_table_row: z.infer<typeof InsertTableRowSchema>;
+  append_table_rows: z.infer<typeof AppendTableRowsSchema>;
+  insert_table_rows: z.infer<typeof InsertTableRowsSchema>;
   insert_lines: z.infer<typeof InsertLinesSchema>;
   add_lines: z.infer<typeof AddLinesSchema>;
   set_block_caption: z.infer<typeof SetBlockCaptionSchema>;
@@ -1136,22 +867,19 @@ export interface ToolHandlers {
     updated_at: string;
     url: string;
   }>;
-  append_page(input: ToolInputs["append_page"]): Promise<{
-    id: number;
-    knowledge_id: number;
-    version: number;
-    new_line_count: number;
-    url: string;
-  }>;
   delete_page(input: ToolInputs["delete_page"]): Promise<{
     id: number;
     deleted: true;
     removed_images: number;
   }>;
-  list_pages(input: ToolInputs["list_pages"]): Promise<(PageWithStats & { url: string })[]>;
   reorder_pages(input: ToolInputs["reorder_pages"]): Promise<{ ok: true; order: number[] }>;
-  move_page(input: ToolInputs["move_page"]): Promise<{ ok: true; order: number[] }>;
-  move_page_to(input: ToolInputs["move_page_to"]): Promise<{ ok: true; order: number[] }>;
+  move_page(input: ToolInputs["move_page"]): Promise<{
+    ok: true;
+    order: number[];
+    from_knowledge_id?: number;
+    to_knowledge_id?: number;
+    position?: number;
+  }>;
   move_page_to_knowledge(
     input: ToolInputs["move_page_to_knowledge"],
   ): Promise<{
@@ -1167,6 +895,8 @@ export interface ToolHandlers {
     knowledge_id: number;
     title: string;
     position: number;
+    /** The page's version — what `expected_version` expects. */
+    version: number;
     content: string;
     total_lines: number;
     line_start: number;
@@ -1297,6 +1027,8 @@ export interface ToolHandlers {
     line_start: number;
     line_end: number;
     page_id: number;
+    /** The page's version — what `expected_version` expects. */
+    version: number;
     page_position: number;
     page_title: string;
     knowledge_id: number;
@@ -1307,16 +1039,6 @@ export interface ToolHandlers {
     columns?: string[];
     /** Present when `summary: true` AND `kind === "table"`. */
     row_count?: number;
-  }>;
-
-  get_table_row(input: ToolInputs["get_table_row"]): Promise<{
-    block_id: number;
-    knowledge_id: number;
-    page_id: number;
-    row_index: number;
-    columns: Record<string, string>;
-    source_line: number;
-    url: string;
   }>;
 
   find_table_rows(input: ToolInputs["find_table_rows"]): Promise<{
@@ -1382,7 +1104,7 @@ export interface ToolHandlers {
     url: string;
   }>;
 
-  append_table_row(input: ToolInputs["append_table_row"]): Promise<{
+  append_table_rows(input: ToolInputs["append_table_rows"]): Promise<{
     page_id: number;
     knowledge_id: number;
     page_version: number;
@@ -1391,7 +1113,7 @@ export interface ToolHandlers {
     url: string;
   }>;
 
-  insert_table_row(input: ToolInputs["insert_table_row"]): Promise<{
+  insert_table_rows(input: ToolInputs["insert_table_rows"]): Promise<{
     page_id: number;
     knowledge_id: number;
     page_version: number;
@@ -1851,6 +1573,34 @@ export function buildToolHandlers(
     }
   };
 
+  /** Move a page into another knowledge. Shared by the MCP `move_page` tool
+   *  (with `knowledge_id`) and the portal's drag-to-another-document route. */
+  function moveToKnowledge(
+    parsed: { page_id: number; knowledge_id: number; position?: number; user_prompt?: string },
+    toolName: string,
+  ) {
+    // Gate both ends: edit access on the page's current project AND on the
+    // target knowledge's project.
+    gateEditByPid(parsed.page_id);
+    const target = knowledge.get(parsed.knowledge_id);
+    gateEditByProject(target?.project);
+    const r = pages.moveToKnowledge(parsed.page_id, parsed.knowledge_id, parsed.position);
+    recordActivity({
+      action: "reorder",
+      target: "knowledge",
+      knowledge_id: r.to_knowledge_id,
+      page_id: parsed.page_id,
+    });
+    logIf(toolName, parsed.user_prompt, r.to_knowledge_id, parsed.page_id, null);
+    return {
+      ok: true as const,
+      from_knowledge_id: r.from_knowledge_id,
+      to_knowledge_id: r.to_knowledge_id,
+      position: r.position,
+      order: r.order,
+    };
+  }
+
   return {
     async add_knowledge(input) {
       const parsed = AddKnowledgeSchema.parse(input);
@@ -2021,39 +1771,6 @@ export function buildToolHandlers(
       };
     },
 
-    async append_page(input) {
-      const parsed = AppendPageSchema.parse(input);
-      gateEditByPid(parsed.page_id);
-      const before = pages.getMetadata(parsed.page_id);
-      if (!before) throw new Error(`page #${parsed.page_id} not found`);
-      // append is purely additive — it can't drop an existing image
-      // reference. Skip the before/after diff entirely.
-      const r = pages.append(parsed.page_id, parsed.text);
-      logIf(
-        "append_page",
-        parsed.user_prompt,
-        before.knowledge_id,
-        r.id,
-        r.version,
-      );
-      recordActivity({
-        action: "edit",
-        target: "page",
-        knowledge_id: before.knowledge_id,
-        page_id: r.id,
-      });
-      return withFeedback(
-        {
-          id: r.id,
-          knowledge_id: before.knowledge_id,
-          version: r.version,
-          new_line_count: r.new_line_count,
-          url: urlFor(ctx, before.knowledge_id, r.id),
-        },
-        r,
-      );
-    },
-
     async delete_page(input) {
       const parsed = DeletePageSchema.parse(input);
       gateEditByPid(parsed.page_id);
@@ -2073,12 +1790,6 @@ export function buildToolHandlers(
       return { id: parsed.page_id, deleted: true, removed_images };
     },
 
-    async list_pages(input) {
-      const parsed = ListPagesSchema.parse(input);
-      gateReadByKid(parsed.knowledge_id);
-      return pages.list(parsed.knowledge_id).map((p) => pageWithUrl(ctx, p));
-    },
-
     async reorder_pages(input) {
       const parsed = ReorderPagesSchema.parse(input);
       gateEditByKid(parsed.knowledge_id);
@@ -2093,11 +1804,24 @@ export function buildToolHandlers(
 
     async move_page(input) {
       const parsed = MovePageSchema.parse(input);
+      const meta = pages.getMetadata(parsed.page_id);
+      if (!meta) throw new Error(`page #${parsed.page_id} not found`);
+      if (parsed.knowledge_id !== undefined && parsed.knowledge_id !== meta.knowledge_id) {
+        if (parsed.before !== undefined || parsed.after !== undefined) {
+          throw new Error("moving to another document takes `position` (or nothing, for last), not before/after");
+        }
+        return moveToKnowledge({
+          page_id: parsed.page_id,
+          knowledge_id: parsed.knowledge_id,
+          position: parsed.position,
+          user_prompt: parsed.user_prompt,
+        }, "move_page");
+      }
       gateEditByPid(parsed.page_id);
-      const r = pages.movePage(parsed.page_id, {
-        before: parsed.before,
-        after: parsed.after,
-      });
+      const r =
+        parsed.position !== undefined
+          ? pages.movePageTo(parsed.page_id, parsed.position)
+          : pages.movePage(parsed.page_id, { before: parsed.before, after: parsed.after });
       recordActivity({
         action: "reorder",
         target: "knowledge",
@@ -2108,52 +1832,8 @@ export function buildToolHandlers(
       return { ok: true, order: r.order };
     },
 
-    async move_page_to(input) {
-      const parsed = MovePageToSchema.parse(input);
-      gateEditByPid(parsed.page_id);
-      const r = pages.movePageTo(parsed.page_id, parsed.position);
-      recordActivity({
-        action: "reorder",
-        target: "knowledge",
-        knowledge_id: r.knowledge_id,
-        page_id: parsed.page_id,
-      });
-      logIf("move_page_to", parsed.user_prompt, r.knowledge_id, parsed.page_id, null);
-      return { ok: true, order: r.order };
-    },
-
     async move_page_to_knowledge(input) {
-      const parsed = MovePageToKnowledgeSchema.parse(input);
-      // Gate both ends: edit access on the page's current project AND on the
-      // target knowledge's project.
-      gateEditByPid(parsed.page_id);
-      const target = knowledge.get(parsed.knowledge_id);
-      gateEditByProject(target?.project);
-      const r = pages.moveToKnowledge(
-        parsed.page_id,
-        parsed.knowledge_id,
-        parsed.position,
-      );
-      recordActivity({
-        action: "reorder",
-        target: "knowledge",
-        knowledge_id: r.to_knowledge_id,
-        page_id: parsed.page_id,
-      });
-      logIf(
-        "move_page_to_knowledge",
-        parsed.user_prompt,
-        r.to_knowledge_id,
-        parsed.page_id,
-        null,
-      );
-      return {
-        ok: true,
-        from_knowledge_id: r.from_knowledge_id,
-        to_knowledge_id: r.to_knowledge_id,
-        position: r.position,
-        order: r.order,
-      };
+      return moveToKnowledge(MovePageToKnowledgeSchema.parse(input), "move_page_to_knowledge");
     },
 
     // ─── line ops ───
@@ -2171,6 +1851,7 @@ export function buildToolHandlers(
         knowledge_id: meta.knowledge_id,
         title: meta.title,
         position: meta.position,
+        version: meta.version,
         knowledge: {
           id: meta.knowledge_id,
           title: k?.title ?? "(unknown)",
@@ -2487,6 +2168,7 @@ export function buildToolHandlers(
         gateReadByProject(s.project);
         return {
           ...s,
+          version: pages.getMetadata(s.page_id)?.version ?? 0,
           url: urlFor(ctx, s.knowledge_id, s.page_id, s.line_start),
         };
       }
@@ -2506,17 +2188,8 @@ export function buildToolHandlers(
           : b;
       return {
         ...stripped,
+        version: pages.getMetadata(b.page_id)?.version ?? 0,
         url: urlFor(ctx, b.knowledge_id, b.page_id, b.line_start),
-      };
-    },
-
-    async get_table_row(input) {
-      const parsed = GetTableRowSchema.parse(input);
-      const r = pages.getTableRow(parsed.block_id, parsed.index);
-      gateReadByKid(r.knowledge_id);
-      return {
-        ...r,
-        url: urlFor(ctx, r.knowledge_id, r.page_id, r.source_line),
       };
     },
 
@@ -2609,8 +2282,8 @@ export function buildToolHandlers(
       };
     },
 
-    async append_table_row(input) {
-      const parsed = AppendTableRowSchema.parse(input);
+    async append_table_rows(input) {
+      const parsed = AppendTableRowsSchema.parse(input);
       const summary = pages.getBlockSummary(parsed.block_id);
       if (summary) gateEditByProject(summary.project);
       const r = pages.appendTableRows(parsed.block_id, {
@@ -2618,7 +2291,7 @@ export function buildToolHandlers(
         expectedVersion: parsed.expected_version,
       });
       logIf(
-        "append_table_row",
+        "append_table_rows",
         parsed.user_prompt,
         r.knowledge_id,
         r.page_id,
@@ -2641,8 +2314,8 @@ export function buildToolHandlers(
       };
     },
 
-    async insert_table_row(input) {
-      const parsed = InsertTableRowSchema.parse(input);
+    async insert_table_rows(input) {
+      const parsed = InsertTableRowsSchema.parse(input);
       const summary = pages.getBlockSummary(parsed.block_id);
       if (summary) gateEditByProject(summary.project);
       const r = pages.insertTableRows(parsed.block_id, {
@@ -2651,7 +2324,7 @@ export function buildToolHandlers(
         expectedVersion: parsed.expected_version,
       });
       logIf(
-        "insert_table_row",
+        "insert_table_rows",
         parsed.user_prompt,
         r.knowledge_id,
         r.page_id,

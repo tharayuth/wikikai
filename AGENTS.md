@@ -71,7 +71,7 @@ src/
   store/knowledge.ts   knowledge metadata CRUD
   store/pages.ts       page CRUD + line-range ops + FTS sync
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
-  mcp/server.ts        registers 42 tools on McpServer
+  mcp/server.ts        registers 35 tools on McpServer (input schemas come from handlers.ts)
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
   examples/*.md        markdown reference content (copied to dist/ by build:assets)
@@ -105,6 +105,7 @@ test/                  config / knowledge / pages / markdown / web / tools
 - **Strict TypeScript everywhere.** `npm run typecheck` must pass for both server and client. No `any` in new code; narrow `unknown` properly.
 - **Markdown rendering happens server-side except for Mermaid + Chart.js**, which run in the browser. Adding a new fence type means: render to a `<div>` with a class in `render/markdown.ts`, then maybe wire JS in `client/src/hooks/useMermaidCharts.ts`.
 - **CSS uses theme tokens.** Never hardcode colors in new code — use `var(--text)`, `var(--surface)`, `var(--accent)`, etc. Both `:root` and `[data-theme="dark"]` define the full token set.
+- **The MCP catalog is paid for every session.** Clients load every tool's description and schema up front, so write the least text that lets an agent call the tool correctly: parameter meaning goes in the `.describe()` on the schema in `handlers.ts` (server.ts registers those shapes; there is no second copy), and the tool description covers behaviour, which tool to use when, return fields worth knowing, and traps. Don't restate a parameter in the tool description, don't repeat a paragraph across tools — point to the tool that owns it — and move long how-to material into `get_example`. `test/mcp-catalog.test.ts` holds the catalog to a size budget.
 - **MCP tool descriptions are English-only.** Every `description`, `title`, and `.describe(...)` on Zod schemas in `mcp/server.ts` + `mcp/handlers.ts` must be written in English so the MCP catalog stays consistent for any client/agent locale. Use English examples too (e.g. "update @47", not "อัพเดต @47"). User-facing UI strings in `client/src/components/` can stay Thai where the rest of the surface already is.
 
 ## Running locally

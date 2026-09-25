@@ -43,6 +43,9 @@ describe("MCP tool handlers", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  const listPages = async (knowledgeId: number) =>
+    (await h.get_knowledge({ id: knowledgeId })).pages!;
+
   describe("add_knowledge", () => {
     it("creates knowledge and returns id + url", async () => {
       const r = await h.add_knowledge({ title: "Doc 1", project: "p" });
@@ -104,22 +107,22 @@ describe("MCP tool handlers", () => {
     });
   });
 
-  describe("add_page / list_pages / delete_page", () => {
+  describe("add_page / delete_page", () => {
     it("end-to-end", async () => {
       const k = await h.add_knowledge({ title: "Doc", project: "examples" });
       const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "a" });
       const b = await h.add_page({ knowledge_id: k.id, title: "B", content: "b" });
-      const list = await h.list_pages({ knowledge_id: k.id });
+      const list = await listPages(k.id);
       expect(list.map((p) => p.title)).toEqual(["A", "B"]);
       expect(list[0].url).toBe(`http://test/&${k.id}/#${a.id}`);
       await h.delete_page({ page_id: a.id });
-      const list2 = await h.list_pages({ knowledge_id: k.id });
+      const list2 = await listPages(k.id);
       expect(list2.map((p) => p.title)).toEqual(["B"]);
       expect(b.position).toBe(2);
     });
   });
 
-  describe("edit_page + append_page", () => {
+  describe("edit_page + add_lines", () => {
     it("edit_page replaces content + bumps version", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "v1" });
@@ -128,10 +131,10 @@ describe("MCP tool handlers", () => {
       expect(pages.get(p.id)!.content).toBe("v2");
     });
 
-    it("append_page returns new line count", async () => {
+    it("add_lines returns new line count", async () => {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a" });
-      const r = await h.append_page({ page_id: p.id, text: "b\nc" });
+      const r = await h.add_lines({ page_id: p.id, new_text: "b\nc" });
       expect(r.new_line_count).toBe(3);
     });
   });
@@ -143,8 +146,53 @@ describe("MCP tool handlers", () => {
       const b = await h.add_page({ knowledge_id: k.id, title: "B", content: "" });
       const c = await h.add_page({ knowledge_id: k.id, title: "C", content: "" });
       await h.reorder_pages({ knowledge_id: k.id, order: [c.id, a.id, b.id] });
-      const list = await h.list_pages({ knowledge_id: k.id });
+      const list = await listPages(k.id);
       expect(list.map((p) => p.title)).toEqual(["C", "A", "B"]);
+    });
+  });
+
+  describe("move_page", () => {
+    async function threePages() {
+      const k = await h.add_knowledge({ title: "K", project: "examples" });
+      const a = await h.add_page({ knowledge_id: k.id, title: "A", content: "" });
+      const b = await h.add_page({ knowledge_id: k.id, title: "B", content: "" });
+      const c = await h.add_page({ knowledge_id: k.id, title: "C", content: "" });
+      return { k, a, b, c };
+    }
+    const titles = async (kid: number) => (await listPages(kid)).map((p) => p.title);
+
+    it("moves before / after a sibling or to a position", async () => {
+      const { k, a, b, c } = await threePages();
+      await h.move_page({ page_id: c.id, before: a.id });
+      expect(await titles(k.id)).toEqual(["C", "A", "B"]);
+      await h.move_page({ page_id: c.id, after: b.id });
+      expect(await titles(k.id)).toEqual(["A", "B", "C"]);
+      await h.move_page({ page_id: a.id, position: 3 });
+      expect(await titles(k.id)).toEqual(["B", "C", "A"]);
+    });
+
+    it("moves to another document with knowledge_id", async () => {
+      const { k, a } = await threePages();
+      const k2 = await h.add_knowledge({ title: "K2", project: "examples" });
+      await h.add_page({ knowledge_id: k2.id, title: "X", content: "" });
+      const r = await h.move_page({ page_id: a.id, knowledge_id: k2.id, position: 1 });
+      expect(r).toMatchObject({ from_knowledge_id: k.id, to_knowledge_id: k2.id, position: 1 });
+      expect(await titles(k2.id)).toEqual(["A", "X"]);
+      expect(await titles(k.id)).toEqual(["B", "C"]);
+    });
+
+    it("treats its own knowledge_id as an in-document move", async () => {
+      const { k, a } = await threePages();
+      await h.move_page({ page_id: a.id, knowledge_id: k.id, position: 2 });
+      expect(await titles(k.id)).toEqual(["B", "A", "C"]);
+    });
+
+    it("rejects ambiguous or empty targets", async () => {
+      const { a, b } = await threePages();
+      const k2 = await h.add_knowledge({ title: "K2", project: "examples" });
+      await expect(h.move_page({ page_id: a.id, before: b.id, position: 1 })).rejects.toThrow(/only one/);
+      await expect(h.move_page({ page_id: a.id })).rejects.toThrow();
+      await expect(h.move_page({ page_id: a.id, knowledge_id: k2.id, before: b.id })).rejects.toThrow(/position/);
     });
   });
 
@@ -165,9 +213,9 @@ describe("MCP tool handlers", () => {
       expect(r.to_knowledge_id).toBe(k2.id);
       expect(r.position).toBe(2);
 
-      const src = await h.list_pages({ knowledge_id: k1.id });
+      const src = await listPages(k1.id);
       expect(src.map((p) => p.title)).toEqual(["B"]);
-      const dst = await h.list_pages({ knowledge_id: k2.id });
+      const dst = await listPages(k2.id);
       expect(dst.map((p) => p.title)).toEqual(["X", "A"]);
       // moved page keeps its id and content.
       expect(b.id).not.toBe(a.id);
@@ -186,7 +234,7 @@ describe("MCP tool handlers", () => {
         position: 1,
       });
       expect(r.position).toBe(1);
-      const dst = await h.list_pages({ knowledge_id: k2.id });
+      const dst = await listPages(k2.id);
       expect(dst.map((p) => p.title)).toEqual(["P", "X", "Y"]);
     });
 
@@ -558,7 +606,8 @@ describe("MCP tool handlers", () => {
       expect(fs.existsSync(fp)).toBe(true);
       await h.delete_knowledge({ id: k.id });
       expect(fs.existsSync(fp)).toBe(false);
-      expect(await h.list_pages({ knowledge_id: k.id })).toEqual([]);
+      await expect(h.get_knowledge({ id: k.id })).rejects.toThrow(/not found/);
+      expect(pages.list(k.id)).toEqual([]);
     });
   });
 
@@ -581,8 +630,8 @@ describe("MCP tool handlers", () => {
       const k = await h.add_knowledge({ title: "K", project: "examples" });
       const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "| a |\n|---|\n| 1 |\n" });
       const id = Number(/\{@(\d+)\}/.exec(pages.readLines(p.id).content)![1]);
-      await expect(h.append_table_row({ block_id: id, new_rows: [] })).rejects.toThrow();
-      await expect(h.insert_table_row({ block_id: id, at: 0, new_rows: [] })).rejects.toThrow();
+      await expect(h.append_table_rows({ block_id: id, new_rows: [] })).rejects.toThrow();
+      await expect(h.insert_table_rows({ block_id: id, at: 0, new_rows: [] })).rejects.toThrow();
     });
   });
 
@@ -1219,7 +1268,7 @@ describe("MCP tool handlers", () => {
     });
   });
 
-  describe("plural table-row aliases (Phase 4)", () => {
+  describe("append_table_rows / insert_table_rows", () => {
     async function makeTable() {
       const k = await h.add_knowledge({ title: "D", project: "examples" });
       const p = await h.add_page({
@@ -1232,11 +1281,9 @@ describe("MCP tool handlers", () => {
       return { p, tableId };
     }
 
-    it("append_table_rows is registered and behaves like the singular form", async () => {
+    it("append_table_rows adds rows at the end", async () => {
       const { p, tableId } = await makeTable();
-      // The handler is shared; the alias just exposes a clearer name. We
-      // exercise the underlying handler the alias points at.
-      const r = await h.append_table_row({
+      const r = await h.append_table_rows({
         block_id: tableId,
         new_rows: ["| 3 | 4 |", "| 5 | 6 |"],
       });
@@ -1248,14 +1295,15 @@ describe("MCP tool handlers", () => {
 
     it("insert_table_rows inserts at a position", async () => {
       const { tableId } = await makeTable();
-      const r = await h.insert_table_row({
+      const r = await h.insert_table_rows({
         block_id: tableId,
         at: 0,
         new_rows: ["| 9 | 9 |"],
       });
       expect(r.inserted_count).toBe(1);
-      const first = await h.get_table_row({ block_id: tableId, index: 0 });
-      expect(first.columns.a).toBe("9");
+      const first = await h.get_table_rows({ block_id: tableId, start: 0 });
+      expect(first.matches).toHaveLength(1);
+      expect(first.matches[0].columns.a).toBe("9");
     });
   });
 

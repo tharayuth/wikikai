@@ -420,14 +420,14 @@ Numbered:
 | Papaya | 35 | ✓ |
 | Durian | 200 | — |
 
-> ✨ **Tables get \`@N\` ids too.** The server appends a trailing \`{@N}\` line under every table on save (with one blank line in between) — the renderer attaches it as \`data-block-id\` on the \`<table>\`, so search-flash, deep links, and \`get_block\` / \`get_table_row\` / \`find_table_rows\` all work on plain markdown tables. No HTML wrapper needed.
+> ✨ **Tables get \`@N\` ids too.** The server appends a trailing \`{@N}\` line under every table on save (with one blank line in between) — the renderer attaches it as \`data-block-id\` on the \`<table>\`, so search-flash, deep links, and \`get_block\` / \`get_table_rows\` / \`find_table_rows\` all work on plain markdown tables. No HTML wrapper needed.
 
 **What you can ask the AI:**
 
 - "Update @<N> — add a \`supplier\` column" → AI reads the table via \`get_block({ id: <N> })\` and rewrites it
 - "What's the price of Mango from @<N>?" → AI uses \`find_table_rows({ block_id: <N>, where: { Product: "Mango" } })\` — no need to dump the whole table
 - "How many rows does @<N> have?" → \`get_block({ id: <N>, summary: true })\` returns \`columns\` + \`row_count\` only (cheap probe)
-- "Drop the last row of @<N>" → \`get_table_row({ block_id: <N>, index: -1 })\` finds the line, then \`edit_lines\`
+- "Drop the last row of @<N>" → \`get_table_rows({ block_id: <N>, start: -1 })\` finds the line, then \`edit_lines\`
 
 **Interactive checkboxes inside table cells**
 
