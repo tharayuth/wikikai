@@ -903,6 +903,7 @@ export const AppendTableRowSchema = z.object({
   block_id: z.number().int().positive().describe("Table block id (`@N`)."),
   new_rows: z
     .array(z.string())
+    .min(1)
     .describe(
       "Rows to append, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines. Validated up-front so nothing is half-written on bad input.",
     ),
@@ -928,6 +929,7 @@ export const InsertTableRowSchema = z.object({
     ),
   new_rows: z
     .array(z.string())
+    .min(1)
     .describe(
       "Rows to insert, raw markdown like `| a | b |` — each must start AND end with `|`, no newlines.",
     ),
@@ -1929,6 +1931,7 @@ export function buildToolHandlers(
       // Snapshot the title BEFORE we drop the row so the audit row stays
       // meaningful after the knowledge is gone.
       const before = knowledge.get(parsed.id);
+      if (!before) throw new Error(`knowledge #${parsed.id} not found`);
       pages.purgeKnowledge(parsed.id);
       knowledge.remove(parsed.id);
       const { removed_images } = sweepAssets();
@@ -2057,6 +2060,7 @@ export function buildToolHandlers(
       // Snapshot title + parent knowledge BEFORE removing so the audit
       // row keeps human-readable context.
       const before = pages.getMetadata(parsed.page_id);
+      if (!before) throw new Error(`page #${parsed.page_id} not found`);
       pages.remove(parsed.page_id);
       const { removed_images } = sweepAssets();
       recordActivity({
@@ -2346,6 +2350,13 @@ export function buildToolHandlers(
       const parsed = ReplaceTextSchema.parse(input);
       if (parsed.page_id != null) {
         gateEditByPid(parsed.page_id);
+        const page = pages.getMetadata(parsed.page_id);
+        if (!page) throw new Error(`page #${parsed.page_id} not found`);
+        if (page.knowledge_id !== parsed.knowledge_id) {
+          throw new Error(
+            `page #${parsed.page_id} is not in knowledge &${parsed.knowledge_id} (it is in &${page.knowledge_id})`,
+          );
+        }
       } else {
         gateEditByKid(parsed.knowledge_id);
       }
@@ -3011,7 +3022,7 @@ export function buildToolHandlers(
       });
       return {
         knowledge_id: parsed.knowledge_id,
-        total: entries.length,
+        total: promptLog.countForKnowledge(parsed.knowledge_id),
         entries,
       };
     },

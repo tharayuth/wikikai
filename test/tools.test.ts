@@ -562,6 +562,43 @@ describe("MCP tool handlers", () => {
     });
   });
 
+  describe("input that cannot mean what the caller asked", () => {
+    it("delete_page / delete_knowledge throw for an unknown id", async () => {
+      await expect(h.delete_page({ page_id: 999 })).rejects.toThrow(/not found/);
+      await expect(h.delete_knowledge({ id: 999 })).rejects.toThrow(/not found/);
+    });
+
+    it("replace_text rejects a page that is not in the given knowledge", async () => {
+      const k1 = await h.add_knowledge({ title: "K1", project: "examples" });
+      const k2 = await h.add_knowledge({ title: "K2", project: "examples" });
+      const p = await h.add_page({ knowledge_id: k2.id, title: "P", content: "foo" });
+      await expect(
+        h.replace_text({ knowledge_id: k1.id, page_id: p.id, find: "foo", replace: "bar" }),
+      ).rejects.toThrow(/not in knowledge/);
+    });
+
+    it("append/insert table rows reject an empty new_rows", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "examples" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "| a |\n|---|\n| 1 |\n" });
+      const id = Number(/\{@(\d+)\}/.exec(pages.readLines(p.id).content)![1]);
+      await expect(h.append_table_row({ block_id: id, new_rows: [] })).rejects.toThrow();
+      await expect(h.insert_table_row({ block_id: id, at: 0, new_rows: [] })).rejects.toThrow();
+    });
+  });
+
+  describe("get_prompt_log", () => {
+    it("total counts every entry, not just the returned page", async () => {
+      const k = await h.add_knowledge({ title: "K", project: "examples" });
+      const p = await h.add_page({ knowledge_id: k.id, title: "P", content: "a", user_prompt: "one" });
+      await h.edit_page({ page_id: p.id, content: "b", user_prompt: "two" });
+      await h.edit_page({ page_id: p.id, content: "c", user_prompt: "three" });
+      const r = await h.get_prompt_log({ knowledge_id: k.id, limit: 1 });
+      expect(r.entries).toHaveLength(1);
+      expect(r.entries[0].prompt).toBe("three");
+      expect(r.total).toBe(3);
+    });
+  });
+
   describe("MCP read gating", () => {
     it("list_knowledge filters to visible projects for non-admin", async () => {
       knowledge.registerProject("alpha");

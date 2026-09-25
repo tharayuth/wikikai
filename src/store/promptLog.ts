@@ -62,6 +62,13 @@ export class PromptLogStore {
     };
   }
 
+  countForKnowledge(knowledge_id: number): number {
+    const row = this.db
+      .prepare(`SELECT count(*) AS c FROM prompt_log WHERE knowledge_id = ?`)
+      .get(knowledge_id) as { c: number };
+    return row.c;
+  }
+
   listForKnowledge(
     knowledge_id: number,
     opts: { limit?: number; offset?: number } = {},
