@@ -180,6 +180,9 @@ export class ImageStore {
     if (!ext) {
       throw new Error(`unsupported mime type: ${mime}`);
     }
+    // One mime per extension — `image/jpg` is not a registered type, and
+    // MCP hosts reject it on an inlined image.
+    mime = EXT_TO_MIME[ext] ?? mime;
     if (bytes.length === 0) {
       throw new Error("image bytes are empty");
     }
@@ -240,7 +243,8 @@ export class ImageStore {
       .get(hash) as ImageMeta | undefined;
     if (!row) return null;
     if (row.width == null) this.fillSize(row);
-    return { ...row, src: srcOf(row.hash, row.ext) };
+    // Rows stored before add() canonicalised the type may say `image/jpg`.
+    return { ...row, mime: EXT_TO_MIME[row.ext] ?? row.mime, src: srcOf(row.hash, row.ext) };
   }
 
   /** Backfill width/height from the file header, in place on `row`. */
@@ -266,11 +270,13 @@ export class ImageStore {
 
   /**
    * The image scaled down so its long edge is at most `maxEdge`, as WebP.
-   * Never enlarges; SVG, GIF and images already within the limit come back
-   * as the original bytes. Scaled copies are cached on disk next to the
-   * originals and removed with them.
+   * Never enlarges a raster; GIF and rasters already within the limit come
+   * back as the original bytes. SVG is always rasterized (to fit `maxEdge`),
+   * since model hosts only accept raster image blocks. Scaled copies are
+   * cached on disk next to the originals and removed with them.
    */
   async variant(meta: ImageMeta, maxEdge: number): Promise<ImageVariant> {
+    if (meta.ext === "svg") return this.rasterizeSvg(meta, maxEdge);
     const original = (): ImageVariant => ({
       bytes: this.readBytes(meta.hash, meta.ext),
       mime: meta.mime,
@@ -303,6 +309,31 @@ export class ImageStore {
       mime: "image/webp",
       width: out.info.width,
       height: out.info.height,
+      resized: true,
+    };
+  }
+
+  private async rasterizeSvg(meta: ImageMeta, maxEdge: number): Promise<ImageVariant> {
+    const fp = this.variantPath(meta.hash, maxEdge);
+    let bytes: Buffer;
+    if (fs.existsSync(fp)) {
+      bytes = fs.readFileSync(fp);
+    } else {
+      bytes = await sharp(this.filePath(meta.hash, meta.ext), { density: 300 })
+        .resize({ width: maxEdge, height: maxEdge, fit: "inside" })
+        .webp({ quality: 90 })
+        .toBuffer();
+      fs.mkdirSync(path.dirname(fp), { recursive: true });
+      const tmp = `${fp}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, bytes);
+      fs.renameSync(tmp, fp);
+    }
+    const size = readImageSize(bytes);
+    return {
+      bytes,
+      mime: "image/webp",
+      width: size?.width ?? null,
+      height: size?.height ?? null,
       resized: true,
     };
   }

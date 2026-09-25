@@ -712,8 +712,8 @@ export const GetImageSchema = z
       .optional()
       .describe("true = inline the stored original, whatever its size."),
   })
-  .refine((v) => !!v.hash || !!v.src, {
-    message: "must supply either hash or src",
+  .refine((v) => !!v.hash !== !!v.src, {
+    message: "pass exactly one of hash or src",
   });
 
 export const GetBlockSchema = z.object({
@@ -2938,9 +2938,10 @@ export function buildToolHandlers(
       if (parsed.mode === "meta") {
         return { ...meta, url, embedded: false, mode: "meta" as const };
       }
-      const maxEdge = parsed.original
-        ? null
-        : (parsed.max_edge ?? ctx.imageReadMaxEdge ?? DEFAULT_IMAGE_READ_MAX_EDGE);
+      const readEdge = parsed.max_edge ?? ctx.imageReadMaxEdge ?? DEFAULT_IMAGE_READ_MAX_EDGE;
+      // An SVG original is text no model host can display, so it is always
+      // rasterized — `original` only lifts the size cap for rasters.
+      const maxEdge = parsed.original && meta.ext !== "svg" ? null : readEdge;
       const v =
         maxEdge == null
           ? {

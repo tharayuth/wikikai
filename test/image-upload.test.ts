@@ -116,6 +116,34 @@ describe("image store + get_image scaled copies", () => {
     expect(fs.readdirSync(dir)).toHaveLength(0);
   });
 
+  it("stores image/jpg as image/jpeg and serves the canonical type", async () => {
+    const jpg = await sharp(await png(300, 200)).jpeg().toBuffer();
+    const up = await h.store_image(jpg, "image/jpg");
+    expect(up.mime).toBe("image/jpeg");
+    db.prepare(`UPDATE images SET mime = 'image/jpg'`).run(); // a row stored before the fix
+    const r = await h.get_image({ hash: up.hash, mode: "full" });
+    expect(r.mime).toBe("image/jpeg");
+    expect(r.served).toMatchObject({ mime: "image/jpeg", resized: false });
+  });
+
+  it("rasterizes SVG to WebP for inlining, even with original: true", async () => {
+    const svg = Buffer.from(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='400' height='200'><rect width='400' height='200' fill='#36c'/></svg>",
+    );
+    const up = await h.store_image(svg, "image/svg+xml");
+    for (const args of [{}, { original: true }, { max_edge: 100 }]) {
+      const r = await h.get_image({ hash: up.hash, mode: "full", ...args });
+      expect(r.served?.mime, JSON.stringify(args)).toBe("image/webp");
+      const size = readImageSize(Buffer.from(r.data_base64!, "base64"));
+      expect(size!.width / size!.height).toBeCloseTo(2, 1);
+    }
+  });
+
+  it("get_image rejects hash and src together", async () => {
+    const up = await h.store_image(await png(100, 100), "image/png");
+    await expect(h.get_image({ hash: up.hash, src: up.src })).rejects.toThrow(/exactly one/);
+  });
+
   it("add_image without a path points the agent at get_upload_url", async () => {
     await expect(h.add_image({})).rejects.toThrow(/get_upload_url/);
   });
