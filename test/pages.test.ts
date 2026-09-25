@@ -11,10 +11,11 @@ describe("PageStore", () => {
   let knowledge: KnowledgeStore;
   let pages: PageStore;
   let kid: number;
+  let db: ReturnType<typeof openDb>;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aim-page-"));
-    const db = openDb(":memory:");
+    db = openDb(":memory:");
     knowledge = new KnowledgeStore(db);
     pages = new PageStore(db, tmpDir);
     kid = knowledge.add({ title: "Doc", project: "examples" }).id;
@@ -706,6 +707,64 @@ describe("PageStore", () => {
   });
 
   // ───────── Cascade delete ─────────
+
+  describe("block id uniqueness", () => {
+    const read = (id: number) => pages.get(id)!.content;
+    const ids = (content: string) => [...content.matchAll(/\{@(\d+)/g)].map((m) => Number(m[1]));
+
+    it("gives {@0 \"caption\"} a real id and keeps the caption", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: '```mermaid {@0 "Flow" h=300}\ngraph TD; a-->b\n```\n\n| a |\n|---|\n| 1 |\n\n{@0 "Table"}\n',
+      });
+      const c = read(p.id);
+      expect(c).not.toMatch(/\{@0\b/);
+      expect(c).toMatch(/```mermaid \{@\d+ "Flow" h=300\}/);
+      expect(c).toMatch(/^\{@\d+ "Table"\}$/m);
+      expect(new Set(ids(c)).size).toBe(2);
+    });
+
+    it("re-stamps an id used twice on one page", () => {
+      const p = pages.add({
+        knowledge_id: kid,
+        title: "t",
+        content: "```mermaid {@7}\ngraph TD; a-->b\n```\n\n```mermaid {@7}\ngraph TD; c-->d\n```\n",
+      });
+      const got = ids(read(p.id));
+      expect(got[0]).toBe(7);
+      expect(got[1]).not.toBe(7);
+    });
+
+    it("re-stamps a block copied from another page, and leaves the original alone", () => {
+      const a = pages.add({ knowledge_id: kid, title: "a", content: "```mermaid\ngraph TD; a-->b\n```\n" });
+      const aContent = read(a.id);
+      const b = pages.add({ knowledge_id: kid, title: "b", content: aContent });
+      const [aId] = ids(read(a.id));
+      const [bId] = ids(read(b.id));
+      expect(bId).not.toBe(aId);
+      // Editing the original keeps its id.
+      pages.update(a.id, { content: aContent + "\nmore" });
+      expect(ids(read(a.id))).toEqual([aId]);
+      expect(pages.getBlock(aId)?.page_id).toBe(a.id);
+    });
+
+    it("startup backfill repairs @0 and cross-page duplicates already on disk", () => {
+      const a = pages.add({ knowledge_id: kid, title: "a", content: "x" });
+      const b = pages.add({ knowledge_id: kid, title: "b", content: "y" });
+      const body = "```mermaid {@4242}\ngraph TD; a-->b\n```\n\n```stats {@0 \"KPIs\"}\n[]\n```\n";
+      fs.writeFileSync(path.join(tmpDir, String(kid), `${a.id}.md`), body);
+      fs.writeFileSync(path.join(tmpDir, String(kid), `${b.id}.md`), body);
+      const reopened = new PageStore(db, tmpDir);
+      const aIds = ids(reopened.get(a.id)!.content);
+      const bIds = ids(reopened.get(b.id)!.content);
+      expect(aIds[0]).toBe(4242); // the older page keeps the id
+      expect(bIds[0]).not.toBe(4242);
+      expect([...aIds, ...bIds]).not.toContain(0);
+      expect(new Set([...aIds, ...bIds]).size).toBe(4);
+      expect(reopened.get(b.id)!.content).toContain('"KPIs"');
+    });
+  });
 
   describe("toggleTaskAtIndex", () => {
     it("flips GFM `- [ ]` and `- [x]` markers", () => {

@@ -1377,10 +1377,27 @@ export class PageStore {
    *   • Rich fences get the annotation appended to the info string.
    *   • Tables get a standalone `{@N}` line inserted immediately below
    *     the last data row.
-   * Blocks that already have one are left as-is.
+   * Blocks that already have one keep it, unless the id cannot be theirs:
+   * `@0` (the placeholder agents write to caption a block that has no id
+   * yet), an id already used earlier on this page, or one in `taken` (held
+   * by another page). Those get a fresh id; caption and `h=` stay.
    */
-  private injectBlockIds(content: string): string {
+  private injectBlockIds(content: string, taken: ReadonlySet<number> = new Set()): string {
     const lines = content.split("\n");
+    const seen = new Set<number>();
+    // Returns the line with its annotation id replaced when that id is unusable.
+    const claim = (line: string): string => {
+      const m = /\{@(\d+)/.exec(line);
+      if (!m) return line;
+      const id = Number(m[1]);
+      if (id !== 0 && !seen.has(id) && !taken.has(id)) {
+        seen.add(id);
+        return line;
+      }
+      const fresh = this.allocBlockId();
+      seen.add(fresh);
+      return line.slice(0, m.index) + `{@${fresh}` + line.slice(m.index + m[0].length);
+    };
     const RICH = new Set([
       "mermaid",
       "chart",
@@ -1412,8 +1429,11 @@ export class PageStore {
           const [, indent, marker, lang, rest] = open;
           inFence = true;
           fenceMarker = marker;
-          if (RICH.has(lang.toLowerCase()) && !/\{@\d+/.test(rest)) {
+          if (/\{@\d+/.test(rest)) {
+            lines[i] = `${indent}${marker}${lang}${claim(rest)}`;
+          } else if (RICH.has(lang.toLowerCase())) {
             const newId = this.allocBlockId();
+            seen.add(newId);
             // Preserve any other trailing tokens by appending the annotation
             lines[i] = `${indent}${marker}${lang}${rest.replace(/\s*$/, "")} {@${newId}}`;
           }
@@ -1444,6 +1464,7 @@ export class PageStore {
               annRe.test(peek2));
           if (!hasAnnotation) {
             const newId = this.allocBlockId();
+            seen.add(newId);
             // Insert blank line + annotation, so the canonical form is
             // always present even if the author wrote `{@N}` directly
             // under the last row.
@@ -1452,6 +1473,7 @@ export class PageStore {
           } else {
             // Skip past the table + (optional blank +) annotation
             i = peek1 != null && peek1.trim() === "" ? end + 2 : end + 1;
+            lines[i] = claim(lines[i]);
           }
         }
       } else {
@@ -1868,13 +1890,17 @@ export class PageStore {
    *  re-scan to find partially-annotated pages; injectBlockIds is run on
    *  every save afterwards so partial pages catch up naturally). */
   private backfillBlockIds(): void {
+    // Oldest page first, so when two pages hold the same id the page that
+    // had it first keeps it and the copy is re-stamped.
     const pageRows = this.db
-      .prepare(`SELECT id, knowledge_id FROM pages`)
+      .prepare(`SELECT id, knowledge_id FROM pages ORDER BY id`)
       .all() as Array<{ id: number; knowledge_id: number }>;
     let touched = 0;
+    const taken = new Set<number>();
     for (const row of pageRows) {
       const content = this.readContent(row.knowledge_id, row.id);
-      const next = this.injectBlockIds(content);
+      const next = this.injectBlockIds(content, taken);
+      for (const id of annotatedBlockIds(next)) taken.add(id);
       if (next !== content) {
         this.writeContent(row.knowledge_id, row.id, next);
         // Re-sync FTS with new content; don't bump page version (this is a
@@ -2013,9 +2039,36 @@ export class PageStore {
    * sync with what's actually on disk.
    */
   private writeContent(knowledgeId: number, pageId: number, content: string): string {
-    const annotated = this.injectBlockIds(relativizeAssetUrls(content, this.assetOrigins));
+    const relative = relativizeAssetUrls(content, this.assetOrigins);
+    const annotated = this.injectBlockIds(
+      relative,
+      this.idsHeldElsewhere(pageId, this.readContent(knowledgeId, pageId), relative),
+    );
     fs.writeFileSync(this.filePath(knowledgeId, pageId), annotated, "utf8");
     return annotated;
+  }
+
+  /** Ids that `next` brings onto page `pageId` (absent from its `current`
+   *  content) while another page already holds them — a block copied from
+   *  elsewhere. Only new ids are checked, so an ordinary edit costs nothing. */
+  private idsHeldElsewhere(pageId: number, current: string, next: string): Set<number> {
+    const had = new Set(annotatedBlockIds(current));
+    const out = new Set<number>();
+    for (const id of annotatedBlockIds(next)) {
+      if (id === 0 || had.has(id)) continue;
+      const rows = this.db
+        .prepare(`SELECT rowid AS page_id FROM pages_fts WHERE pages_fts MATCH @q`)
+        .all({ q: `"{@${id}"` }) as Array<{ page_id: number }>;
+      for (const { page_id } of rows) {
+        if (page_id === pageId) continue;
+        const meta = this.getMetadata(page_id);
+        if (meta && annotatedBlockIds(this.readContent(meta.knowledge_id, page_id)).includes(id)) {
+          out.add(id);
+          break;
+        }
+      }
+    }
+    return out;
   }
 
   // ─────────── CRUD ───────────
@@ -3673,6 +3726,32 @@ export interface PageTask {
   /** 1-based source line. */
   line: number;
   checked: boolean;
+}
+
+/**
+ * Every block id annotated on a page: `{@N}` on a fence opener, or on a line
+ * of its own (the form tables carry), outside other fences — the same places
+ * `injectBlockIds` stamps. Ids quoted inside a fenced example don't count.
+ */
+function annotatedBlockIds(content: string): number[] {
+  const out: number[] = [];
+  let fence = "";
+  for (const line of content.split("\n")) {
+    if (fence) {
+      if (new RegExp(`^\\s*${fence}+\\s*$`).test(line)) fence = "";
+      continue;
+    }
+    const open = /^\s*(```+)\s*[A-Za-z0-9_-]*(.*)$/.exec(line);
+    if (open) {
+      fence = open[1];
+      const m = /\{@(\d+)/.exec(open[2]);
+      if (m) out.push(Number(m[1]));
+      continue;
+    }
+    const own = /^\s*\{@(\d+)(?:\s[^}]*)?\}\s*$/.exec(line);
+    if (own) out.push(Number(own[1]));
+  }
+  return out;
 }
 
 /**
