@@ -222,6 +222,14 @@ function fullPageHash(content: string): string {
   return hashRange(lines.slice(0, total).join("\n"));
 }
 
+/** Saving can add lines the draft didn't have — the blank line and `{@N}`
+ *  stamped under a new table. Only the edited region can lack an id, so the
+ *  extra lines belong to it: widen `after` to keep covering the whole edit. */
+function widenForStamps(after: LineRange, draft: string, next: string): LineRange {
+  const added = countLines(next) - countLines(draft);
+  return added > 0 ? { ...after, line_end: after.line_end + added } : after;
+}
+
 /** Build the {@link EditFeedback} shared by every fine-grained edit.
  *  `before`/`after` are the replaced and resulting line ranges (pass
  *  `null` for `before` on pure inserts/appends). */
@@ -2656,7 +2664,8 @@ export class PageStore {
     // can convert a block from one type to another (e.g. markdown table
     // ↔ html-embed) without the id silently regenerating.
     const newTextWithIds = this.preserveBlockIds(oldSlice, newText);
-    const newLines = newTextWithIds.split("\n");
+    // "" deletes the range outright — split() would leave one blank line.
+    const newLines = newTextWithIds === "" ? [] : newTextWithIds.split("\n");
     const draft = [
       ...lines.slice(0, lineStart - 1),
       ...newLines,
@@ -2686,7 +2695,7 @@ export class PageStore {
       id: pageId,
       version: r.version,
       new_line_count: countLines(next),
-      ...editFeedback(all, next, before, after),
+      ...editFeedback(all, next, before, widenForStamps(after, draft, next)),
     };
   }
 
@@ -2788,7 +2797,7 @@ export class PageStore {
       version: r.version,
       new_line_count: countLines(next),
       inserted_lines: insertedLines.length,
-      ...editFeedback(all, next, null, after),
+      ...editFeedback(all, next, null, widenForStamps(after, draft, next)),
     };
   }
 
@@ -2942,7 +2951,7 @@ export class PageStore {
       version: r.version,
       new_line_count: countLines(next),
       replaced_lines: replacedLines,
-      ...editFeedback(all, next, before, after),
+      ...editFeedback(all, next, before, widenForStamps(after, draft, next)),
     };
   }
 

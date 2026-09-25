@@ -359,6 +359,20 @@ describe("PageStore", () => {
       expect(() => pages.editLines(id, 2, 2, "B", r.hash)).not.toThrow();
       expect(() => pages.editLines(id, 1, 1, "A", "badhash")).toThrow(/hash mismatch/);
     });
+    it("deletes the range when new text is empty", () => {
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content: "a\nb\nc\nd" });
+      const r = pages.editLines(id, 2, 3, "");
+      expect(pages.get(id)!.content).toBe("a\nd");
+      expect(r.changed_range?.after).toEqual({ line_start: 2, line_end: 1 });
+    });
+    it("reports the lines a server-stamped table id adds in changed_range.after", () => {
+      const { id } = pages.add({ knowledge_id: kid, title: "T", content: "a\nb" });
+      const r = pages.editLines(id, 2, 2, "| x | y |\n|---|---|\n| 1 | 2 |");
+      const lines = pages.get(id)!.content.split("\n");
+      const stamp = lines.findIndex((l) => /^\{@\d+\}$/.test(l)) + 1;
+      expect(stamp).toBeGreaterThan(0);
+      expect(r.changed_range?.after?.line_end).toBe(stamp);
+    });
   });
 
   describe("editSection", () => {
