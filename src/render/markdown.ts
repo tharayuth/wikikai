@@ -164,6 +164,23 @@ function blockIdAttr(id: number | null): string {
 }
 
 /**
+ * A block whose body is an auto-fit grid of cards (stats, steps,
+ * chart-grid, images). The caption and `@N` badge go in a wrapper around
+ * the grid, not inside it: inside, the caption is one more grid item and
+ * lands in the next free cell — beside the last card. Spanning it across
+ * the row (`grid-column: 1 / -1`) is no fix: a spanning item keeps auto-fit
+ * from collapsing the empty tracks, so the cards shrink to the minimum.
+ */
+function gridBlock(
+  gridClass: string,
+  items: string,
+  blockId: number | null,
+  caption: string | null,
+): string {
+  return `<div class="grid-block"${blockIdAttr(blockId)}><div class="${gridClass}">${items}</div>${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+}
+
+/**
  * Inject `data-html-img-block` + `data-html-img-index` attributes into
  * every `<img>` tag inside an `html-embed` fence's raw HTML, so the
  * client's drag-resize hook can identify which `<img>` in which fence
@@ -207,7 +224,7 @@ function renderStats(
       return `<div class="stat-card${color}"><div class="num${color}">${num}</div><div class="label">${label}</div></div>`;
     })
     .join("");
-  return `<div class="stats-bar"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+  return gridBlock("stats-bar", cards, blockId, caption);
 }
 
 function renderChart(
@@ -271,7 +288,7 @@ function renderSteps(
       );
     })
     .join("");
-  return `<div class="steps-grid"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+  return gridBlock("steps-grid", cards, blockId, caption);
 }
 
 interface ImageEntry {
@@ -340,7 +357,7 @@ function renderImages(
     })
     .join("");
   const layoutClass = arr.length === 1 ? "image-grid solo" : "image-grid";
-  return `<div class="${layoutClass}"${blockIdAttr(blockId)}>${figures}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+  return gridBlock(layoutClass, figures, blockId, caption);
 }
 
 /** One entry of a ```file block. Everything is display data copied from
@@ -462,7 +479,7 @@ function renderChartGrid(
       return `<div class="chart-card">${titleHtml}<canvas class="chart" data-chart="${safe}"></canvas></div>`;
     })
     .join("");
-  return `<div class="chart-grid"${blockIdAttr(blockId)}>${cards}${blockCaption(caption)}${blockBadge(blockId)}</div>`;
+  return gridBlock("chart-grid", cards, blockId, caption);
 }
 
 function buildMd(highlighter: Highlighter): MarkdownIt {

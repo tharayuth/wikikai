@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { parseCellColorMarker, renderMarkdown } from "../src/render/markdown.js";
 import { enumeratePageTasks } from "../src/store/pages.js";
 
+/** What sits between `openTag` and the `</div>` that closes it, or null. */
+function divInnerHtml(html: string, openTag: string): string | null {
+  const start = html.indexOf(openTag);
+  if (start < 0) return null;
+  const tags = /<div\b|<\/div>/g;
+  tags.lastIndex = start + openTag.length;
+  let depth = 1;
+  for (let m = tags.exec(html); m; m = tags.exec(html)) {
+    depth += m[0] === "</div>" ? -1 : 1;
+    if (depth === 0) return html.slice(start + openTag.length, m.index);
+  }
+  return null;
+}
+
 describe("renderMarkdown", () => {
   it("includes source coordinates for repeated reading blocks", async () => {
     const out = await renderMarkdown("same\n\nsame");
@@ -440,6 +454,24 @@ describe("renderMarkdown", () => {
     );
     // Caption should NOT survive as literal text in the fence info / cards
     expect(out).not.toContain("{@77");
+  });
+
+  // Inside the grid the caption is one more grid item, and auto-fit puts it
+  // in the next free cell — beside the last card, not under the block.
+  it.each([
+    ["stats", "stats-bar", '[{"num":"42","label":"answer"}]'],
+    ["steps", "steps-grid", '[{"title":"one"}]'],
+    ["chart-grid", "chart-grid", '[{"type":"bar","data":{"labels":["x"],"datasets":[{"data":[1]}]}}]'],
+    ["images", "image-grid", '[{"src":"/img/a.png","alt":"a"},{"src":"/img/b.png","alt":"b"}]'],
+  ])("renders the %s caption under its grid, not inside it", async (fence, gridClass, body) => {
+    const out = await renderMarkdown(
+      "```" + fence + ' {@77 "Under the grid"}\n' + body + "\n```",
+    );
+    const grid = divInnerHtml(out, `<div class="${gridClass}">`);
+    expect(grid).not.toBeNull();
+    expect(grid).not.toContain("block-caption");
+    const block = divInnerHtml(out, '<div class="grid-block" data-block-id="77">');
+    expect(block).toContain('<div class="block-caption">Under the grid</div>');
   });
 
   it("renders block-caption div on a markdown table with caption annotation", async () => {
