@@ -102,6 +102,22 @@ describe("resolveDrop", () => {
     expect(resolveDrop(columns, 1, "column:review")).toEqual({ status: "review", beforeId: null });
   });
 
+  describe("onto the Done column", () => {
+    const withDone = columnsOf([card(1, "todo", 1), card(5, "done", 1), card(6, "done", 2), card(7, "done", 3)]);
+
+    it("lands at the top, before the first Done card", () => {
+      expect(resolveDrop(withDone, 1, "column:done")).toEqual({ status: "done", beforeId: 5 });
+    });
+
+    it("lands with no card to go before when Done is empty", () => {
+      expect(resolveDrop(columns, 1, "column:done")).toEqual({ status: "done", beforeId: null });
+    });
+
+    it("skips the dragged card when it is itself the first Done card", () => {
+      expect(resolveDrop(withDone, 5, "column:done")).toEqual({ status: "done", beforeId: 6 });
+    });
+  });
+
   it("does nothing for an unknown target", () => {
     expect(resolveDrop(columns, 1, 99)).toBeNull();
     expect(resolveDrop(columns, 1, "column:nope")).toBeNull();

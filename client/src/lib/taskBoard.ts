@@ -58,7 +58,13 @@ export function resolveDrop<T extends { id: number }>(
   if (over === activeId) return null;
   if (typeof over === "string") {
     const status = over.replace(/^column:/, "") as BoardStatus;
-    return BOARD_STATUSES.includes(status) ? { status, beforeId: null } : null;
+    if (!BOARD_STATUSES.includes(status)) return null;
+    // Done goes to the top: recent work stays visible there, and Done is paged,
+    // so a card sent to the bottom could land past the cards shown.
+    if (status === "done") {
+      return { status, beforeId: columns.done.find((t) => t.id !== activeId)?.id ?? null };
+    }
+    return { status, beforeId: null };
   }
   const to = BOARD_STATUSES.find((s) => columns[s].some((t) => t.id === over));
   if (!to) return null;
