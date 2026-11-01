@@ -161,8 +161,8 @@ with other filters.
 ### 4.5 Project lifecycle
 
 - A task's project cannot be changed in Core.
-- `add_task` accepts a project known only through `knowledge.project` and
-  registers it first. `knowledge.ts` already registers projects when documents
+- The MCP tools accept a project known only through `knowledge.project` and
+  register it first. `knowledge.ts` already registers projects when documents
   are written, so this is a safety net. An unknown name is an error, so a typo
   cannot create a project.
 - `unregisterProject` raises a dedicated error when any task exists, archived
@@ -375,11 +375,11 @@ All new CSS uses theme tokens. New view labels are English, matching `CalendarVi
 only by a task description would be deleted after the grace period. This is
 required work, not a follow-up.
 
-- `TaskStore` gains `allReferencedImageHashes()` and `allReferencedFileHashes()`,
-  which scan every task, archived ones included. The patterns are shared with
-  `PageStore`, not copied.
-- `sweepOrphanedAssets` takes a required `tasks` option and unions those hashes
-  into `liveRefs`. Its two callers, in `server.ts` and `handlers.ts`, pass it.
+- `sweepOrphanedAssets` reads task descriptions through the `db` it already takes,
+  and unions those hashes into `liveRefs`. Archived tasks count. No caller changes,
+  so none can forget to count tasks.
+- It reuses `extractImageHashesSet` and `extractFileHashesSet`, so the patterns are
+  shared rather than copied.
 - `markDroppedRefs` is unchanged. It may stamp an asset that a task still uses, and
   the next sweep clears that stamp before anything is deleted.
 
@@ -418,7 +418,7 @@ the activity log. Both tags join `REFRESH_TAGS`.
 |---|---|
 | `test/tasks.test.ts` | CRUD, validation limits, position and renumbering, version rules, `next` skipping blocked, archived and other people's tasks, two claims on one version with exactly one winner |
 | `test/tasks-tools.test.ts` | The four tools, `assignee` resolution, `view` cannot edit, non-members are refused by task id, no email in any output |
-| `test/web.test.ts` | Routes and status codes, anonymous refused, `javascript:` and `//host` links rejected, stale move answers 409, hard delete only when archived and admin, project unregister answers 409 |
+| `test/tasks-web.test.ts` | Routes and status codes, anonymous refused, `javascript:` and `//host` links rejected, stale move answers 409, hard delete only when archived and admin, project unregister answers 409 |
 | Orphan GC tests | An image only in a description survives past the grace period, and can be collected after the task is deleted |
 | Activity log tests | A member sees `board_task` rows of their projects only, and `projectCalendar` ignores them |
 | `test/db-migration.test.ts` | An older database gains the tables and columns with existing rows intact |
