@@ -23,6 +23,7 @@ type ServerEvent =
   | { type: "page-deleted"; page_id: number; knowledge_id: number }
   | { type: "knowledge-changed"; knowledge_id?: number }
   | { type: "activity-logged"; knowledge_id: number | null }
+  | { type: "task-changed"; project_id: number; task_id: number }
   | { type: "tool-called"; tool_name: string; age_ms: number };
 
 const REFRESH_TAGS = [
@@ -34,6 +35,8 @@ const REFRESH_TAGS = [
   "Page",
   "PageRendered",
   "Revisions",
+  "Tasks",
+  "Task",
 ] as const;
 
 export function useServerEvents(): void {
@@ -119,6 +122,16 @@ export function useServerEvents(): void {
           // toggle, caption, resize).
           dispatch(
             portalApi.util.invalidateTags([
+              { type: "ActivityLog", id: "LIST" },
+            ]),
+          );
+          break;
+        }
+        case "task-changed": {
+          dispatch(
+            portalApi.util.invalidateTags([
+              { type: "Tasks", id: e.project_id },
+              { type: "Task", id: e.task_id },
               { type: "ActivityLog", id: "LIST" },
             ]),
           );

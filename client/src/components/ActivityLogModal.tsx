@@ -5,7 +5,7 @@ import {
   useGetActivityLogQuery,
   type ActivityLogEntry,
 } from "../store/api";
-import { navigateTo } from "../hooks/useHash";
+import { buildTaskLink, currentQueryString, navigateTo } from "../hooks/useHash";
 
 /**
  * Tall, scrollable audit-log dialog opened from the topbar. Lists
@@ -87,17 +87,31 @@ function ActivityRow({ entry }: { entry: ActivityLogEntry }): JSX.Element {
   const time = formatTime(entry.created_at);
   const tag = describeAction(entry.action);
   const targetText = describeTarget(entry);
-  const jumpable =
+  const taskJumpable =
+    entry.target === "board_task" &&
     entry.action !== "delete" &&
-    entry.knowledge_id != null &&
-    !(entry.target === "page" && entry.page_id == null);
+    entry.project_id != null &&
+    entry.task_id != null;
+  const jumpable =
+    taskJumpable ||
+    (entry.action !== "delete" &&
+      entry.knowledge_id != null &&
+      !(entry.target === "page" && entry.page_id == null));
 
   const onJump = () => {
-    if (entry.knowledge_id == null) return;
-    navigateTo({
-      kid: entry.knowledge_id,
-      pid: entry.page_id ?? null,
-    });
+    if (taskJumpable) {
+      navigateTo(
+        { kid: null },
+        { search: buildTaskLink(currentQueryString(), entry.project_id as number, entry.task_id as number) },
+      );
+    } else if (entry.knowledge_id != null) {
+      navigateTo({
+        kid: entry.knowledge_id,
+        pid: entry.page_id ?? null,
+      });
+    } else {
+      return;
+    }
     dispatch(closeActivityLog());
   };
 
@@ -221,6 +235,8 @@ function describeTarget(entry: ActivityLogEntry): string {
         : `page #${entry.page_id ?? "?"}`;
       return `task on ${pg}`;
     }
+    case "board_task":
+      return `board task T${entry.task_id ?? "?"}${entry.task_title ? ` "${entry.task_title}"` : ""}`;
     case "image": {
       const where =
         entry.page_id && pgTitle

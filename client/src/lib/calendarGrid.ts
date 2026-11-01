@@ -81,3 +81,45 @@ export function filterDays<P extends { created: boolean; count: number }>(
   }
   return out;
 }
+
+interface DatedTask {
+  id: number;
+  start_date: string | null;
+  due_date: string | null;
+}
+
+export interface CalendarTaskEntry<T> {
+  task: T;
+  kind: "due" | "start";
+}
+
+/**
+ * Tasks per day between `from` and `to`, inclusive. Task dates are plain
+ * strings with no time zone: unlike page activity, they are never converted.
+ * Matching start and due dates show once, as due.
+ */
+export function tasksByDate<T extends DatedTask>(
+  tasks: T[],
+  from: string,
+  to: string,
+): Map<string, CalendarTaskEntry<T>[]> {
+  const map = new Map<string, CalendarTaskEntry<T>[]>();
+  const put = (date: string | null, entry: CalendarTaskEntry<T>): void => {
+    if (!date || date < from || date > to) return;
+    const list = map.get(date);
+    if (list) list.push(entry);
+    else map.set(date, [entry]);
+  };
+  for (const task of tasks) {
+    put(task.due_date, { task, kind: "due" });
+    if (task.start_date !== task.due_date) put(task.start_date, { task, kind: "start" });
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => (a.kind === b.kind ? a.task.id - b.task.id : a.kind === "due" ? -1 : 1));
+  }
+  return map;
+}
+
+export function isOverdue(task: { due_date: string | null; status: string }, today: string): boolean {
+  return task.due_date !== null && task.due_date < today && task.status !== "done";
+}

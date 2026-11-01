@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { applyMove } from "../lib/taskBoard";
 
 // ─── Types mirrored from server ───
 export interface KnowledgeMeta {
@@ -148,13 +149,16 @@ export interface ActivityLogEntry {
   source: "mcp" | "web";
   tool_name: string | null;
   action: "add" | "edit" | "delete" | "reorder" | "toggle" | "caption" | "upload" | "resize";
-  target: "knowledge" | "page" | "block" | "image" | "task";
+  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task";
   knowledge_id: number | null;
   knowledge_title: string | null;
   page_id: number | null;
   page_title: string | null;
   block_id: number | null;
   block_caption: string | null;
+  project_id: number | null;
+  task_id: number | null;
+  task_title: string | null;
   user_id: number | null;
   user_name: string | null;
 }
@@ -198,6 +202,67 @@ export interface ProjectPermission {
   level: "view" | "edit";
 }
 
+// ─── Tasks ───
+export type TaskStatus = "todo" | "doing" | "review" | "done";
+
+export interface TaskMember {
+  id: number;
+  display_name: string;
+}
+
+export interface TaskLink {
+  id: number;
+  url: string;
+  label: string | null;
+}
+
+export interface TaskRow {
+  id: number;
+  project_id: number;
+  title: string;
+  status: TaskStatus;
+  position: number;
+  assignee: TaskMember | null;
+  start_date: string | null;
+  due_date: string | null;
+  labels: string[];
+  blocked_reason: string | null;
+  version: number;
+  updated_at: string;
+  archived: boolean;
+}
+
+export interface TaskDetail extends TaskRow {
+  project: string;
+  description: string;
+  session_id: string | null;
+  links: TaskLink[];
+  created_by: number | null;
+  created_at: string;
+}
+
+export interface ProjectTasksResponse {
+  project: { id: number; name: string };
+  can_edit: boolean;
+  tasks: TaskRow[];
+}
+
+export interface TaskPatch {
+  expected_version: number;
+  title?: string;
+  description?: string;
+  status?: TaskStatus;
+  assignee_id?: number | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  labels?: string[];
+  session_id?: string | null;
+  blocked_reason?: string | null;
+  add_links?: { url: string; label?: string }[];
+  remove_link_ids?: number[];
+  archived?: boolean;
+}
+
 export const portalApi = createApi({
   reducerPath: "portalApi",
   baseQuery: fetchBaseQuery({ baseUrl: "/api/" }),
@@ -213,6 +278,8 @@ export const portalApi = createApi({
     "Auth",
     "Permissions",
     "Share",
+    "Tasks",
+    "Task",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -453,6 +520,81 @@ export const portalApi = createApi({
       // Every create/edit writes an activity row, which fires the
       // `activity-logged` SSE event that invalidates this tag.
       providesTags: [{ type: "ActivityLog", id: "LIST" }],
+    }),
+
+    // The Board and Calendar share one cache entry through the `{ projectId }`
+    // argument. moveTask's optimistic update patches exactly that entry.
+    listProjectTasks: builder.query<ProjectTasksResponse, { projectId: number; includeArchived?: boolean }>({
+      query: ({ projectId, includeArchived }) => ({
+        url: `projects/${projectId}/tasks`,
+        params: includeArchived ? { include_archived: 1 } : undefined,
+      }),
+      providesTags: (_r, _e, arg) => [{ type: "Tasks", id: arg.projectId }],
+    }),
+
+    listProjectMembers: builder.query<{ members: TaskMember[] }, number>({
+      query: (projectId) => `projects/${projectId}/members`,
+    }),
+
+    getTask: builder.query<TaskDetail, number>({
+      query: (id) => `tasks/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "Task", id }],
+    }),
+
+    getTaskRendered: builder.query<string, number>({
+      query: (id) => ({ url: `tasks/${id}/rendered`, responseHandler: (r) => r.text() }),
+      providesTags: (_r, _e, id) => [{ type: "Task", id }],
+    }),
+
+    addTask: builder.mutation<TaskDetail, { projectId: number; title: string }>({
+      query: ({ projectId, title }) => ({
+        url: `projects/${projectId}/tasks`,
+        method: "POST",
+        body: { title },
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Tasks", id: arg.projectId }],
+    }),
+
+    updateTask: builder.mutation<TaskDetail, { id: number; projectId: number; patch: TaskPatch }>({
+      query: ({ id, patch }) => ({ url: `tasks/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Tasks", id: arg.projectId },
+        { type: "Task", id: arg.id },
+      ],
+    }),
+
+    moveTask: builder.mutation<
+      TaskDetail,
+      { id: number; projectId: number; status: TaskStatus; beforeId: number | null; expectedVersion: number }
+    >({
+      query: ({ id, status, beforeId, expectedVersion }) => ({
+        url: `tasks/${id}/move`,
+        method: "POST",
+        body: { status, before_id: beforeId, expected_version: expectedVersion },
+      }),
+      // Move the card at once and restore it if the server refuses. The tags
+      // below refetch in both cases, so a stale board corrects itself.
+      async onQueryStarted({ id, projectId, status, beforeId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          portalApi.util.updateQueryData("listProjectTasks", { projectId }, (draft) => {
+            draft.tasks = applyMove(draft.tasks, id, status, beforeId);
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Tasks", id: arg.projectId },
+        { type: "Task", id: arg.id },
+      ],
+    }),
+
+    deleteTask: builder.mutation<{ deleted: boolean }, { id: number; projectId: number }>({
+      query: ({ id }) => ({ url: `tasks/${id}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Tasks", id: arg.projectId }],
     }),
 
     getActivityLog: builder.query<
@@ -874,6 +1016,14 @@ export const {
   useGetPromptLogQuery,
   useGetActivityLogQuery,
   useGetProjectCalendarQuery,
+  useListProjectTasksQuery,
+  useListProjectMembersQuery,
+  useGetTaskQuery,
+  useGetTaskRenderedQuery,
+  useAddTaskMutation,
+  useUpdateTaskMutation,
+  useMoveTaskMutation,
+  useDeleteTaskMutation,
   useGetAuthMeQuery,
   useLoginMutation,
   useLogoutMutation,

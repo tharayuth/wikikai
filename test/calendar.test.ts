@@ -6,8 +6,15 @@ import { openDb, type Db } from "../src/store/db.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
 import { bucketEvents, projectCalendar, type CalendarEvent } from "../src/store/calendar.js";
-import { filterDays, monthGrid, shiftMonth } from "../client/src/lib/calendarGrid.js";
-import { buildCalendarSearch, parseCalendar, withoutCalendar } from "../client/src/hooks/useHash.js";
+import { filterDays, isOverdue, monthGrid, shiftMonth, tasksByDate } from "../client/src/lib/calendarGrid.js";
+import {
+  buildCalendarSearch,
+  buildProjectViewSearch,
+  buildTaskLink,
+  buildTaskSearch,
+  parseCalendar,
+  withoutCalendar,
+} from "../client/src/hooks/useHash.js";
 
 function ev(at: string, over: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -160,10 +167,42 @@ describe("calendar grid + URL helpers", () => {
   it("round-trips the calendar query and keeps other params", () => {
     const q = buildCalendarSearch("?projects=1,2", 7, "2026-09");
     expect(q).toBe("?projects=1,2&calendar=7&month=2026-09");
-    expect(parseCalendar(q)).toEqual({ projectId: 7, month: "2026-09" });
-    expect(parseCalendar("?calendar=7&month=2026-13")).toEqual({ projectId: 7, month: null });
+    expect(parseCalendar(q)).toEqual({ projectId: 7, month: "2026-09", view: "calendar", taskId: null });
+    expect(parseCalendar("?calendar=7&month=2026-13")).toEqual({
+      projectId: 7,
+      month: null,
+      view: "calendar",
+      taskId: null,
+    });
     expect(parseCalendar("?projects=1")).toBeNull();
     expect(withoutCalendar(q)).toBe("?projects=1,2");
+  });
+
+  it("reads the project view and open task, ignoring bad values", () => {
+    expect(parseCalendar("?calendar=7&view=board&task=12")).toMatchObject({ view: "board", taskId: 12 });
+    expect(parseCalendar("?calendar=7&view=list")).toMatchObject({ view: "list", taskId: null });
+    expect(parseCalendar("?calendar=7&view=nope&task=abc")).toMatchObject({ view: "calendar", taskId: null });
+    expect(parseCalendar("?calendar=7&task=-1")).toMatchObject({ taskId: null });
+    expect(parseCalendar("?calendar=7&task=1.5")).toMatchObject({ taskId: null });
+  });
+
+  it("builds view and task queries, keeping other params", () => {
+    expect(buildProjectViewSearch("?calendar=7&month=2026-09", "board")).toBe("?calendar=7&month=2026-09&view=board");
+    expect(buildProjectViewSearch("?calendar=7&view=board", "calendar")).toBe("?calendar=7");
+    expect(buildTaskSearch("?calendar=7&view=board", 12)).toBe("?calendar=7&view=board&task=12");
+    expect(buildTaskSearch("?calendar=7&view=board&task=12", null)).toBe("?calendar=7&view=board");
+  });
+
+  it("keeps the view and task when changing month, and drops them on leaving", () => {
+    const q = "?projects=1,2&calendar=7&view=list&task=3";
+    expect(buildCalendarSearch(q, 7, "2026-10")).toBe("?projects=1,2&calendar=7&view=list&task=3&month=2026-10");
+    expect(withoutCalendar(q)).toBe("?projects=1,2");
+  });
+
+  it("builds a deep link to a task from anywhere", () => {
+    expect(buildTaskLink("?projects=1,2&calendar=9&month=2026-01&view=list&task=3", 7, 12)).toBe(
+      "?projects=1,2&calendar=7&view=board&task=12",
+    );
   });
 });
 
@@ -204,5 +243,51 @@ describe("filterDays (created / edited toggles)", () => {
 
   it("both off leaves no days", () => {
     expect(filterDays(days, { created: false, edited: false })).toEqual([]);
+  });
+});
+
+describe("tasks on the calendar", () => {
+  const task = (id: number, over: { start_date?: string | null; due_date?: string | null; status?: string } = {}) => ({
+    id,
+    start_date: null,
+    due_date: null,
+    status: "todo",
+    ...over,
+  });
+
+  it("places a task on its start and due dates", () => {
+    const map = tasksByDate([task(1, { start_date: "2026-11-02", due_date: "2026-11-05" })], "2026-11-01", "2026-11-30");
+    expect(map.get("2026-11-02")?.map((e) => e.kind)).toEqual(["start"]);
+    expect(map.get("2026-11-05")?.map((e) => e.kind)).toEqual(["due"]);
+  });
+
+  it("shows matching start and due dates once, as due", () => {
+    const map = tasksByDate([task(1, { start_date: "2026-11-02", due_date: "2026-11-02" })], "2026-11-01", "2026-11-30");
+    expect(map.get("2026-11-02")?.map((e) => e.kind)).toEqual(["due"]);
+  });
+
+  it("leaves out undated tasks and dates outside the range, keeping the padding days", () => {
+    const map = tasksByDate(
+      [task(1), task(2, { due_date: "2026-12-31" }), task(3, { due_date: "2026-11-01" })],
+      "2026-11-01",
+      "2026-12-05",
+    );
+    expect([...map.keys()]).toEqual(["2026-11-01"]);
+  });
+
+  it("lists due before start, then by id", () => {
+    const map = tasksByDate(
+      [task(2, { start_date: "2026-11-02" }), task(3, { due_date: "2026-11-02" }), task(1, { due_date: "2026-11-02" })],
+      "2026-11-01",
+      "2026-11-30",
+    );
+    expect(map.get("2026-11-02")?.map((e) => e.task.id)).toEqual([1, 3, 2]);
+  });
+
+  it("calls a task overdue only before its due date passes and while not done", () => {
+    expect(isOverdue(task(1, { due_date: "2026-11-01" }), "2026-11-02")).toBe(true);
+    expect(isOverdue(task(1, { due_date: "2026-11-02" }), "2026-11-02")).toBe(false);
+    expect(isOverdue(task(1, { due_date: "2026-11-01", status: "done" }), "2026-11-02")).toBe(false);
+    expect(isOverdue(task(1), "2026-11-02")).toBe(false);
   });
 });

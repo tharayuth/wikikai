@@ -22,15 +22,26 @@ export interface HashLocation {
   block: number | null;
   /** Parsed `?projects=` filter, or null when the param is absent. */
   projects: ProjectFilter | null;
-  /** `?calendar=<projectId>&month=YYYY-MM` — the project calendar view,
-   *  shown in place of the viewer when no knowledge is open. */
+  /** `?calendar=<projectId>&month=YYYY-MM&view=board&task=12` — the project
+   *  view, shown in place of the viewer when no knowledge is open. */
   calendar: CalendarLocation | null;
 }
+
+export type ProjectViewKind = "calendar" | "board" | "list";
 
 export interface CalendarLocation {
   projectId: number;
   /** `YYYY-MM`, or null for "the current month". */
   month: string | null;
+  /** Which tab of the project view. Old calendar links have no `view`. */
+  view: ProjectViewKind;
+  /** `task=<id>`: the task modal open over that view. */
+  taskId: number | null;
+}
+
+function toSearch(params: URLSearchParams): string {
+  const q = params.toString().replace(/%2C/g, ",");
+  return q ? `?${q}` : "";
 }
 
 const NAV_EVENT = "wikikai-nav";
@@ -56,15 +67,20 @@ export function parseProjectFilter(search: string): ProjectFilter | null {
   return { ids, noProject };
 }
 
-/** Parse `?calendar=7&month=2026-09`. Null when absent or malformed. */
+/** Parse `?calendar=7&month=2026-09&view=board&task=12`. Null when `calendar`
+ *  is absent or malformed; a bad `month`, `view` or `task` falls back alone. */
 export function parseCalendar(search: string): CalendarLocation | null {
   const params = new URLSearchParams(search);
   const projectId = Number(params.get("calendar"));
   if (!Number.isInteger(projectId) || projectId <= 0) return null;
   const month = params.get("month");
+  const view = params.get("view");
+  const taskId = Number(params.get("task"));
   return {
     projectId,
     month: month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null,
+    view: view === "board" || view === "list" ? view : "calendar",
+    taskId: Number.isInteger(taskId) && taskId > 0 ? taskId : null,
   };
 }
 
@@ -82,13 +98,38 @@ export function buildCalendarSearch(
   return `?${params.toString().replace(/%2C/g, ",")}`;
 }
 
-/** `search` minus the calendar params — used when leaving the calendar. */
+/** `search` minus the project-view params — used when leaving the view. */
 export function withoutCalendar(search: string): string {
   const params = new URLSearchParams(search);
   params.delete("calendar");
   params.delete("month");
-  const q = params.toString().replace(/%2C/g, ",");
-  return q ? `?${q}` : "";
+  params.delete("view");
+  params.delete("task");
+  return toSearch(params);
+}
+
+/** Switch project tab. The calendar is the default, so it needs no param. */
+export function buildProjectViewSearch(search: string, view: ProjectViewKind): string {
+  const params = new URLSearchParams(search);
+  if (view === "calendar") params.delete("view");
+  else params.set("view", view);
+  return toSearch(params);
+}
+
+/** Open the task modal, or close it with null. */
+export function buildTaskSearch(search: string, taskId: number | null): string {
+  const params = new URLSearchParams(search);
+  if (taskId == null) params.delete("task");
+  else params.set("task", String(taskId));
+  return toSearch(params);
+}
+
+/** A task on its project's board, from anywhere. Keeps `?projects=`. */
+export function buildTaskLink(search: string, projectId: number, taskId: number): string {
+  return buildTaskSearch(
+    buildProjectViewSearch(buildCalendarSearch(withoutCalendar(search), projectId, null), "board"),
+    taskId,
+  );
 }
 
 /** Build the `?projects=` query string for a set of selected tokens (project
