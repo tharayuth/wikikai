@@ -339,8 +339,10 @@ export function buildApp(opts: BuildAppOptions): Express {
   // One persistent text/event-stream per client; the server fans out
   // store mutations from src/lib/events.ts so every open tab can
   // invalidate the right RTK Query tags in real time. Lightweight —
-  // 25s keep-alive ping, JSON-encoded payload, no auth gate (same
-  // policy as the rest of /api which is meant to be network-protected).
+  // 25s keep-alive ping, JSON-encoded payload. Gated like the rest of /api:
+  // requireAuth above does not exempt this path, so when web auth is on an
+  // anonymous client gets 401. It is not filtered per user, but payloads
+  // carry ids and a tool name, never content.
   app.get("/api/events", (req, res) => {
     res.set({
       "Content-Type": "text/event-stream",
