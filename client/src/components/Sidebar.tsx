@@ -1096,8 +1096,8 @@ function ProjectGroup({
             type="button"
             className="sidebar-group-calendar-btn"
             onClick={openCalendar}
-            title={`Calendar of ${project}`}
-            aria-label={`Calendar of ${project}`}
+            title={`Calendar and tasks of ${project}`}
+            aria-label={`Calendar and tasks of ${project}`}
           >
             <svg
               viewBox="0 0 24 24"

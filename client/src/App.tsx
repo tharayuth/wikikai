@@ -8,7 +8,7 @@ import { useGetAuthMeQuery } from "./store/api";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
 import { Viewer } from "./components/Viewer";
-import { CalendarView } from "./components/CalendarView";
+import { ProjectView } from "./components/ProjectView";
 import { LoginPage } from "./components/LoginPage";
 import { HelpModal } from "./components/HelpModal";
 import { ActivityLogModal } from "./components/ActivityLogModal";
@@ -187,10 +187,7 @@ export function App() {
         />
         <SidebarResizeHandle />
         {location.kid == null && location.calendar ? (
-          <CalendarView
-            projectId={location.calendar.projectId}
-            month={location.calendar.month}
-          />
+          <ProjectView location={location.calendar} />
         ) : (
           <Viewer
             kid={location.kid}

@@ -20,7 +20,7 @@ import {
 /**
  * Google-Calendar-style month view of one project: each day lists the
  * knowledge touched that day with its created (+) / edited (✎) pages.
- * Rendered in place of the viewer for `/?calendar=<projectId>&month=YYYY-MM`.
+ * Rendered inside ProjectView for `/?calendar=<projectId>&month=YYYY-MM`.
  */
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -146,7 +146,7 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
   const status = (error as { status?: number } | undefined)?.status;
 
   return (
-    <section className="viewer calendar-view">
+    <div className="calendar-view">
       <header className="cal-header">
         <div className="cal-title">
           <span className="cal-project">📅 {data?.project.name ?? projectName ?? `Project ${projectId}`}</span>
@@ -232,7 +232,7 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
       {openDay && (
         <DayPanel date={openDay} day={byDate.get(openDay)} onClose={() => setOpenDay(null)} />
       )}
-    </section>
+    </div>
   );
 }
 
