@@ -3,6 +3,7 @@ import { CalendarView } from "./CalendarView";
 import { TaskBoard } from "./TaskBoard";
 import { TaskFilters } from "./TaskFilters";
 import { TaskListView } from "./TaskListView";
+import { TaskModal } from "./TaskModal";
 import {
   buildProjectViewSearch,
   buildTaskSearch,
@@ -24,13 +25,17 @@ const TABS: { view: ProjectViewKind; label: string }[] = [
  * Board and List. Rendered in place of the viewer for `/?calendar=<id>`.
  */
 export function ProjectView({ location }: { location: CalendarLocation }): JSX.Element {
-  const { projectId, month, view } = location;
+  const { projectId, month, view, taskId } = location;
   const [filter, setFilter] = useState<TaskFilter>(NO_FILTER);
 
   useEffect(() => setFilter(NO_FILTER), [projectId]);
 
   const openTask = useCallback((id: number) => {
     navigateTo({ kid: null }, { search: buildTaskSearch(currentQueryString(), id) });
+  }, []);
+
+  const closeTask = useCallback(() => {
+    navigateTo({ kid: null }, { search: buildTaskSearch(currentQueryString(), null) });
   }, []);
 
   return (
@@ -55,6 +60,7 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
       {view === "calendar" && <CalendarView projectId={projectId} month={month} />}
       {view === "board" && <TaskBoard projectId={projectId} filter={filter} onOpenTask={openTask} />}
       {view === "list" && <TaskListView projectId={projectId} filter={filter} onOpenTask={openTask} />}
+      {taskId != null && <TaskModal key={taskId} projectId={projectId} taskId={taskId} onClose={closeTask} />}
     </section>
   );
 }

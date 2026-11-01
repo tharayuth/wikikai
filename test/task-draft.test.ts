@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+import { changedElsewhere, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
+
+const task = {
+  title: "T",
+  description: "Body",
+  status: "todo" as const,
+  assignee: { id: 7, display_name: "Ann" },
+  start_date: "2026-11-01",
+  due_date: null,
+  labels: ["api", "ui"],
+  session_id: null,
+  blocked_reason: "waiting",
+};
+
+describe("draftOf", () => {
+  it("turns nulls and lists into form values", () => {
+    expect(draftOf(task)).toEqual({
+      title: "T",
+      description: "Body",
+      status: "todo",
+      assignee_id: 7,
+      start_date: "2026-11-01",
+      due_date: "",
+      labels: "api, ui",
+      session_id: "",
+      blocked_reason: "waiting",
+    });
+  });
+});
+
+describe("patchFrom", () => {
+  it("returns null when nothing changed", () => {
+    expect(patchFrom(draftOf(task), task)).toBeNull();
+  });
+
+  it("sends only what changed", () => {
+    expect(patchFrom({ ...draftOf(task), title: "New" }, task)).toEqual({ title: "New" });
+  });
+
+  it("does not resend an assignee who was left alone", () => {
+    expect(patchFrom({ ...draftOf(task), description: "New" }, task)).not.toHaveProperty("assignee_id");
+  });
+
+  it("turns emptied fields into null", () => {
+    expect(
+      patchFrom({ ...draftOf(task), start_date: "", blocked_reason: "  ", assignee_id: null }, task),
+    ).toEqual({ start_date: null, blocked_reason: null, assignee_id: null });
+  });
+
+  it("compares labels as a list, ignoring spacing", () => {
+    expect(patchFrom({ ...draftOf(task), labels: "api,ui" }, task)).toBeNull();
+    expect(patchFrom({ ...draftOf(task), labels: "api" }, task)).toEqual({ labels: ["api"] });
+    expect(patchFrom({ ...draftOf(task), labels: " " }, task)).toEqual({ labels: [] });
+  });
+
+  it("ignores whitespace around the title", () => {
+    expect(patchFrom({ ...draftOf(task), title: "  T " }, task)).toBeNull();
+  });
+});
+
+describe("changedElsewhere", () => {
+  it("flags new versions only when there are unsaved edits to protect", () => {
+    expect(changedElsewhere(true, 2, 3)).toBe(true);
+    expect(changedElsewhere(false, 2, 3)).toBe(false);
+    expect(changedElsewhere(true, 3, 3)).toBe(false);
+    expect(changedElsewhere(true, 3, undefined)).toBe(false);
+  });
+});

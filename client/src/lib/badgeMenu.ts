@@ -80,7 +80,7 @@ function copyFallback(text: string, onOk: () => void, onFail: () => void): void 
   }
 }
 
-function writeClipboard(
+export function writeClipboard(
   text: string,
   onOk: () => void,
   onFail: () => void,
