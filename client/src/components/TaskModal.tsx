@@ -15,7 +15,7 @@ import {
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { writeClipboard } from "../lib/badgeMenu";
 import { BOARD_STATUSES, apiErrorMessage, type BoardStatus } from "../lib/taskBoard";
-import { changedElsewhere, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
+import { adoptsServerCopy, changedElsewhere, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
 
 interface Props {
   projectId: number;
@@ -58,10 +58,10 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
   const stale = base !== null && changedElsewhere(dirty, base.version, task?.version);
 
   useEffect(() => {
-    if (!task || dirty) return;
+    if (!task || !adoptsServerCopy(dirty, base?.version ?? null, task.version)) return;
     setBase(task);
     setDraft(draftOf(task));
-  }, [task, dirty]);
+  }, [task, dirty, base?.version]);
 
   useMermaidCharts(editingDescription ? null : bodyEl, [rendered.data ?? "", theme], theme, undefined, {
     readOnly: true,

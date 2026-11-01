@@ -87,3 +87,10 @@ export function patchFrom(draft: TaskDraft, base: DraftableTask): TaskDraftPatch
 export function changedElsewhere(dirty: boolean, baseVersion: number, latestVersion: number | undefined): boolean {
   return dirty && latestVersion !== undefined && latestVersion !== baseVersion;
 }
+
+/** Whether the form should load this server copy. Not over unsaved edits, and
+ *  not an older copy: right after a save, the cache still holds the version
+ *  before it. */
+export function adoptsServerCopy(dirty: boolean, baseVersion: number | null, latestVersion: number): boolean {
+  return !dirty && (baseVersion === null || latestVersion >= baseVersion);
+}

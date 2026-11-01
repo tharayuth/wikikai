@@ -6155,3 +6155,4 @@ button.ki-id-badge::after {
 .task-session input { flex: 1; min-width: 180px; }
 .task-modal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .task-modal-spacer { flex: 1; }
+.modal .task-field textarea { min-height: 160px; }

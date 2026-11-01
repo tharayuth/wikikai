@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedElsewhere, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
+import { adoptsServerCopy, changedElsewhere, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
 
 const task = {
   title: "T",
@@ -65,5 +65,27 @@ describe("changedElsewhere", () => {
     expect(changedElsewhere(false, 2, 3)).toBe(false);
     expect(changedElsewhere(true, 3, 3)).toBe(false);
     expect(changedElsewhere(true, 3, undefined)).toBe(false);
+  });
+});
+
+describe("adoptsServerCopy", () => {
+  it("loads the first copy", () => {
+    expect(adoptsServerCopy(false, null, 1)).toBe(true);
+  });
+
+  it("loads a newer copy when there are no unsaved edits", () => {
+    expect(adoptsServerCopy(false, 2, 3)).toBe(true);
+  });
+
+  it("loads a copy of the same version", () => {
+    expect(adoptsServerCopy(false, 3, 3)).toBe(true);
+  });
+
+  it("refuses the older cached copy right after a save", () => {
+    expect(adoptsServerCopy(false, 3, 2)).toBe(false);
+  });
+
+  it("refuses any copy over unsaved edits", () => {
+    expect(adoptsServerCopy(true, 2, 3)).toBe(false);
   });
 });
