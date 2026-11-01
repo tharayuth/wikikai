@@ -111,6 +111,24 @@ describe("projects id migration (legacy -> auto-increment)", () => {
     db.close();
   });
 
+  it("gives an older database the task tables and activity columns", () => {
+    const file = makeLegacyDb();
+    const db = openDb(file);
+    const cols = (db.prepare("PRAGMA table_info(activity_log)").all() as { name: string }[]).map(
+      (c) => c.name,
+    );
+    expect(cols).toEqual(expect.arrayContaining(["project_id", "task_id", "task_title"]));
+    const { id } = db.prepare("SELECT id FROM projects WHERE name = 'alpha'").get() as { id: number };
+    const now = "2026-01-01T00:00:00.000Z";
+    db.prepare(
+      "INSERT INTO tasks (project_id, title, position, created_at, updated_at) VALUES (?, 'T', 1, ?, ?)",
+    ).run(id, now, now);
+    expect(db.prepare("SELECT status, version FROM tasks").get()).toEqual({ status: "todo", version: 1 });
+    expect(db.pragma("foreign_key_check")).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM project_permissions").get()).toEqual({ n: 1 });
+    db.close();
+  });
+
   it("is idempotent — re-opening does not rebuild or change ids", () => {
     const file = makeLegacyDb();
     const first = openDb(file);

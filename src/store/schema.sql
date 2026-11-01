@@ -235,3 +235,43 @@ CREATE TABLE IF NOT EXISTS files (
   size_bytes   INTEGER NOT NULL,
   created_at   TEXT    NOT NULL
 );
+
+-- ───── Tasks: tracked work on a project's board ─────
+-- Separate from page checkboxes (`- [ ]`, the `toggle_task` tool), which are
+-- content inside a document. `project_id` references the stable id, so a
+-- project rename leaves tasks alone. RESTRICT because unregistering a project
+-- keeps its documents; it must not silently take its tasks. `position` orders
+-- tasks within one project + status, and the board order is the work queue.
+-- See store/tasks.ts for the rules.
+CREATE TABLE IF NOT EXISTS tasks (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id     INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  title          TEXT NOT NULL,
+  description    TEXT NOT NULL DEFAULT '',  -- markdown
+  status         TEXT NOT NULL DEFAULT 'todo'
+                 CHECK (status IN ('todo','doing','review','done')),
+  position       INTEGER NOT NULL,
+  assignee_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  start_date     TEXT,                      -- YYYY-MM-DD
+  due_date       TEXT,                      -- YYYY-MM-DD
+  labels         TEXT,                      -- comma-separated, like knowledge.tags
+  session_id     TEXT,                      -- claude --resume <id>
+  blocked_reason TEXT,                      -- NULL = not blocked
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  version        INTEGER NOT NULL DEFAULT 1,
+  archived_at    TEXT                       -- NULL = active
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_board ON tasks(project_id, status, position);
+
+CREATE TABLE IF NOT EXISTS task_links (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id    INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  url        TEXT NOT NULL,                 -- http(s):// or a relative /path only
+  label      TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_links_task ON task_links(task_id);
+-- NOTE: `activity_log.project_id`, `task_id` and `task_title` are added by the
+-- in-place migration in db.ts, for the same reason as `activity_log.user_id`.

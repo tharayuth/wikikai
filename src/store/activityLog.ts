@@ -21,6 +21,7 @@ export type ActivityTarget =
   | "file"
   | "image"
   | "task"
+  | "board_task"
   | "secret";
 
 /** What a single recorded row looks like — what callers pass in (no
@@ -34,6 +35,9 @@ export interface RecordInput {
   page_title?: string | null;
   block_id?: number | null;
   block_caption?: string | null;
+  project_id?: number | null;
+  task_id?: number | null;
+  task_title?: string | null;
 }
 
 export interface ActivityEntry {
@@ -49,6 +53,9 @@ export interface ActivityEntry {
   page_title: string | null;
   block_id: number | null;
   block_caption: string | null;
+  project_id: number | null;
+  task_id: number | null;
+  task_title: string | null;
   /** Acting user id when known. NULL for rows written before auth was
    *  enabled, or for MCP rows when no `mcpDefaultUserId` was set. */
   user_id: number | null;
@@ -79,11 +86,11 @@ export class ActivityLogStore {
         `INSERT INTO activity_log
          (created_at, source, tool_name, action, target,
           knowledge_id, knowledge_title, page_id, page_title,
-          block_id, block_caption, user_id)
+          block_id, block_caption, project_id, task_id, task_title, user_id)
          VALUES
          (@created_at, @source, @tool_name, @action, @target,
           @knowledge_id, @knowledge_title, @page_id, @page_title,
-          @block_id, @block_caption, @user_id)`,
+          @block_id, @block_caption, @project_id, @task_id, @task_title, @user_id)`,
       )
       .run({
         created_at: new Date().toISOString(),
@@ -97,6 +104,9 @@ export class ActivityLogStore {
         page_title: entry.page_title ?? null,
         block_id: entry.block_id ?? null,
         block_caption: entry.block_caption ?? null,
+        project_id: entry.project_id ?? null,
+        task_id: entry.task_id ?? null,
+        task_title: entry.task_title ?? null,
         user_id: ctx.user_id ?? null,
       });
     // Notify the SSE hub so any open ActivityLogModal refetches —
@@ -111,10 +121,10 @@ export class ActivityLogStore {
 
   /** List entries newest-first. Optional `knowledge_id` narrows to a
    *  single knowledge; `limit` defaults to 100 (max 500). When
-   *  `visibleProjects` is an array, only rows whose `knowledge_id`
-   *  resolves to one of those projects are returned — rows with a
-   *  NULL `knowledge_id` (e.g. image uploads) are excluded too. Passing
-   *  `null` or `undefined` disables the visibility filter (admin view). */
+   *  `visibleProjects` is an array, only rows whose document or task belongs
+   *  to one of those projects are returned — rows with neither (e.g. image
+   *  uploads) are excluded too. Passing `null` or `undefined` disables the
+   *  visibility filter (admin view). */
   list(opts: {
     limit?: number;
     offset?: number;
@@ -141,9 +151,10 @@ export class ActivityLogStore {
       }
       const placeholders = visFilter.map(() => "?").join(",");
       conditions.push(
-        `a.knowledge_id IS NOT NULL AND a.knowledge_id IN (SELECT id FROM knowledge WHERE project IN (${placeholders}))`,
+        `((a.knowledge_id IS NOT NULL AND a.knowledge_id IN (SELECT id FROM knowledge WHERE project IN (${placeholders})))
+          OR a.project_id IN (SELECT id FROM projects WHERE name IN (${placeholders})))`,
       );
-      params.push(...visFilter);
+      params.push(...visFilter, ...visFilter);
     }
 
     const wherePart = conditions.length
@@ -154,8 +165,8 @@ export class ActivityLogStore {
       .prepare(
         `SELECT a.id, a.created_at, a.source, a.tool_name, a.action, a.target,
                 a.knowledge_id, a.knowledge_title, a.page_id, a.page_title,
-                a.block_id, a.block_caption, a.user_id,
-                u.display_name AS user_name
+                a.block_id, a.block_caption, a.project_id, a.task_id, a.task_title,
+                a.user_id, u.display_name AS user_name
          FROM activity_log a
          LEFT JOIN users u ON u.id = a.user_id
          ${wherePart}

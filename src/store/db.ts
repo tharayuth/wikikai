@@ -27,6 +27,20 @@ export function openDb(dbPath: string): Db {
       `ALTER TABLE activity_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
     );
   }
+  for (const [column, type] of [
+    ["project_id", "INTEGER"],
+    ["task_id", "INTEGER"],
+    ["task_title", "TEXT"],
+  ] as const) {
+    if (!hasColumn(db, "activity_log", column)) {
+      // Board-task rows have no document or page to hang off. Not foreign
+      // keys: a log row outlives its target.
+      db.exec(`ALTER TABLE activity_log ADD COLUMN ${column} ${type}`);
+    }
+  }
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_activity_log_project ON activity_log(project_id, created_at DESC)`,
+  );
   if (!hasColumn(db, "users", "mcp_token")) {
     // Per-user MCP API token. Nullable for legacy rows; populated on
     // create + regenerate. UNIQUE so a stale token can't accidentally
