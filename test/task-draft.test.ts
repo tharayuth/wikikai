@@ -66,6 +66,10 @@ describe("changedElsewhere", () => {
     expect(changedElsewhere(true, 3, 3)).toBe(false);
     expect(changedElsewhere(true, 3, undefined)).toBe(false);
   });
+
+  it("ignores an older cached copy, as seen right after a save", () => {
+    expect(changedElsewhere(true, 3, 2)).toBe(false);
+  });
 });
 
 describe("adoptsServerCopy", () => {
@@ -77,8 +81,8 @@ describe("adoptsServerCopy", () => {
     expect(adoptsServerCopy(false, 2, 3)).toBe(true);
   });
 
-  it("loads a copy of the same version", () => {
-    expect(adoptsServerCopy(false, 3, 3)).toBe(true);
+  it("does not rewrite a draft that has returned to clean on a same-version copy", () => {
+    expect(adoptsServerCopy(false, 3, 3)).toBe(false);
   });
 
   it("refuses the older cached copy right after a save", () => {

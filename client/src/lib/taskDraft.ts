@@ -82,15 +82,17 @@ export function patchFrom(draft: TaskDraft, base: DraftableTask): TaskDraftPatch
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
-/** True when the task moved on underneath unsaved edits. The modal then keeps
- *  the typed text on screen and asks, instead of replacing it. */
+/** True when a newer version of the task exists underneath unsaved edits. The
+ *  modal then keeps the typed text on screen and asks, instead of replacing it.
+ *  An older cached copy (right after a save) is not a change. */
 export function changedElsewhere(dirty: boolean, baseVersion: number, latestVersion: number | undefined): boolean {
-  return dirty && latestVersion !== undefined && latestVersion !== baseVersion;
+  return dirty && latestVersion !== undefined && latestVersion > baseVersion;
 }
 
-/** Whether the form should load this server copy. Not over unsaved edits, and
- *  not an older copy: right after a save, the cache still holds the version
- *  before it. */
+/** Whether the form should load this server copy. Only a strictly newer one,
+ *  and never over unsaved edits. An older copy is the cache right after a save,
+ *  and a same-version copy would rewrite text the person is typing: a draft
+ *  that has just returned to clean would lose a trailing ", " from the labels. */
 export function adoptsServerCopy(dirty: boolean, baseVersion: number | null, latestVersion: number): boolean {
-  return !dirty && (baseVersion === null || latestVersion >= baseVersion);
+  return !dirty && (baseVersion === null || latestVersion > baseVersion);
 }

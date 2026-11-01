@@ -55,6 +55,9 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
   const canEdit = board.data?.can_edit ?? false;
   const isAdmin = me.data?.user?.is_admin === true || me.data?.auth_enabled === false;
   const dirty = base !== null && draft !== null && patchFrom(draft, base) !== null;
+  const loadStatus = (taskQuery.error as { status?: number } | undefined)?.status;
+  // A 404 only replaces the form when there is nothing typed to keep.
+  const gone = loadStatus === 404 && !dirty;
   const stale = base !== null && changedElsewhere(dirty, base.version, task?.version);
 
   useEffect(() => {
@@ -62,6 +65,14 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
     setBase(task);
     setDraft(draftOf(task));
   }, [task, dirty, base?.version]);
+
+  // Toggling a task list box is keyed by page, so a box here could never save.
+  useEffect(() => {
+    if (!bodyEl) return;
+    bodyEl.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
+      box.disabled = true;
+    });
+  }, [bodyEl, rendered.data]);
 
   useMermaidCharts(editingDescription ? null : bodyEl, [rendered.data ?? "", theme], theme, undefined, {
     readOnly: true,
@@ -175,9 +186,13 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
           </button>
         </div>
 
-        {taskQuery.error ? (
+        {gone ? (
           <div className="task-modal-body">
             <p>Task not found. It may have been deleted.</p>
+          </div>
+        ) : taskQuery.error && !base ? (
+          <div className="task-modal-body">
+            <p>Could not load this task.</p>
           </div>
         ) : !base || !draft ? (
           <div className="task-modal-body">
