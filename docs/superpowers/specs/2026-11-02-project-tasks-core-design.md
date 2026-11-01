@@ -133,9 +133,10 @@ drift apart.
 
 ### 4.3 Position
 
-- Non-archived tasks in one project and status are renumbered from 1, in a
-  transaction, whenever that status's order changes. Renumbering does not touch
-  the `version` or `updated_at` of the other tasks.
+- When a task is placed into a status, the non-archived tasks in that project
+  and status are renumbered from 1, in a transaction. A status a task leaves
+  keeps its gaps, because gaps cannot change the order. Renumbering does not
+  touch the `version` or `updated_at` of the other tasks.
 - A new task goes to the bottom of its status.
 - A status change places the task at the bottom of the new status, except `done`,
   which places it at the top so that recent work stays visible.

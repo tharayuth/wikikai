@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { openDb } from "../src/store/db.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
@@ -511,6 +511,27 @@ describe("TaskStore", () => {
         task_title: "A2",
       });
       expect(JSON.stringify(db.prepare("SELECT * FROM activity_log").all())).not.toContain("Private body");
+    });
+
+    it("keeps a change the audit log refused, announces it, and reports on stderr", () => {
+      const { db, alpha } = setup();
+      const broken = new TaskStore(db, { record() { throw new Error("boom"); } } as unknown as ActivityLogStore);
+      const seen: WikikaiEvent[] = [];
+      const off = onEvent((e) => seen.push(e));
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const t = broken.add(alpha.id, { title: "Kept" });
+        expect(t).toMatchObject({ title: "Kept", project_id: alpha.id });
+        expect(broken.get(t.id)?.title).toBe("Kept");
+        expect(seen.filter((e) => e.type === "task-changed")).toEqual([
+          { type: "task-changed", project_id: alpha.id, task_id: t.id },
+        ]);
+        expect(errors).toHaveBeenCalledTimes(1);
+        expect(String(errors.mock.calls[0][0])).toContain(`T${t.id}`);
+      } finally {
+        off();
+        errors.mockRestore();
+      }
     });
   });
 });

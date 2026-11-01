@@ -630,8 +630,11 @@ export class TaskStore {
         task_id: taskId,
         task_title: title,
       });
-    } catch {
-      // Never let audit logging take down a mutation.
+    } catch (e) {
+      // The change has already committed, so it must not throw. Dropping it
+      // silently would hide a broken audit log, so leave a trace instead.
+      // eslint-disable-next-line no-console
+      console.error(`[wikikai] could not log task change: ${action} T${taskId}`, e);
     }
     emitEvent({ type: "task-changed", project_id: projectId, task_id: taskId });
   }
