@@ -115,6 +115,7 @@ export function TaskBoard({ projectId, filter, onOpenTask }: Props): JSX.Element
             tasks={status === "done" ? columns.done.slice(0, doneShown) : columns[status]}
             total={columns[status].length}
             canEdit={canEdit}
+            filter={filter}
             onOpenTask={onOpenTask}
             onShowMore={status === "done" ? () => setDoneShown((n) => n + DONE_PAGE_SIZE) : undefined}
           />
@@ -137,6 +138,7 @@ function Column({
   tasks,
   total,
   canEdit,
+  filter,
   onOpenTask,
   onShowMore,
 }: {
@@ -145,6 +147,7 @@ function Column({
   tasks: TaskRow[];
   total: number;
   canEdit: boolean;
+  filter: TaskFilter;
   onOpenTask: (id: number) => void;
   onShowMore?: () => void;
 }): JSX.Element {
@@ -167,7 +170,7 @@ function Column({
           Show more ({total - tasks.length})
         </button>
       )}
-      {status === "todo" && canEdit && <QuickAdd projectId={projectId} />}
+      {status === "todo" && canEdit && <QuickAdd projectId={projectId} filter={filter} />}
     </section>
   );
 }
@@ -234,7 +237,7 @@ function CardBody({ task, onOpen }: { task: TaskRow; onOpen?: () => void }): JSX
   );
 }
 
-function QuickAdd({ projectId }: { projectId: number }): JSX.Element {
+function QuickAdd({ projectId, filter }: { projectId: number; filter: TaskFilter }): JSX.Element {
   const dispatch = useAppDispatch();
   const [title, setTitle] = useState("");
   const [addTask, { isLoading }] = useAddTaskMutation();
@@ -245,7 +248,14 @@ function QuickAdd({ projectId }: { projectId: number }): JSX.Element {
     if (!text) return;
     addTask({ projectId, title: text })
       .unwrap()
-      .then(() => setTitle(""))
+      .then((created) => {
+        setTitle("");
+        // A new task has no assignee or labels, so an assignee or label filter
+        // hides it at once. Say so, or the person adds it a second time.
+        if (filterTasks([created], filter).length === 0) {
+          dispatch(showToast({ message: `Added T${created.id}. The current filter hides it.`, kind: "info" }));
+        }
+      })
       .catch((err: unknown) => {
         dispatch(showToast({ message: apiErrorMessage(err, "Could not add the task"), kind: "error" }));
       });
