@@ -55,7 +55,7 @@ export const MAX_CALENDAR_DAYS = 42;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Parse a `YYYY-MM-DD` date into a UTC-midnight epoch, or throw. */
-function parseDate(s: string, name: string): number {
+export function parseDate(s: string, name: string): number {
   if (!DATE_RE.test(s)) throw new Error(`${name} must be YYYY-MM-DD`);
   const t = Date.parse(`${s}T00:00:00Z`);
   if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== s) {

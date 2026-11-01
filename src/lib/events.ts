@@ -16,6 +16,9 @@ import { EventEmitter } from "node:events";
  *                       for log entries without a knowledge target —
  *                       e.g. image uploads). The open ActivityLogModal
  *                       refreshes its list on this signal.
+ *   task-changed     — a task on a project's board changed. Ids only: this
+ *                       stream reaches every connected browser regardless of
+ *                       project access.
  *   tool-called      — an MCP tool was invoked. Read-only tools included,
  *                       so this is a liveness signal, not a mutation
  *                       signal — it invalidates no caches. `age_ms` is
@@ -28,6 +31,7 @@ export type WikikaiEvent =
   | { type: "page-deleted"; page_id: number; knowledge_id: number }
   | { type: "knowledge-changed"; knowledge_id?: number }
   | { type: "activity-logged"; knowledge_id: number | null }
+  | { type: "task-changed"; project_id: number; task_id: number }
   | { type: "tool-called"; tool_name: string; age_ms: number };
 
 const bus = new EventEmitter();
