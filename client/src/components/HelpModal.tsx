@@ -653,6 +653,18 @@ function McpGuideTh() {
         </tbody>
       </table>
 
+      <h3>Tools — งานของ project</h3>
+      <table>
+        <thead><tr><th>Tool</th><th>หน้าที่</th></tr></thead>
+        <tbody>
+          <tr><td><code>add_task</code></td><td>สร้างงานบนบอร์ดของ project Args: <code>{`{ project, title, description?, status?, assignee?, start_date?, due_date?, labels?, links?, session_id?, position? }`}</code></td></tr>
+          <tr><td><code>list_tasks</code></td><td>รายการย่อตามลำดับบนบอร์ด ค่าเริ่มต้นคือ todo, doing และ review ส่ง <code>next: true</code> เพื่อขอแค่งานถัดไปที่ควรหยิบ</td></tr>
+          <tr><td><code>get_task</code></td><td>งานหนึ่งรายการแบบเต็ม พร้อม description และลิงก์</td></tr>
+          <tr><td><code>edit_task</code></td><td>แก้ทุก field, ย้าย status, เพิ่มหรือลบลิงก์ และ archive ต้องส่ง <code>expected_version</code> เสมอ เพื่อไม่ให้สอง session หยิบงานเดียวกัน</td></tr>
+        </tbody>
+      </table>
+      <p>งานบนบอร์ดไม่ใช่ checkbox ในหน้า: <code>toggle_task</code> ใช้สลับ <code>- [ ]</code> ภายในหน้าเท่านั้น</p>
+
       <h3>Block id (<code>@N</code>) + caption</h3>
       <p>
         ทุก rich block (mermaid / chart / chart-grid / stats / steps / html-embed) ที่ render จะได้เลข <code>@N</code> แบบ global. ใน source markdown ติดเป็น <code>```mermaid {`{@123}`}</code>; UI แสดง pill <code>@123</code> มุมซ้ายบนของ block ตอน hover (คลิกเปิดเมนู: copy หรือเข้า editor ที่ block นั้น). User บอก "อัพเดต @47" → <code>get_block({"{ id: 47 }"})</code> ได้เลย ไม่ต้องค้นเอง.
