@@ -40,6 +40,12 @@ describe("MCP tool catalog", () => {
     }
   });
 
+  it("exposes the task tools, with no way to delete", async () => {
+    const names = (await listTools()).map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["add_task", "list_tasks", "get_task", "edit_task"]));
+    expect(names).not.toContain("delete_task");
+  });
+
   it("does not expose internal-only fields", async () => {
     const tools = await listTools();
     for (const name of ["add_image", "add_file"]) {

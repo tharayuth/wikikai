@@ -22,6 +22,14 @@ import type { PromptLogStore, PromptLogEntry } from "../store/promptLog.js";
 import type { ActivityLogStore } from "../store/activityLog.js";
 import type { PermissionStore } from "../store/permissions.js";
 import type { User, UserStore } from "../store/users.js";
+import {
+  TASK_STATUSES,
+  TaskStore,
+  type Task,
+  type TaskMember,
+  type TaskRow,
+  type TaskStatus,
+} from "../store/tasks.js";
 import { getCallContext } from "../lib/callContext.js";
 import { assertProjectAccess } from "../lib/permissions.js";
 import { formatSecretFence, sealSecret, unsealSecret } from "../lib/secret.js";
@@ -740,6 +748,109 @@ export const GetExampleSchema = z.object({
 
 // ─────────── Types ───────────
 
+// ─── Project tasks ───
+
+const TASK_ASSIGNEE_NOTE = "me, or a member's name or email.";
+const TASK_DATE_NOTE = "YYYY-MM-DD.";
+
+const TaskLinkSchema = z.object({
+  url: z.string().max(2000).describe("http(s) URL or path like /&3/#12."),
+  label: z.string().max(200).optional(),
+});
+
+const TaskPlacementSchema = z
+  .enum(["top", "bottom"])
+  .optional()
+  .describe("Queue position within its status.");
+
+export const AddTaskSchema = z.object({
+  project: z.string().min(1).max(100),
+  title: z.string().min(1).max(300),
+  description: z.string().max(20000).optional().describe("Markdown. Link a wiki page for long material."),
+  status: z.enum(TASK_STATUSES).optional().describe("Default todo."),
+  assignee: z.string().max(200).optional().describe(TASK_ASSIGNEE_NOTE),
+  start_date: z.string().optional().describe(TASK_DATE_NOTE),
+  due_date: z.string().optional().describe(TASK_DATE_NOTE),
+  labels: z.array(z.string().max(50)).max(20).optional(),
+  links: z.array(TaskLinkSchema).max(50).optional(),
+  session_id: z.string().max(200).optional().describe(SESSION_NOTE),
+  position: TaskPlacementSchema,
+});
+
+export const ListTasksSchema = z
+  .object({
+    project: z.string().min(1).max(100),
+    status: z.array(z.enum(TASK_STATUSES)).optional().describe("Default todo, doing, review."),
+    assignee: z.string().max(200).optional().describe(TASK_ASSIGNEE_NOTE),
+    label: z.string().max(50).optional(),
+    include_archived: z.boolean().optional(),
+    limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
+    next: z.boolean().optional().describe("Only the next task to claim. Takes no other filter."),
+  })
+  .refine(
+    (v) =>
+      !v.next ||
+      (v.status === undefined &&
+        v.assignee === undefined &&
+        v.label === undefined &&
+        v.include_archived === undefined &&
+        v.limit === undefined),
+    { message: "next cannot be combined with other filters" },
+  );
+
+export const GetTaskSchema = z.object({
+  task_id: z.number().int().positive(),
+});
+
+export const EditTaskSchema = z.object({
+  task_id: z.number().int().positive(),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .describe("`version` from your last task call. STALE if the task changed since."),
+  title: z.string().min(1).max(300).optional(),
+  description: z.string().max(20000).optional(),
+  status: z.enum(TASK_STATUSES).optional(),
+  assignee: z.string().max(200).nullable().optional().describe(`${TASK_ASSIGNEE_NOTE} null clears.`),
+  start_date: z.string().nullable().optional().describe(`${TASK_DATE_NOTE} null clears.`),
+  due_date: z.string().nullable().optional().describe(`${TASK_DATE_NOTE} null clears.`),
+  labels: z.array(z.string().max(50)).max(20).optional().describe("Replaces the whole list."),
+  session_id: z.string().max(200).nullable().optional().describe(SESSION_NOTE),
+  blocked_reason: z
+    .string()
+    .max(1000)
+    .nullable()
+    .optional()
+    .describe("Why work stopped; `next` skips it. null clears."),
+  add_links: z.array(TaskLinkSchema).max(50).optional(),
+  remove_link_ids: z.array(z.number().int().positive()).max(50).optional(),
+  archived: z.boolean().optional(),
+  position: TaskPlacementSchema,
+});
+
+export type TaskResult = Task & { url: string };
+
+export interface TaskListEntry {
+  id: number;
+  title: string;
+  status: TaskStatus;
+  assignee: TaskMember | null;
+  due_date: string | null;
+  labels: string[];
+  blocked_reason: string | null;
+  version: number;
+  url: string;
+}
+
+function taskUrl(ctx: HandlerContext, projectId: number, taskId: number): string {
+  const base = ctx.publicBaseUrl.replace(/\/$/, "");
+  return `${base}/?calendar=${projectId}&view=board&task=${taskId}`;
+}
+
+const DEFAULT_LIST_STATUSES: TaskStatus[] = ["todo", "doing", "review"];
+const DEFAULT_LIST_LIMIT = 100;
+
 export type ToolInputs = {
   add_knowledge: z.infer<typeof AddKnowledgeSchema>;
   edit_knowledge: z.infer<typeof EditKnowledgeSchema>;
@@ -777,6 +888,10 @@ export type ToolInputs = {
   get_example: z.infer<typeof GetExampleSchema>;
   get_prompt_log: z.infer<typeof GetPromptLogSchema>;
   toggle_task: z.infer<typeof ToggleTaskSchema>;
+  add_task: z.infer<typeof AddTaskSchema>;
+  list_tasks: z.infer<typeof ListTasksSchema>;
+  get_task: z.infer<typeof GetTaskSchema>;
+  edit_task: z.infer<typeof EditTaskSchema>;
 };
 
 export type StoredImageResult = ImageMetaWithSrc & {
@@ -1242,6 +1357,11 @@ export interface ToolHandlers {
     updated_at: string;
     url: string;
   }>;
+
+  add_task(input: ToolInputs["add_task"]): Promise<TaskResult>;
+  list_tasks(input: ToolInputs["list_tasks"]): Promise<{ tasks: TaskListEntry[] }>;
+  get_task(input: ToolInputs["get_task"]): Promise<TaskResult>;
+  edit_task(input: ToolInputs["edit_task"]): Promise<TaskResult>;
 }
 
 /** Walk page content and collect every image reference. Three surfaces:
@@ -1412,6 +1532,24 @@ export function buildToolHandlers(
   files: FileStore | null = null,
 ): ToolHandlers {
   const aclEnabled = ctx.projectAclEnabled ?? true;
+
+  const tasks = new TaskStore(db, activityLog, { aclEnabled });
+  const callerId = (): number | null => getCallContext().user_id ?? null;
+  const withTaskUrl = (task: Task): TaskResult => ({
+    ...task,
+    url: taskUrl(ctx, task.project_id, task.id),
+  });
+  const compactTask = (row: TaskRow): TaskListEntry => ({
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    assignee: row.assignee,
+    due_date: row.due_date,
+    labels: row.labels,
+    blocked_reason: row.blocked_reason,
+    version: row.version,
+    url: taskUrl(ctx, row.project_id, row.id),
+  });
 
   /** Attachment references in a page body, for diff-based cleanup after
    *  an edit. Empty when no file store is wired (tests that never attach). */
@@ -2730,6 +2868,62 @@ export function buildToolHandlers(
         updated_at: r.updated_at,
         url: urlFor(ctx, meta.knowledge_id, parsed.page_id),
       };
+    },
+
+    async add_task(input) {
+      const parsed = AddTaskSchema.parse(input);
+      gateEditByProject(parsed.project);
+      const project = tasks.ensureProject(parsed.project);
+      const { project: _project, assignee, ...fields } = parsed;
+      return withTaskUrl(
+        tasks.add(project.id, {
+          ...fields,
+          assignee_id: assignee === undefined ? undefined : tasks.resolveAssignee(project.name, assignee, callerId()),
+        }),
+      );
+    },
+
+    async list_tasks(input) {
+      const parsed = ListTasksSchema.parse(input);
+      gateReadByProject(parsed.project);
+      const project = tasks.ensureProject(parsed.project);
+      if (parsed.next) {
+        const next = tasks.next(project.id, callerId());
+        return { tasks: next ? [compactTask(next)] : [] };
+      }
+      const rows = tasks.list(project.id, {
+        statuses: parsed.status ?? DEFAULT_LIST_STATUSES,
+        assigneeId:
+          parsed.assignee === undefined ? undefined : tasks.resolveAssignee(project.name, parsed.assignee, callerId()),
+        label: parsed.label,
+        includeArchived: parsed.include_archived,
+        limit: parsed.limit ?? DEFAULT_LIST_LIMIT,
+      });
+      return { tasks: rows.map(compactTask) };
+    },
+
+    async get_task(input) {
+      const parsed = GetTaskSchema.parse(input);
+      const task = tasks.get(parsed.task_id);
+      if (!task) throw new Error(`task T${parsed.task_id} not found`);
+      gateReadByProject(task.project);
+      return withTaskUrl(task);
+    },
+
+    async edit_task(input) {
+      const parsed = EditTaskSchema.parse(input);
+      const current = tasks.get(parsed.task_id);
+      if (!current) throw new Error(`task T${parsed.task_id} not found`);
+      gateEditByProject(current.project);
+      const { task_id, assignee, ...fields } = parsed;
+      return withTaskUrl(
+        tasks.edit(task_id, {
+          ...fields,
+          ...(assignee === undefined
+            ? {}
+            : { assignee_id: assignee === null ? null : tasks.resolveAssignee(current.project, assignee, callerId()) }),
+        }),
+      );
     },
   };
 }

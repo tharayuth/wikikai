@@ -9,6 +9,7 @@ import {
   AddKnowledgeSchema,
   AddLinesSchema,
   AddPageSchema,
+  AddTaskSchema,
   AppendTableRowsSchema,
   DeleteKnowledgeSchema,
   DeletePageSchema,
@@ -16,6 +17,7 @@ import {
   EditLinesSchema,
   EditPageSchema,
   EditSectionSchema,
+  EditTaskSchema,
   FindTableRowsSchema,
   GetBlockSchema,
   GetExampleSchema,
@@ -23,12 +25,14 @@ import {
   GetKnowledgeSchema,
   GetOutlineSchema,
   GetPromptLogSchema,
+  GetTaskSchema,
   GetTableRowsSchema,
   GetTableRowsWithCheckboxSchema,
   GetUploadUrlSchema,
   InsertLinesSchema,
   InsertTableRowsSchema,
   ListKnowledgeSchema,
+  ListTasksSchema,
   MovePageSchema,
   ReadPageSchema,
   ReorderPagesSchema,
@@ -443,10 +447,54 @@ export function createMcpServer(
     {
       title: "Toggle checkbox",
       description:
-        "Tick or untick a checkbox on a page. Boxes are counted in source order across `- [ ]` list items (bulleted or numbered), `[ ]` in table cells and `<input type=checkbox>` in html-embed; boxes inside other code fences don't count. Pass `expected_version` so an edit that shifted the boxes fails the call instead of flipping the wrong one.",
+        "Tick or untick a checkbox on a page. Boxes are counted in source order across `- [ ]` list items (bulleted or numbered), `[ ]` in table cells and `<input type=checkbox>` in html-embed; boxes inside other code fences don't count. Pass `expected_version` so an edit that shifted the boxes fails the call instead of flipping the wrong one. For tracked work on a project's board, use the task tools.",
       inputSchema: shapeOf(ToggleTaskSchema),
     },
     async (input) => jsonContent(await handlers.toggle_task(input)),
+  );
+
+  // ─── Project tasks ───
+  server.registerTool(
+    "add_task",
+    {
+      title: "Create task",
+      description:
+        "Create a board task: tracked work with status and assignee. For a checkbox inside a page, use toggle_task. Returns the full task with `version` and `url`.",
+      inputSchema: shapeOf(AddTaskSchema),
+    },
+    async (input) => jsonContent(await handlers.add_task(input)),
+  );
+
+  server.registerTool(
+    "list_tasks",
+    {
+      title: "List tasks",
+      description:
+        "Board tasks in order, as compact rows (no description or links). To pick up work, pass `next: true`, then claim it with edit_task: its `version`, status `doing`, assignee `me`, your `session_id`. STALE means another session took it; list again.",
+      inputSchema: shapeOf(ListTasksSchema),
+    },
+    async (input) => jsonContent(await handlers.list_tasks(input)),
+  );
+
+  server.registerTool(
+    "get_task",
+    {
+      title: "Read task",
+      description: "One board task in full, with its description and links.",
+      inputSchema: shapeOf(GetTaskSchema),
+    },
+    async (input) => jsonContent(await handlers.get_task(input)),
+  );
+
+  server.registerTool(
+    "edit_task",
+    {
+      title: "Edit task",
+      description:
+        "Change a board task: fields, status, links, `archived`. No delete. When work is finished, set `review` and link the commit or document; set `done` only when the user says so. If stuck, set `blocked_reason` and stop. Returns the task with its new `version`.",
+      inputSchema: shapeOf(EditTaskSchema),
+    },
+    async (input) => jsonContent(await handlers.edit_task(input)),
   );
 
   // ─── Images and files ───
