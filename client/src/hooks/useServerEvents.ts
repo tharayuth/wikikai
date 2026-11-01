@@ -132,9 +132,9 @@ export function useServerEvents(): void {
             portalApi.util.invalidateTags([
               { type: "Tasks", id: e.project_id },
               { type: "Task", id: e.task_id },
-              // `add_task` with a new project name registers the project, so
-              // the sidebar must refetch the registry to show it (and give
-              // its group an id) without a reload.
+              // A task tool can register a project known only through its
+              // documents, so the sidebar must refetch the registry to give
+              // that group an id without a reload.
               { type: "Projects", id: "LIST" },
               { type: "ActivityLog", id: "LIST" },
             ]),

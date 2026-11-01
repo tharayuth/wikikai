@@ -18,7 +18,7 @@ export interface DocumentlessOptions {
 
 /**
  * Append a `[name, []]` group for every registered project that owns no
- * documents, so a project created through `add_task` has a way in to its
+ * documents, so a project whose last document went away keeps a way in to its
  * board: the calendar icon on its group is the only UI entry to it, and
  * groups are otherwise built from knowledge rows alone.
  *
