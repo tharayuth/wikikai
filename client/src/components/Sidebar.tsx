@@ -35,6 +35,7 @@ import {
   toggleKnowledgeStar,
 } from "../lib/starredKnowledge";
 import { matchesAnyKnowledgeTag } from "../lib/knowledgeTags";
+import { withDocumentlessProjects } from "../lib/sidebarGroups";
 import {
   SidebarTagFilterModal,
   type SidebarTagFilterOption,
@@ -816,7 +817,19 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
       </aside>
     );
   }
-  if (matched.length === 0) {
+  // A registered project with no documents still gets a group: its calendar
+  // icon is the only UI entry to the project's board. They are added only
+  // when nothing narrows the list, and the `?projects=` filter still applies.
+  const groups = withDocumentlessProjects(
+    groupByProject(matched),
+    projectList?.projects ?? [],
+    {
+      narrowed:
+        q !== "" || selectedTags.length > 0 || starredOnly || archivedOnly,
+      urlFilter,
+    },
+  );
+  if (groups.length === 0) {
     return (
       <aside
         className={`sidebar${selectedTags.length > 0 ? " has-tag-filter" : ""}`}
@@ -851,7 +864,6 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   // in the URL (e.g. `?projects=7,9,8` → 7, then 9, then 8). Otherwise keep
   // the natural order in which knowledge appears.
   const projectGroups = (() => {
-    const groups = groupByProject(matched);
     const orderIds = urlFilter?.ids;
     if (orderIds == null || orderIds.length === 0) return groups;
     const rank = (name: string) => {
@@ -885,6 +897,11 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
             projectId={nameToId.get(project) ?? null}
             activeKidInGroup={activeKidInGroup}
           >
+            {list.length === 0 && (
+              <div className="sidebar-empty sidebar-group-empty">
+                No documents yet
+              </div>
+            )}
             {list.map((it) => {
               // Only narrow pages list when the knowledge appeared *because* a
               // page matched (i.e. its title / project did not match `q`).

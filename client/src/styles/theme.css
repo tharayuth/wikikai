@@ -779,6 +779,13 @@ button.ki-id-badge::after {
   font-size: 13px;
   text-align: center;
 }
+/* Inside a group (a project with no documents) the full-sidebar padding is
+ * far too tall; keep one quiet line, aligned with the topic cards. */
+.sidebar-empty.sidebar-group-empty {
+  padding: 4px 16px 10px;
+  font-size: 12px;
+  text-align: left;
+}
 .sidebar-group {
   margin-bottom: 2px;
 }
