@@ -130,6 +130,7 @@ function UserGuideEn() {
           <tr><td>Filter sidebar by tags</td><td>Click the tag button immediately before <Kbd>Show archived only</Kbd> → search and check one or more tags. A topic is shown when it matches <strong>any</strong> selected tag. The active filters appear as removable chips on the next line; click <Kbd>Clear</Kbd> to remove the whole selection</td></tr>
           <tr><td>Star important topics</td><td>Click the star button on a sidebar topic, or the star button just before <Kbd>i</Kbd> in the header. Use the star button beside the sidebar filter input to show starred topics only. Stars are saved in this browser localStorage, not shared metadata</td></tr>
           <tr><td>Project calendar</td><td>Click the calendar icon at the right end of a project header in the sidebar. A month view replaces the document pane and lists, per day, every knowledge whose pages were created or edited that day (days follow your browser's time zone). The number after each title counts that day's pages — green when at least one was created. <Kbd>Show pages</Kbd> also lists the pages inside each cell: <strong>+</strong> created, <strong>✎</strong> edited, <code>×N</code> changes that day. <Kbd>+ Created</Kbd> and <Kbd>✎ Edited</Kbd> (both on by default) narrow every cell, the day list and the month totals to new pages or to edits only — a page created and then edited that day counts as one creation under Created and as its edits under Edited. These choices are remembered in this browser. Click a day for the full list, a title to open it, and <Kbd>‹</Kbd> <Kbd>›</Kbd> / <Kbd>Today</Kbd> to change month. Built from the activity log, so deleted pages do not appear</td></tr>
+          <tr><td>Project tasks</td><td>The calendar icon opens the project's <strong>Calendar</strong>, <strong>Board</strong> and <strong>List</strong> tabs. Drag a card to change its status or its place in the queue: the board order is the order agents pick up work. Add a task in the box under <Kbd>Todo</Kbd>, and click a title to open it. Tasks with a start or due date appear on the calendar; overdue tasks are red. Archive a task to hide it. Only an admin can delete an archived task.</td></tr>
           <tr><td>Move knowledge to a different project</td><td>Open the info popover (<Kbd>i</Kbd>), click the <strong>project</strong> row → inline editor with autocomplete. Type a known project or any new name; Enter saves, Esc cancels. Empty value detaches the knowledge from any project</td></tr>
           <tr><td>Show info (session, tokens, prompt)</td><td>Click the <Kbd>i</Kbd> button left of the title</td></tr>
           <tr><td>Knowledge actions (copy / add page / tags / edit / share / delete)</td><td>Click the <code>&amp;N</code> badge — in the topbar <strong>or</strong> on a sidebar topic row — to open the same menu: copy id, copy content, add page, share, manage tags, rename, delete</td></tr>
@@ -159,6 +160,7 @@ function UserGuideEn() {
           <tr><td><code>/&amp;2/#5</code></td><td>knowledge &amp;2, opens tab with page #5</td></tr>
           <tr><td><code>/&amp;2/#5:42</code></td><td>knowledge &amp;2, page #5, scrolls near line 42</td></tr>
           <tr><td><code>/?calendar=7&amp;month=2026-09</code></td><td>calendar of project id 7 for September 2026 (omit <code>month</code> for this month)</td></tr>
+          <tr><td><code>/?calendar=7&amp;view=board&amp;task=12</code></td><td>board of project id 7, with task T12 open (<code>view</code> is <code>board</code> or <code>list</code>; omit it for the calendar)</td></tr>
           <tr><td colSpan={2} style={{ paddingTop: 8, color: "var(--text-3)" }}>Legacy URLs still work:</td></tr>
           <tr><td><code>/#&amp;2/5:42</code></td><td>same as <code>/&amp;2/#5:42</code></td></tr>
           <tr><td><code>/#2/5:42</code></td><td>same as <code>/&amp;2/#5:42</code> (oldest format)</td></tr>
@@ -259,6 +261,7 @@ function UserGuideTh() {
           <tr><td>กรอง sidebar ด้วย tags</td><td>คลิกปุ่มรูป tag ซึ่งอยู่ก่อนปุ่ม <Kbd>Show archived only</Kbd> → ค้นหาและติ๊ก tags ที่ต้องการ. Topic จะแสดงเมื่อมี tag <strong>ใด tag หนึ่ง</strong> ที่เลือก. Tags ที่กำลังกรองจะแสดงเป็น chips ในบรรทัดถัดไป กด <Kbd>×</Kbd> เพื่อลบทีละ tag หรือ <Kbd>Clear</Kbd> เพื่อล้างทั้งหมด</td></tr>
           <tr><td>Star topic สำคัญ</td><td>คลิกปุ่มดาวบนรายการใน sidebar หรือปุ่มดาวก่อน <Kbd>i</Kbd> ใน header. ปุ่มดาวข้างช่อง filter ใน sidebar ใช้กรองให้เห็นเฉพาะ topic ที่ star ไว้. ค่า star เก็บใน localStorage ของ browser นี้ ไม่ใช่ metadata ที่แชร์กับคนอื่น</td></tr>
           <tr><td>ปฏิทินของ project</td><td>คลิกไอคอนปฏิทินที่ท้ายหัว project ใน sidebar. หน้าปฏิทินรายเดือนจะแสดงแทนพื้นที่เอกสาร แต่ละวันแสดง knowledge ที่มี page ถูกสร้างหรือแก้ในวันนั้น (ตัดวันตามเวลาของ browser). ตัวเลขท้ายชื่อคือจำนวน page ของวันนั้น — เป็นสีเขียวถ้ามีการสร้าง page ใหม่. <Kbd>Show pages</Kbd> จะแสดงรายการ page ในช่องวันด้วย: <strong>+</strong> สร้าง, <strong>✎</strong> แก้ไข, <code>×N</code> จำนวนครั้งที่เปลี่ยนในวันนั้น. ปุ่ม <Kbd>+ Created</Kbd> และ <Kbd>✎ Edited</Kbd> (เปิดทั้งคู่เป็นค่าเริ่มต้น) ใช้กรองช่องวัน รายการของวัน และตัวเลขสรุปของเดือน ให้เหลือเฉพาะ page ที่สร้างใหม่ หรือเฉพาะที่แก้ไข — page ที่สร้างแล้วแก้ต่อในวันเดียวกันนับเป็นการสร้าง 1 ครั้งฝั่ง Created และนับเฉพาะจำนวนครั้งที่แก้ฝั่ง Edited. browser จะจำค่าที่เลือกไว้. คลิกวันเพื่อดูรายการทั้งหมด คลิกชื่อเพื่อเปิด และใช้ <Kbd>‹</Kbd> <Kbd>›</Kbd> / <Kbd>Today</Kbd> เปลี่ยนเดือน. ข้อมูลมาจาก activity log — page ที่ถูกลบไปแล้วจะไม่แสดง</td></tr>
+          <tr><td>งานของ project</td><td>ไอคอนปฏิทินจะเปิดแท็บ <strong>Calendar</strong>, <strong>Board</strong> และ <strong>List</strong> ของ project นั้น ลากการ์ดเพื่อเปลี่ยนสถานะหรือลำดับคิว โดยลำดับบนบอร์ดคือลำดับที่ agent จะหยิบงาน เพิ่มงานได้จากช่องใต้ <Kbd>Todo</Kbd> และคลิกชื่องานเพื่อเปิดดู งานที่มีวันเริ่มหรือวันครบกำหนดจะขึ้นบนปฏิทิน และงานที่เลยกำหนดจะเป็นสีแดง ซ่อนงานได้ด้วยการ archive ส่วนการลบงานที่ archive แล้วทำได้เฉพาะ admin</td></tr>
           <tr><td>ย้าย knowledge ไปอีก project</td><td>เปิด info popover (<Kbd>i</Kbd>) → คลิกแถว <strong>project</strong> → ช่อง input พร้อม autocomplete project ที่มี. พิมพ์ชื่อ project เดิม หรือชื่อใหม่ก็ได้, Enter = บันทึก, Esc = ยกเลิก. เว้นว่าง = ถอด project ออก</td></tr>
           <tr><td>ดูข้อมูล (session, tokens, prompt)</td><td>คลิกปุ่ม <Kbd>i</Kbd> ด้านซ้ายของ title</td></tr>
           <tr><td>เมนู knowledge (คัดลอก / เพิ่ม page / tags / แก้ชื่อ / แชร์ / ลบ)</td><td>คลิก badge <code>&amp;N</code> — ที่ topbar <strong>หรือ</strong> ที่แถว topic ใน sidebar — เปิดเมนูเดียวกัน: คัดลอก id, คัดลอกเนื้อหา, เพิ่ม page, แชร์, จัดการ tags, แก้ชื่อ, ลบ</td></tr>
@@ -288,6 +291,7 @@ function UserGuideTh() {
           <tr><td><code>/&amp;2/#5</code></td><td>knowledge &amp;2, เปิด tab page #5</td></tr>
           <tr><td><code>/&amp;2/#5:42</code></td><td>knowledge &amp;2, page #5, scroll ใกล้บรรทัด 42</td></tr>
           <tr><td><code>/?calendar=7&amp;month=2026-09</code></td><td>ปฏิทินของ project id 7 เดือนกันยายน 2026 (ไม่ใส่ <code>month</code> = เดือนนี้)</td></tr>
+          <tr><td><code>/?calendar=7&amp;view=board&amp;task=12</code></td><td>บอร์ดของ project id 7 พร้อมเปิดงาน T12 (<code>view</code> เป็น <code>board</code> หรือ <code>list</code> ไม่ใส่ = ปฏิทิน)</td></tr>
           <tr><td colSpan={2} style={{ paddingTop: 8, color: "var(--text-3)" }}>URL รูปแบบเก่ายังใช้ได้:</td></tr>
           <tr><td><code>/#&amp;2/5:42</code></td><td>เทียบเท่า <code>/&amp;2/#5:42</code></td></tr>
           <tr><td><code>/#2/5:42</code></td><td>เทียบเท่า <code>/&amp;2/#5:42</code> (รูปแบบเดิมที่สุด)</td></tr>
@@ -424,6 +428,18 @@ function McpGuideEn() {
           <tr><td><code>toggle_task</code></td><td>Flip a checkbox on a page. Args: <code>{`{ page_id, index, expected_version? }`}</code> — <code>index</code> is the 0-based position among every box on the page in source order: <code>- [ ]</code> / <code>1. [ ]</code> list items, <code>[ ]</code> in table cells and <code>&lt;input type=checkbox&gt;</code> in html-embed (boxes in other code fences don't count). Same write-back path the rendered UI uses</td></tr>
         </tbody>
       </table>
+
+      <h3>Tools — Project tasks</h3>
+      <table>
+        <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>add_task</code></td><td>Create a task on a project's board. Args: <code>{`{ project, title, description?, status?, assignee?, start_date?, due_date?, labels?, links?, session_id?, position? }`}</code>.</td></tr>
+          <tr><td><code>list_tasks</code></td><td>Compact rows in board order; defaults to todo, doing and review. Pass <code>next: true</code> for the next task to claim.</td></tr>
+          <tr><td><code>get_task</code></td><td>One task in full, with description and links.</td></tr>
+          <tr><td><code>edit_task</code></td><td>Change any field, move status, add or remove links, archive. <code>expected_version</code> is required, so two sessions cannot claim one task.</td></tr>
+        </tbody>
+      </table>
+      <p>A board task is not a page checkbox: <code>toggle_task</code> flips a <code>- [ ]</code> inside a page.</p>
 
       <h3>Block ids (<code>@N</code>) + captions</h3>
       <p>

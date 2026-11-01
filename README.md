@@ -14,6 +14,7 @@ Both guides include working examples of every block type, reusable prompts, and 
 ## Why WikiKai?
 
 - **Let AI do the work.** Create documents, edit sections, update tables, and upload images and files through MCP.
+- **Track the work too.** Each project has a board, a task list and a calendar. AI can pick up the next task, link what it produced, and leave it for your review.
 - **Pick up where you left off.** Organize knowledge into projects and pages, then ask AI to find and reuse it in your next conversation.
 - **Point to exactly what you mean.** Reference a document with `&N`, a page with `#N`, or a table, chart or other supported block with `@N`.
 - **Make knowledge easy to understand.** Combine Markdown, diagrams, charts, KPI cards, step cards, interactive checkboxes, galleries, code and custom HTML layouts.

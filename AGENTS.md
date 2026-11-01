@@ -70,12 +70,14 @@ src/
   store/db.ts          better-sqlite3 connection + schema.sql apply
   store/knowledge.ts   knowledge metadata CRUD
   store/pages.ts       page CRUD + line-range ops + FTS sync
+  store/tasks.ts       project tasks: board order, claims, validation — every task rule
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
-  mcp/server.ts        registers 35 tools on McpServer (input schemas come from handlers.ts)
+  mcp/server.ts        registers 39 tools on McpServer (input schemas come from handlers.ts)
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
   examples/*.md        markdown reference content (copied to dist/ by build:assets)
   web/app.ts           Express routes — /api, /mcp (auth-gated), /mermaid, /chart, static
+  web/taskRoutes.ts    REST routes for project tasks, thin over TaskStore
   web/mcpRoute.ts      MCP transport handler + session map
   web/mermaidViewer.ts standalone fullscreen Mermaid HTML (pan/zoom/export PNG)
   web/chartViewer.ts   standalone fullscreen Chart.js HTML (export PNG)

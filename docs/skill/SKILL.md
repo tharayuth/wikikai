@@ -1,6 +1,6 @@
 ---
 name: wikikai
-description: Use WikiKai MCP server to persist presentation-style knowledge — markdown pages with Mermaid diagrams, Chart.js graphs, stats cards, and step lists. INVOKE when the user asks to "บันทึก", "เก็บไว้", "ทำ doc", "make a knowledge doc", "save this as a knowledge page", "ทำสรุปไว้ดู", "open my notes", or when producing an explanation that the user will want to revisit and share via URL. Also INVOKE when the user references existing knowledge (e.g. `&3`, `#12`, "เปิด knowledge เก่า", "search my docs"). Skip for transient answers, code edits, or pure conversation.
+description: Use WikiKai MCP server to persist presentation-style knowledge — markdown pages with Mermaid diagrams, Chart.js graphs, stats cards, and step lists. INVOKE when the user asks to "บันทึก", "เก็บไว้", "ทำ doc", "make a knowledge doc", "save this as a knowledge page", "ทำสรุปไว้ดู", "open my notes", or when producing an explanation that the user will want to revisit and share via URL. Also INVOKE when the user references existing knowledge (e.g. `&3`, `#12`, "เปิด knowledge เก่า", "search my docs"). Also INVOKE when the user asks to create or update tasks on a project's board, or to pick up work ("ทำงานถัดไป", "next task on the board", "T12"). Skip for transient answers, code edits, or pure conversation.
 ---
 
 # WikiKai skill
@@ -59,6 +59,26 @@ Every fine-grained edit (`edit_lines`, `edit_section`, `insert_lines`, `add_line
 - `get_prompt_log({ knowledge_id, limit?, offset? })` — read the audit trail of `user_prompt` values per knowledge (only calls that passed one are logged; `total` counts all entries). Each entry: `{ page_id?, page_version?, tool_name, prompt, created_at }`. Use to answer "why did revision N happen?"
 - `toggle_task({ page_id, index, expected_version? })` — flip the Nth interactive checkbox on a page (0-based, document order, skipping non-html-embed code fences). Counts three sources in source order: GFM `- [ ]`/`- [x]` task items (bulleted or numbered), `[ ]`/`[x]` **anywhere inside a markdown-table cell** (start, middle, multiple per cell), and `<input type="checkbox">` inside `html-embed`. Same path the web checkbox uses.
   - **Pass `expected_version` from your most recent `read_page` / `get_block`** when you call toggle from an AI workflow. Indices are recomputed top-down on every call, so if another tool added a checkbox earlier between your read and your toggle, index N now points at a different box. With `expected_version` the server rejects the call instead of flipping the wrong one. Web-UI clicks omit it (no race window).
+
+### Project tasks (the board, not page checkboxes)
+A task is tracked work on a project's board, written `T12`. A page checkbox (`- [ ]`, `toggle_task`) is content inside a document. If the user says "next task on the board", or names `T12`, use these tools.
+
+- `add_task({ project, title, description?, status?, assignee?, start_date?, due_date?, labels?, links?, session_id?, position? })` — returns the full task with `version` and `url`.
+- `list_tasks({ project, status?, assignee?, label?, include_archived?, limit?, next? })` — compact rows in board order, defaulting to `todo`, `doing` and `review`. `next: true` returns only the next task to claim.
+- `get_task({ task_id })` — one task in full, with description and links.
+- `edit_task({ task_id, expected_version, ...fields, add_links?, remove_link_ids?, archived?, position? })` — returns the full task with its new `version`. Tasks cannot be deleted over MCP; archive instead.
+- `assignee` is `"me"`, or a project member's display name or email. These tools do not take `user_prompt`.
+
+**Picking up work.** When told to do the next task:
+
+1. `list_tasks({ project, next: true })`. An empty list means the queue is empty, so say so and stop.
+2. Claim it: `edit_task({ task_id, expected_version, status: "doing", assignee: "me", session_id })`. `STALE` means another session took it, so go back to step 1.
+3. Do the work described in the returned `description` and `links`.
+4. Finish: `edit_task({ task_id, expected_version, status: "review", add_links: [...] })`, linking the commit or the WikiKai page. Set `done` only when the user says so.
+
+**If stuck**, set `blocked_reason` and stop, leaving the task in `doing`. `next` skips blocked tasks.
+
+**Keep descriptions short.** Up to 20,000 characters, with no revision history, so an overwrite loses the old text. Put anything worth keeping on a wiki page and link it from the task.
 
 ### Interactive checkboxes (GFM, not a fence)
 - Write plain GFM task items anywhere a normal markdown list works: `- [ ] task` / `- [x] done`. They render as clickable checkboxes; clicking flips the source (version bump + revision + FTS reindex).
