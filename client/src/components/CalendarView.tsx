@@ -176,7 +176,8 @@ export function CalendarView({ projectId, month, onOpenTask }: Props): JSX.Eleme
           <span className="cal-stats">
             {error
               ? ""
-              : `${stats.docs} knowledge · ${stats.pages} pages · ${stats.days} active days · ${tasksDue} tasks due`}
+              : `${stats.docs} knowledge · ${stats.pages} pages · ${stats.days} active days`}
+            {!error && showTasks && taskQuery.data ? ` · ${tasksDue} tasks due` : ""}
             {isFetching ? " · loading…" : ""}
             {taskQuery.error ? " · could not load tasks" : ""}
           </span>
@@ -348,7 +349,7 @@ function DayCell({
       >
         {dayNum}
       </button>
-      {total > 0 && <span className="cal-count">{total}</span>}
+      {hasItems && <span className="cal-count">{total + tasks.length}</span>}
       <div className="cal-items">
         {taskLines.map((entry) => (
           <TaskLine key={`${entry.task.id}-${entry.kind}`} entry={entry} onOpenTask={onOpenTask} />
