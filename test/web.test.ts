@@ -910,6 +910,34 @@ describe("HTTP routes", () => {
     expect(raw.text).toBe("# H\n\ntext");
   });
 
+  // Cloudflare rewrites addresses in a text/html response into
+  // `[email protected]` links unless it carries `no-transform`, and the SPA
+  // inserts rendered pages with innerHTML, so its decode script never runs.
+  it("marks page HTML no-transform so a proxy leaves emails alone", async () => {
+    const k = knowledge.add({ title: "K", project: "examples" });
+    const p = pages.add({
+      knowledge_id: k.id,
+      title: "P",
+      content:
+        "mail kai@example.com\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+        '```chart\n{"type":"bar","data":{"labels":["a"],"datasets":[{"data":[1]}]}}\n```\n',
+    });
+    const token = (await req(app).post(`/api/knowledge/${k.id}/share`)).body
+      .share_token as string;
+    for (const url of [
+      `/api/pages/${p.id}/rendered`,
+      `/mermaid/${p.id}/0`,
+      `/chart/${p.id}/0`,
+      `/api/share/${token}/pages/${p.id}/rendered`,
+      `/share/${token}/mermaid/${p.id}/0`,
+      `/share/${token}/chart/${p.id}/0`,
+    ]) {
+      const r = await req(app).get(url);
+      expect(r.status, url).toBe(200);
+      expect(r.headers["cache-control"], url).toMatch(/\bno-transform\b/);
+    }
+  });
+
   it("GET /api/blocks/:id/content returns raw inner for a fence block", async () => {
     const k = knowledge.add({ title: "K", project: "examples" });
     const p = pages.add({

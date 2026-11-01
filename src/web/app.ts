@@ -670,6 +670,18 @@ export function buildApp(opts: BuildAppOptions): Express {
   });
 
   /**
+   * Send HTML that carries page content. Cloudflare's Email Address
+   * Obfuscation rewrites every address in a text/html response into a
+   * `[email protected]` link plus a decode script; the SPA inserts rendered
+   * pages with innerHTML, so that script never runs and the reader sees the
+   * placeholder. `no-transform` is the documented opt-out, and it travels
+   * with the app instead of depending on a zone setting.
+   */
+  function sendPageHtml(res: Response, html: string): void {
+    res.set("Cache-Control", "no-transform").type("text/html").send(html);
+  }
+
+  /**
    * Resolve `req.params.token` to its knowledge AND enforce the password
    * gate. Writes the 404 / 401 itself and returns null when the caller must
    * stop; otherwise hands back the knowledge plus who unlocked it (null on
@@ -809,7 +821,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const html = await renderMarkdown(opts.pages.readLines(pid).content);
-      res.type("text/html").send(html);
+      sendPageHtml(res, html);
     } catch (e) {
       next(e);
     }
@@ -1135,7 +1147,7 @@ export function buildApp(opts: BuildAppOptions): Express {
         content = opts.pages.readLines(pid).content;
       }
       const html = await renderMarkdown(content);
-      res.type("text/html").send(html);
+      sendPageHtml(res, html);
     } catch (e) {
       next(e);
     }
@@ -1621,7 +1633,8 @@ export function buildApp(opts: BuildAppOptions): Express {
         return;
       }
       const knowledge = opts.knowledge.get(meta.knowledge_id);
-      res.type("text/html").send(
+      sendPageHtml(
+        res,
         mermaidViewerHtml({
           pageTitle: meta.title,
           knowledgeTitle: knowledge?.title ?? `&${meta.knowledge_id}`,
@@ -1669,7 +1682,8 @@ export function buildApp(opts: BuildAppOptions): Express {
       }
       const knowledge = opts.knowledge.get(meta.knowledge_id);
       const c = charts[idx];
-      res.type("text/html").send(
+      sendPageHtml(
+        res,
         chartViewerHtml({
           pageTitle: meta.title,
           knowledgeTitle: knowledge?.title ?? `&${meta.knowledge_id}`,
