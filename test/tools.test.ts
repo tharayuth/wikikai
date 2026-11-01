@@ -13,6 +13,7 @@ import { UserStore } from "../src/store/users.js";
 import { buildToolHandlers } from "../src/mcp/handlers.js";
 import { withCallContext } from "../src/lib/callContext.js";
 import { sweepOrphanedAssets } from "../src/store/orphanGc.js";
+import { TaskStore } from "../src/store/tasks.js";
 
 describe("MCP tool handlers", () => {
   let tmpDir: string;
@@ -868,6 +869,33 @@ describe("MCP tool handlers", () => {
       expect(images.get(img.hash)).not.toBeNull();
       expect(onDisk(img)).toBe(true);
       expect(orphanedAt(img.hash)).not.toBeNull();
+    });
+
+    it("an image used only by a task description survives the sweep until the task is deleted", async () => {
+      knowledge.registerProject("p");
+      const tasks = new TaskStore(db, new ActivityLogStore(db));
+      const img = await addPng("task-only");
+      const t = tasks.add(tasks.ensureProject("p").id, {
+        title: "T",
+        description: `![shot](${img.src})`,
+      });
+
+      ageOrphan(img.hash, 30);
+      sweep();
+      expect(images.get(img.hash)).not.toBeNull();
+      expect(onDisk(img)).toBe(true);
+      expect(orphanedAt(img.hash)).toBeNull();
+
+      tasks.edit(t.id, { expected_version: 1, archived: true });
+      ageOrphan(img.hash, 30);
+      sweep();
+      expect(images.get(img.hash)).not.toBeNull();
+
+      tasks.remove(t.id);
+      sweep();
+      ageOrphan(img.hash, 30);
+      sweep();
+      expect(images.get(img.hash)).toBeNull();
     });
 
     it("splitting a page — drop from the parent, then reuse in a new page — keeps the image (regression)", async () => {

@@ -1,7 +1,7 @@
 import type { Db } from "./db.js";
 import type { PageStore } from "./pages.js";
-import type { ImageStore } from "./images.js";
-import type { FileStore } from "./files.js";
+import { extractImageHashesSet, type ImageStore } from "./images.js";
+import { extractFileHashesSet, type FileStore } from "./files.js";
 
 /**
  * Deferred garbage collection for content-addressed assets (`images`, `files`).
@@ -55,7 +55,7 @@ export function markDroppedRefs(
 interface SweepOptions {
   db: Db;
   table: AssetTable;
-  /** Hashes referenced by live page content (lowercased). */
+  /** Hashes referenced by live page content and task descriptions (lowercased). */
   liveRefs: Set<string>;
   /** Hashes referenced by stored revisions. Lazy: only a sweep that actually
    *  has something due pays for the revision scan. */
@@ -104,6 +104,22 @@ export function sweepOrphans(opts: SweepOptions): number {
   return removed;
 }
 
+/**
+ * Asset hashes mentioned in task descriptions. Read through the sweep's own
+ * `db`, so no caller can forget to count tasks. Archived tasks count: one
+ * unarchive brings the description back.
+ */
+function taskDescriptionRefs(db: Db, extract: (content: string) => Set<string>): Set<string> {
+  const out = new Set<string>();
+  const rows = db
+    .prepare(`SELECT description FROM tasks WHERE description <> ''`)
+    .iterate() as IterableIterator<{ description: string }>;
+  for (const row of rows) {
+    for (const hash of extract(row.description)) out.add(hash);
+  }
+  return out;
+}
+
 /** One sweep over both asset kinds. Run after delete_page / delete_knowledge
  *  and on the server's housekeeping timer. */
 export function sweepOrphanedAssets(opts: {
@@ -120,7 +136,10 @@ export function sweepOrphanedAssets(opts: {
   const removed_images = sweepOrphans({
     db,
     table: "images",
-    liveRefs: pages.allReferencedImageHashes(),
+    liveRefs: new Set([
+      ...pages.allReferencedImageHashes(),
+      ...taskDescriptionRefs(db, extractImageHashesSet),
+    ]),
     revisionRefs: () => pages.allRevisionImageHashes(),
     remove: (hash) => images.remove(hash),
     graceMs,
@@ -130,7 +149,10 @@ export function sweepOrphanedAssets(opts: {
     ? sweepOrphans({
         db,
         table: "files",
-        liveRefs: pages.allReferencedFileHashes(),
+        liveRefs: new Set([
+          ...pages.allReferencedFileHashes(),
+          ...taskDescriptionRefs(db, extractFileHashesSet),
+        ]),
         revisionRefs: () => pages.allRevisionFileHashes(),
         remove: (hash) => files.remove(hash),
         graceMs,

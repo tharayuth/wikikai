@@ -86,6 +86,18 @@ function rowToMetadata(row: Row): KnowledgeMetadata {
   };
 }
 
+/** Unregistering keeps a project's documents, so it must not silently take its
+ *  tasks. Checked up front because a raw constraint error says nothing useful. */
+export class ProjectHasTasksError extends Error {
+  constructor(
+    name: string,
+    public readonly count: number,
+  ) {
+    super(`project "${name}" has ${count} task(s), archived ones included. Delete them first.`);
+    this.name = "ProjectHasTasksError";
+  }
+}
+
 export class KnowledgeStore {
   constructor(private db: Db) {}
 
@@ -115,12 +127,17 @@ export class KnowledgeStore {
 
   /** Drop a project from the registry. Does NOT delete any knowledge —
    *  the project name simply stops appearing on its own once no knowledge
-   *  references it. */
+   *  references it. Refused while the project has tasks. */
   unregisterProject(name: string): { name: string; removed: boolean } {
-    const r = this.db
-      .prepare(`DELETE FROM projects WHERE name = ?`)
-      .run(name.trim());
-    return { name: name.trim(), removed: r.changes > 0 };
+    const trimmed = name.trim();
+    const { n } = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM tasks t JOIN projects p ON p.id = t.project_id WHERE p.name = ?`,
+      )
+      .get(trimmed) as { n: number };
+    if (n > 0) throw new ProjectHasTasksError(trimmed, n);
+    const r = this.db.prepare(`DELETE FROM projects WHERE name = ?`).run(trimmed);
+    return { name: trimmed, removed: r.changes > 0 };
   }
 
   /** Rename a project, keeping its id. Updates the registry row (the
