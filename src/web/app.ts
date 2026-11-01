@@ -44,7 +44,9 @@ import {
   resolveShareViewer,
   setShareCookie,
 } from "./shareAccess.js";
-import type { KnowledgeMetadata } from "../store/knowledge.js";
+import { ProjectHasTasksError, type KnowledgeMetadata } from "../store/knowledge.js";
+import type { TaskStore } from "../store/tasks.js";
+import { attachTaskRoutes } from "./taskRoutes.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(here, "..", "..", "client", "dist");
@@ -62,6 +64,8 @@ export interface BuildAppOptions {
   shareUsers: ShareUserStore;
   /** Attachments (`add_file`). Optional so lightweight test apps can skip it. */
   files?: FileStore;
+  /** Project tasks. Optional so lightweight test apps can skip it. */
+  tasks?: TaskStore;
   /** Defaults to true. When false, project-level ACL is bypassed. */
   projectAclEnabled?: boolean;
   handlers: ToolHandlers;
@@ -130,6 +134,9 @@ export function buildApp(opts: BuildAppOptions): Express {
   // and anonymous SPA loads get redirected to /login.
   app.use(requireAuth(authOpts));
   attachAuthRoutes(app, authOpts);
+  if (opts.tasks) {
+    attachTaskRoutes(app, { tasks: opts.tasks, permissions: opts.permissions, aclEnabled });
+  }
 
   // ─── Images: content-addressed binary serving ───
   // Path is /img/<sha256>.<ext>; hash + ext are validated so no traversal
@@ -934,6 +941,10 @@ export function buildApp(opts: BuildAppOptions): Express {
       const result = opts.knowledge.unregisterProject(req.params.name);
       res.json(result);
     } catch (e) {
+      if (e instanceof ProjectHasTasksError) {
+        res.status(409).json({ error: e.message });
+        return;
+      }
       next(e);
     }
   });
