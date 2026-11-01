@@ -96,3 +96,13 @@ export function changedElsewhere(dirty: boolean, baseVersion: number, latestVers
 export function adoptsServerCopy(dirty: boolean, baseVersion: number | null, latestVersion: number): boolean {
   return !dirty && (baseVersion === null || latestVersion > baseVersion);
 }
+
+/** The draft to show once a save has been answered. `current` is what the form
+ *  holds now and `submitted` is the object that was sent. When they are the same
+ *  object nothing was typed while the request was in flight, so the form takes
+ *  the saved copy. Otherwise it keeps `current`: the reply must not overwrite
+ *  text typed in the meantime, and `patchFrom` against the new base still sees
+ *  those edits as unsaved. */
+export function draftAfterSave(current: TaskDraft, submitted: TaskDraft, saved: DraftableTask): TaskDraft {
+  return current === submitted ? draftOf(saved) : current;
+}

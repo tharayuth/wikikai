@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import { showToast } from "../store/uiSlice";
 import {
@@ -15,7 +15,7 @@ import {
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { writeClipboard } from "../lib/badgeMenu";
 import { BOARD_STATUSES, apiErrorMessage, type BoardStatus } from "../lib/taskBoard";
-import { adoptsServerCopy, changedElsewhere, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
+import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
 
 interface Props {
   projectId: number;
@@ -46,6 +46,9 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
 
   const [base, setBase] = useState<TaskDetail | null>(null);
   const [draft, setDraft] = useState<TaskDraft | null>(null);
+  // The draft as of the latest render, for a save reply to compare against.
+  const draftRef = useRef<TaskDraft | null>(null);
+  draftRef.current = draft;
   const [editingDescription, setEditingDescription] = useState(false);
   const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null);
   const [newLinkUrl, setNewLinkUrl] = useState("");
@@ -78,6 +81,16 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
     readOnly: true,
   });
 
+  // A relative link in a description does a full page load and bypasses
+  // requestClose(), as does closing the tab. Ask the browser to confirm both.
+  // Back is not intercepted.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent): void => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   const requestClose = (): void => {
     if (dirty && !window.confirm("Discard your unsaved changes to this task?")) return;
     onClose();
@@ -102,9 +115,12 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
     updateTask({ id: taskId, projectId, patch: { expected_version: base.version, ...changes } })
       .unwrap()
       .then((next) => {
+        // The reply must not overwrite what was typed while it was in flight:
+        // the base moves on either way, so those edits stay dirty and savable.
+        const untouched = draftRef.current === draft;
         setBase(next);
-        setDraft(draftOf(next));
-        setEditingDescription(false);
+        setDraft((current) => (current ? draftAfterSave(current, draft, next) : current));
+        if (untouched) setEditingDescription(false);
       })
       .catch(toastError("Could not save the task"));
   };

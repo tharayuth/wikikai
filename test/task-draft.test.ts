@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adoptsServerCopy, changedElsewhere, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
+import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
 
 const task = {
   title: "T",
@@ -91,5 +91,33 @@ describe("adoptsServerCopy", () => {
 
   it("refuses any copy over unsaved edits", () => {
     expect(adoptsServerCopy(true, 2, 3)).toBe(false);
+  });
+});
+
+describe("draftAfterSave", () => {
+  const saved = { ...task, title: "Saved", description: "Saved body" };
+
+  it("takes the saved copy when nothing was typed during the request", () => {
+    const submitted = { ...draftOf(task), title: " Saved " };
+    expect(draftAfterSave(submitted, submitted, saved)).toEqual(draftOf(saved));
+  });
+
+  it("keeps what is on screen when the person kept typing", () => {
+    const submitted = { ...draftOf(task), title: "Saved" };
+    const typed = { ...submitted, description: "More words, typed while saving" };
+    expect(draftAfterSave(typed, submitted, saved)).toBe(typed);
+  });
+
+  it("keeps a lookalike draft too: only the same object counts as untouched", () => {
+    const submitted = draftOf(task);
+    const copy = { ...submitted };
+    expect(draftAfterSave(copy, submitted, saved)).toBe(copy);
+  });
+
+  it("leaves the typed edits unsaved against the new base", () => {
+    const submitted = { ...draftOf(task), title: "Saved" };
+    const typed = { ...submitted, description: "More words" };
+    const kept = draftAfterSave(typed, submitted, saved);
+    expect(patchFrom(kept, saved)).toEqual({ description: "More words" });
   });
 });
