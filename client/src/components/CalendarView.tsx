@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   useGetProjectCalendarQuery,
+  useListProjectTasksQuery,
   useListProjectsQuery,
   type CalendarDay,
+  type TaskRow,
 } from "../store/api";
 import {
   buildCalendarSearch,
@@ -11,10 +13,13 @@ import {
 } from "../hooks/useHash";
 import {
   filterDays,
+  isOverdue,
   monthGrid,
   monthOf,
   shiftMonth,
+  tasksByDate,
   todayLocal,
+  type CalendarTaskEntry,
 } from "../lib/calendarGrid";
 
 /**
@@ -29,12 +34,15 @@ const CELL_LINES = 5;
 /** Knowledge accent colours, picked by id so a doc keeps its colour. */
 const K_COLORS = ["blue", "green", "amber", "purple", "cyan", "red"];
 
+type DayTask = CalendarTaskEntry<TaskRow>;
+
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /**
  * A view toggle remembered in this browser. `showPages` (off by default)
  * lists pages in day cells — the day dialog always shows them; `created` /
- * `edited` (both on by default) pick which kind of change is shown anywhere.
+ * `edited` (both on by default) pick which kind of change is shown anywhere;
+ * `tasks` (on by default) shows task start and due dates.
  */
 function useStoredFlag(name: string, initial: boolean): [boolean, () => void] {
   const key = `wikikai.calendar.${name}`;
@@ -93,9 +101,10 @@ interface Props {
   projectId: number;
   /** `YYYY-MM`, or null for the current month. */
   month: string | null;
+  onOpenTask: (id: number) => void;
 }
 
-export function CalendarView({ projectId, month }: Props): JSX.Element {
+export function CalendarView({ projectId, month, onOpenTask }: Props): JSX.Element {
   const today = todayLocal();
   const shown = month ?? monthOf(today);
   const grid = useMemo(() => monthGrid(shown), [shown]);
@@ -103,6 +112,7 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
   const [showPages, toggleShowPages] = useStoredFlag("showPages", false);
   const [showCreated, toggleCreated] = useStoredFlag("created", true);
   const [showEdited, toggleEdited] = useStoredFlag("edited", true);
+  const [showTasks, toggleTasks] = useStoredFlag("tasks", true);
 
   const projects = useListProjectsQuery();
   const projectName =
@@ -124,6 +134,19 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
     for (const d of days) m.set(d.date, d);
     return m;
   }, [days]);
+
+  const taskQuery = useListProjectTasksQuery({ projectId });
+  const tasksOnDay = useMemo(
+    () => tasksByDate(showTasks ? taskQuery.data?.tasks ?? [] : [], grid.from, grid.to),
+    [showTasks, taskQuery.data, grid.from, grid.to],
+  );
+  const tasksDue = useMemo(() => {
+    let n = 0;
+    for (const [date, entries] of tasksOnDay) {
+      if (monthOf(date) === shown) n += entries.filter((e) => e.kind === "due").length;
+    }
+    return n;
+  }, [tasksOnDay, shown]);
 
   // Month totals only count days inside the shown month, not the padding.
   const stats = useMemo(() => {
@@ -153,8 +176,9 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
           <span className="cal-stats">
             {error
               ? ""
-              : `${stats.docs} knowledge · ${stats.pages} pages · ${stats.days} active days`}
+              : `${stats.docs} knowledge · ${stats.pages} pages · ${stats.days} active days · ${tasksDue} tasks due`}
             {isFetching ? " · loading…" : ""}
+            {taskQuery.error ? " · could not load tasks" : ""}
           </span>
         </div>
         <div className="cal-nav">
@@ -178,6 +202,15 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
               <span className="cal-p-mark edited">✎</span> Edited
             </button>
           </div>
+          <button
+            type="button"
+            className={`cal-toggle cal-toggle-tasks${showTasks ? " on" : ""}`}
+            aria-pressed={showTasks}
+            onClick={toggleTasks}
+            title={showTasks ? "Hide tasks" : "Show tasks"}
+          >
+            Tasks
+          </button>
           <button
             type="button"
             className={`cal-toggle cal-toggle-pages${showPages ? " on" : ""}`}
@@ -220,6 +253,8 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
               key={date}
               date={date}
               day={byDate.get(date)}
+              tasks={tasksOnDay.get(date) ?? []}
+              onOpenTask={onOpenTask}
               outside={monthOf(date) !== shown}
               today={date === today}
               showPages={showPages}
@@ -230,7 +265,13 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
       )}
 
       {openDay && (
-        <DayPanel date={openDay} day={byDate.get(openDay)} onClose={() => setOpenDay(null)} />
+        <DayPanel
+          date={openDay}
+          day={byDate.get(openDay)}
+          tasks={tasksOnDay.get(openDay) ?? []}
+          onOpenTask={onOpenTask}
+          onClose={() => setOpenDay(null)}
+        />
       )}
     </div>
   );
@@ -239,26 +280,32 @@ export function CalendarView({ projectId, month }: Props): JSX.Element {
 function DayCell({
   date,
   day,
+  tasks,
   outside,
   today,
   showPages,
   onOpen,
+  onOpenTask,
 }: {
   date: string;
   day: CalendarDay | undefined;
+  tasks: DayTask[];
   outside: boolean;
   today: boolean;
   showPages: boolean;
   onOpen: () => void;
+  onOpenTask: (id: number) => void;
 }): JSX.Element {
   const dayNum = Number(date.slice(8));
   const total = day?.knowledge.reduce((n, k) => n + k.pages.length, 0) ?? 0;
+  const hasItems = total > 0 || tasks.length > 0;
 
-  // Fill the cell line by line; whatever doesn't fit becomes "+N more"
-  // (pages when they are listed, knowledge when only knowledge is).
+  // Fill the cell line by line, tasks first; whatever doesn't fit becomes
+  // "+N more" (pages when they are listed, knowledge when only knowledge is).
+  const taskLines = tasks.slice(0, CELL_LINES);
   const knowledge = day?.knowledge ?? [];
-  let budget = CELL_LINES;
-  let hidden: number;
+  let budget = CELL_LINES - taskLines.length;
+  let hidden = tasks.length - taskLines.length;
   const groups: JSX.Element[] = [];
   if (showPages) {
     let shownPages = 0;
@@ -270,34 +317,42 @@ function DayCell({
       shownPages += pages.length;
       groups.push(<KnowledgeGroup key={k.id} k={k} pages={pages} />);
     }
-    hidden = total - shownPages;
+    hidden += total - shownPages;
   } else {
-    for (const k of knowledge.slice(0, CELL_LINES)) {
+    for (const k of knowledge.slice(0, budget)) {
       groups.push(<KnowledgeGroup key={k.id} k={k} pages={[]} compact />);
     }
-    hidden = Math.max(0, knowledge.length - CELL_LINES);
+    hidden += Math.max(0, knowledge.length - budget);
   }
 
   const cls = ["cal-day"];
   if (outside) cls.push("outside");
   if (today) cls.push("today");
-  if (total > 0) cls.push("has-items");
+  if (hasItems) cls.push("has-items");
+
+  const description = [
+    total ? `${total} pages` : "",
+    tasks.length ? `${tasks.length} tasks` : "",
+  ].filter(Boolean).join(", ");
 
   return (
-    <div className={cls.join(" ")} onClick={total > 0 ? onOpen : undefined}>
+    <div className={cls.join(" ")} onClick={hasItems ? onOpen : undefined}>
       <button
         type="button"
         className="cal-daynum"
         onClick={(e) => {
           e.stopPropagation();
-          if (total > 0) onOpen();
+          if (hasItems) onOpen();
         }}
-        aria-label={`${longDateLabel(date)}${total ? `, ${total} pages` : ""}`}
+        aria-label={`${longDateLabel(date)}${description ? `, ${description}` : ""}`}
       >
         {dayNum}
       </button>
       {total > 0 && <span className="cal-count">{total}</span>}
       <div className="cal-items">
+        {taskLines.map((entry) => (
+          <TaskLine key={`${entry.task.id}-${entry.kind}`} entry={entry} onOpenTask={onOpenTask} />
+        ))}
         {groups}
         {hidden > 0 && (
           <button
@@ -313,6 +368,34 @@ function DayCell({
         )}
       </div>
     </div>
+  );
+}
+
+function TaskLine({ entry, onOpenTask }: { entry: DayTask; onOpenTask: (id: number) => void }): JSX.Element {
+  const { task, kind } = entry;
+  const cls = ["cal-task", `cal-task-${kind}`];
+  if (isOverdue(task, todayLocal())) cls.push("overdue");
+  if (task.status === "done") cls.push("done");
+  return (
+    <button
+      type="button"
+      className={cls.join(" ")}
+      title={`${kind === "due" ? "Due" : "Starts"} — T${task.id} ${task.title}${
+        task.blocked_reason ? ` (blocked: ${task.blocked_reason})` : ""
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenTask(task.id);
+      }}
+    >
+      <span className="cal-task-mark" aria-hidden="true">
+        {kind === "due" ? "⚑" : "▸"}
+      </span>
+      <span className="cal-task-text">
+        T{task.id} {task.title}
+      </span>
+      {task.blocked_reason && <span className="cal-task-blocked">!</span>}
+    </button>
   );
 }
 
@@ -379,10 +462,14 @@ function KnowledgeGroup({
 function DayPanel({
   date,
   day,
+  tasks,
+  onOpenTask,
   onClose,
 }: {
   date: string;
   day: CalendarDay | undefined;
+  tasks: DayTask[];
+  onOpenTask: (id: number) => void;
   onClose: () => void;
 }): JSX.Element {
   useEffect(() => {
@@ -409,10 +496,20 @@ function DayPanel({
           </button>
         </div>
         <div className="cal-panel-body">
+          {tasks.map((entry) => (
+            <TaskLine
+              key={`${entry.task.id}-${entry.kind}`}
+              entry={entry}
+              onOpenTask={(id) => {
+                onClose();
+                onOpenTask(id);
+              }}
+            />
+          ))}
           {(day?.knowledge ?? []).map((k) => (
             <KnowledgeGroup key={k.id} k={k} pages={k.pages} />
           ))}
-          {!day && <p className="cal-empty">Nothing created or edited on this day.</p>}
+          {!day && tasks.length === 0 && <p className="cal-empty">Nothing created, edited or due on this day.</p>}
         </div>
       </div>
     </div>

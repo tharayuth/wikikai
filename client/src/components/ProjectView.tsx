@@ -57,7 +57,7 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
         ))}
         {view !== "calendar" && <TaskFilters projectId={projectId} filter={filter} onChange={setFilter} />}
       </div>
-      {view === "calendar" && <CalendarView projectId={projectId} month={month} />}
+      {view === "calendar" && <CalendarView projectId={projectId} month={month} onOpenTask={openTask} />}
       {view === "board" && <TaskBoard projectId={projectId} filter={filter} onOpenTask={openTask} />}
       {view === "list" && <TaskListView projectId={projectId} filter={filter} onOpenTask={openTask} />}
       {taskId != null && <TaskModal key={taskId} projectId={projectId} taskId={taskId} onClose={closeTask} />}

@@ -6156,3 +6156,22 @@ button.ki-id-badge::after {
 .task-modal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .task-modal-spacer { flex: 1; }
 .modal .task-field textarea { min-height: 160px; }
+
+/* ─── Tasks on the calendar ─── */
+.cal-task {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  padding: 1px 4px;
+  border: none; border-radius: var(--radius-sm);
+  background: var(--accent-light); color: var(--accent-strong);
+  font: inherit; font-size: 11.5px; text-align: left; cursor: pointer;
+}
+.cal-task:hover { filter: brightness(.97); }
+.cal-task-start { background: var(--surface-2); color: var(--text-2); }
+.cal-task.overdue { background: var(--red-light); color: var(--red); font-weight: 600; }
+.cal-task.done { background: transparent; color: var(--text-3); }
+.cal-task.done .cal-task-text { text-decoration: line-through; }
+.cal-task-mark { flex: none; }
+.cal-task-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-task-blocked { flex: none; color: var(--red); font-weight: 700; }
+.cal-panel-body .cal-task { font-size: 13px; padding: 3px 6px; }
+.cal-panel-body .cal-task-text { white-space: normal; }
