@@ -71,7 +71,7 @@ A task is tracked work on a project's board, written `T12`. A page checkbox (`- 
 
 **Picking up work.** When told to do the next task:
 
-1. `list_tasks({ project, next: true })`. An empty list means the queue is empty, so say so and stop.
+1. `list_tasks({ project, next: true })`. An empty list means no task is claimable right now: others may be blocked, assigned to someone else, or already in progress. Say so and stop.
 2. Claim it: `edit_task({ task_id, expected_version, status: "doing", assignee: "me", session_id })`. `STALE` means another session took it, so go back to step 1.
 3. Do the work described in the returned `description` and `links`.
 4. Finish: `edit_task({ task_id, expected_version, status: "review", add_links: [...] })`, linking the commit or the WikiKai page. Set `done` only when the user says so.
