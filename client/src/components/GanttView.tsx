@@ -13,6 +13,7 @@ import {
   type TaskRow,
 } from "../store/api";
 import { isOverdue, todayLocal } from "../lib/calendarGrid";
+import { openDatePicker } from "../lib/datePicker";
 import {
   GANTT_ZOOMS,
   barGeometry,
@@ -476,6 +477,7 @@ function MilestonePanel({
         value={date}
         aria-label="Milestone date"
         disabled={!canEdit}
+        onClick={(e) => openDatePicker(e.currentTarget)}
         onChange={(e) => setDate(e.target.value)}
       />
       {milestone && (

@@ -46,7 +46,12 @@
   --app-max: 1280px;
 }
 
+/* Native controls follow the app's theme, not the operating system's. Without
+   this a date field's calendar icon is dark on dark, or light on light, whenever
+   the two disagree. */
+[data-theme="light"] { color-scheme: light; }
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #1a1a1a;
   --surface: #232323;
   --surface-2: #2a2a2a;
@@ -6612,6 +6617,8 @@ button.ki-id-badge::after {
   background: var(--surface); color: var(--text);
   font: inherit; font-size: 13px; font-weight: 400;
 }
+input[type="date"]:not(:disabled) { cursor: pointer; }
+input[type="date"]:not(:disabled)::-webkit-calendar-picker-indicator { cursor: pointer; }
 .task-field input:disabled, .task-field select:disabled { background: var(--surface-2); color: var(--text-2); }
 .task-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .task-description-header { display: flex; align-items: center; justify-content: space-between; }

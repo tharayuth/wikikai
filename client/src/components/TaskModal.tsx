@@ -15,6 +15,7 @@ import {
   type TaskPatch,
 } from "../store/api";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
+import { openDatePicker } from "../lib/datePicker";
 import { writeClipboard } from "../lib/badgeMenu";
 import { apiErrorMessage, boardColumns, columnKey, columnLabel } from "../lib/taskBoard";
 import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
@@ -333,6 +334,7 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
                   type="date"
                   value={draft.start_date}
                   disabled={!canEdit}
+                  onClick={(e) => openDatePicker(e.currentTarget)}
                   onChange={(e) => set("start_date", e.target.value)}
                 />
               </label>
@@ -342,6 +344,7 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
                   type="date"
                   value={draft.due_date}
                   disabled={!canEdit}
+                  onClick={(e) => openDatePicker(e.currentTarget)}
                   onChange={(e) => set("due_date", e.target.value)}
                 />
               </label>
