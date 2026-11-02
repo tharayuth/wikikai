@@ -753,6 +753,8 @@ export const GetExampleSchema = z.object({
 const TASK_ASSIGNEE_NOTE = "me, or a member's name or email.";
 const TASK_DATE_NOTE = "YYYY-MM-DD.";
 
+const TASK_COLUMN_NOTE = "Column name in the module; status follows it.";
+
 const TaskLinkSchema = z.object({
   url: z.string().max(2000).describe("http(s) URL or path like /&3/#12."),
   label: z.string().max(200).optional(),
@@ -775,6 +777,8 @@ export const AddTaskSchema = z.object({
   links: z.array(TaskLinkSchema).max(50).optional(),
   session_id: z.string().max(200).optional().describe(SESSION_NOTE),
   position: TaskPlacementSchema,
+  module: z.string().min(1).max(50).optional().describe("Module name. Default: the first."),
+  column: z.string().min(1).max(50).optional().describe(TASK_COLUMN_NOTE),
 });
 
 export const ListTasksSchema = z
@@ -785,7 +789,8 @@ export const ListTasksSchema = z
     label: z.string().max(50).optional(),
     include_archived: z.boolean().optional(),
     limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
-    next: z.boolean().optional().describe("Only the next task to claim. Takes no other filter."),
+    module: z.string().min(1).max(50).optional().describe("Only this module."),
+    next: z.boolean().optional().describe("Only the next task to claim. Combines only with `module`."),
   })
   .refine(
     (v) =>
@@ -827,6 +832,8 @@ export const EditTaskSchema = z.object({
   remove_link_ids: z.array(z.number().int().positive()).max(50).optional(),
   archived: z.boolean().optional(),
   position: TaskPlacementSchema,
+  module: z.string().min(1).max(50).optional().describe("Move to this module."),
+  column: z.string().min(1).max(50).nullable().optional().describe(`${TASK_COLUMN_NOTE} null: the built-in column.`),
 });
 
 export type TaskResult = Task & { url: string };
@@ -835,6 +842,8 @@ export interface TaskListEntry {
   id: number;
   title: string;
   status: TaskStatus;
+  module: string;
+  column: string;
   assignee: TaskMember | null;
   due_date: string | null;
   labels: string[];
@@ -1543,6 +1552,8 @@ export function buildToolHandlers(
     id: row.id,
     title: row.title,
     status: row.status,
+    module: row.module,
+    column: row.column,
     assignee: row.assignee,
     due_date: row.due_date,
     labels: row.labels,
@@ -2874,10 +2885,11 @@ export function buildToolHandlers(
       const parsed = AddTaskSchema.parse(input);
       gateEditByProject(parsed.project);
       const project = tasks.ensureProject(parsed.project);
-      const { project: _project, assignee, ...fields } = parsed;
+      const { project: _project, assignee, module, column, ...fields } = parsed;
       return withTaskUrl(
         tasks.add(project.id, {
           ...fields,
+          ...tasks.placementByName(project.id, null, { module, column, status: parsed.status }),
           assignee_id: assignee === undefined ? undefined : tasks.resolveAssignee(project.name, assignee, callerId()),
         }),
       );
@@ -2887,8 +2899,9 @@ export function buildToolHandlers(
       const parsed = ListTasksSchema.parse(input);
       gateReadByProject(parsed.project);
       const project = tasks.ensureProject(parsed.project);
+      const moduleId = parsed.module === undefined ? undefined : tasks.modules.resolveModule(project.id, parsed.module).id;
       if (parsed.next) {
-        const next = tasks.next(project.id, callerId());
+        const next = tasks.next(project.id, callerId(), moduleId);
         return { tasks: next ? [compactTask(next)] : [] };
       }
       const rows = tasks.list(project.id, {
@@ -2898,6 +2911,7 @@ export function buildToolHandlers(
         label: parsed.label,
         includeArchived: parsed.include_archived,
         limit: parsed.limit ?? DEFAULT_LIST_LIMIT,
+        moduleId,
       });
       return { tasks: rows.map(compactTask) };
     },
@@ -2915,10 +2929,11 @@ export function buildToolHandlers(
       const current = tasks.get(parsed.task_id);
       if (!current) throw new Error(`task T${parsed.task_id} not found`);
       gateEditByProject(current.project);
-      const { task_id, assignee, ...fields } = parsed;
+      const { task_id, assignee, module, column, ...fields } = parsed;
       return withTaskUrl(
         tasks.edit(task_id, {
           ...fields,
+          ...tasks.placementByName(current.project_id, current.module_id, { module, column, status: parsed.status }),
           ...(assignee === undefined
             ? {}
             : { assignee_id: assignee === null ? null : tasks.resolveAssignee(current.project, assignee, callerId()) }),

@@ -24,8 +24,10 @@ describe("MCP tool catalog", () => {
   it("stays within its size budget", async () => {
     const size = JSON.stringify(await listTools()).length;
     // ≈ 4 characters per token. Raising the budget needs a reason: every
-    // client pays for it at the start of every session.
-    expect(size, `catalog is ${size} chars`).toBeLessThan(40_000);
+    // client pays for it at the start of every session. It rose from 40,000 for
+    // `module` and `column` on the task tools: by then every description held
+    // only what an agent needs to call the tool correctly.
+    expect(size, `catalog is ${size} chars`).toBeLessThan(41_000);
   });
 
   it("gives every tool a description", async () => {

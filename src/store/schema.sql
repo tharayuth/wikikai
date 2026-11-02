@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS files (
 -- content inside a document. `project_id` references the stable id, so a
 -- project rename leaves tasks alone. RESTRICT because unregistering a project
 -- keeps its documents; it must not silently take its tasks. `position` orders
--- tasks within one project + status, and the board order is the work queue.
+-- tasks within one board column, and the board order is the work queue.
 -- See store/tasks.ts for the rules.
 CREATE TABLE IF NOT EXISTS tasks (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -264,6 +264,36 @@ CREATE TABLE IF NOT EXISTS tasks (
   archived_at    TEXT                       -- NULL = active
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_board ON tasks(project_id, status, position);
+
+-- A project's boards. Unregistering a project needs its tasks gone first (see
+-- `tasks.project_id`), so the cascade only ever removes empty modules; RESTRICT
+-- here would stop a project being unregistered once anyone opened its board.
+CREATE TABLE IF NOT EXISTS task_modules (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  position   INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_modules_name
+  ON task_modules(project_id, name COLLATE NOCASE);
+
+-- Columns people add to a board. The four built-in columns have no row: a task
+-- with no `column_id` sits in the locked column of its status, so nothing stored
+-- can rename or delete one. `position` counts within one status, with the locked
+-- column as 0: negative sorts before it, positive after.
+CREATE TABLE IF NOT EXISTS task_columns (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  module_id  INTEGER NOT NULL REFERENCES task_modules(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  status     TEXT NOT NULL CHECK (status IN ('todo','doing','review','done')),
+  position   INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_columns_name
+  ON task_columns(module_id, name COLLATE NOCASE);
+-- NOTE: `tasks.module_id` and `tasks.column_id` are added by the in-place
+-- migration in db.ts, with their index and a backfill.
 
 CREATE TABLE IF NOT EXISTS task_links (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

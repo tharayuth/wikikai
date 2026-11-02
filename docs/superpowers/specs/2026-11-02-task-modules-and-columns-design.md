@@ -1,7 +1,7 @@
 # Task Modules and Columns
 
 **Date:** 2026-11-02
-**Status:** Draft, awaiting review
+**Status:** Approved by the owner, implemented
 **Scope:** Split a project's tasks into modules, each with its own board. Let
 people add columns to a board. Make the four built-in columns visibly locked.
 **Builds on:** [Project Tasks Core](2026-11-02-project-tasks-core-design.md)
@@ -125,6 +125,7 @@ between modules. It cannot lose a task.
 | `src/web/taskRoutes.ts` | The new routes, sharing its access and error helpers |
 | `client/src/lib/taskBoard.ts` | Pure board logic: column order, drop resolution, optimistic moves |
 | `client/src/components/ModuleBar.tsx` (new) | The module bar and its menu |
+| `client/src/components/BoardControls.tsx` (new) | The `⋯` menu and inline name form that modules and columns share |
 | `client/src/components/TaskBoard.tsx` | Renders columns from the pure functions, plus the column header and menu |
 
 ## 4. Rules

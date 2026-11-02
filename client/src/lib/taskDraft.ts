@@ -11,6 +11,8 @@ interface DraftableTask {
   title: string;
   description: string;
   status: BoardStatus;
+  module_id: number;
+  column_id: number | null;
   assignee: { id: number } | null;
   start_date: string | null;
   due_date: string | null;
@@ -23,6 +25,8 @@ export interface TaskDraft {
   title: string;
   description: string;
   status: BoardStatus;
+  module_id: number;
+  column_id: number | null;
   assignee_id: number | null;
   start_date: string;
   due_date: string;
@@ -35,6 +39,8 @@ export interface TaskDraftPatch {
   title?: string;
   description?: string;
   status?: BoardStatus;
+  module_id?: number;
+  column_id?: number | null;
   assignee_id?: number | null;
   start_date?: string | null;
   due_date?: string | null;
@@ -48,6 +54,8 @@ export function draftOf(task: DraftableTask): TaskDraft {
     title: task.title,
     description: task.description,
     status: task.status,
+    module_id: task.module_id,
+    column_id: task.column_id,
     assignee_id: task.assignee?.id ?? null,
     start_date: task.start_date ?? "",
     due_date: task.due_date ?? "",
@@ -72,6 +80,8 @@ export function patchFrom(draft: TaskDraft, base: DraftableTask): TaskDraftPatch
   if (title !== base.title) patch.title = title;
   if (draft.description !== base.description) patch.description = draft.description;
   if (draft.status !== base.status) patch.status = draft.status;
+  if (draft.module_id !== base.module_id) patch.module_id = draft.module_id;
+  if (draft.column_id !== base.column_id) patch.column_id = draft.column_id;
   if (draft.assignee_id !== (base.assignee?.id ?? null)) patch.assignee_id = draft.assignee_id;
   if (orNull(draft.start_date) !== base.start_date) patch.start_date = orNull(draft.start_date);
   if (orNull(draft.due_date) !== base.due_date) patch.due_date = orNull(draft.due_date);

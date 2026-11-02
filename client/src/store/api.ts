@@ -149,7 +149,7 @@ export interface ActivityLogEntry {
   source: "mcp" | "web";
   tool_name: string | null;
   action: "add" | "edit" | "delete" | "reorder" | "toggle" | "caption" | "upload" | "resize";
-  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task";
+  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task" | "board_module" | "board_column";
   knowledge_id: number | null;
   knowledge_title: string | null;
   page_id: number | null;
@@ -221,6 +221,11 @@ export interface TaskRow {
   project_id: number;
   title: string;
   status: TaskStatus;
+  module_id: number;
+  module: string;
+  /** Null in the locked column of its status. */
+  column_id: number | null;
+  column: string;
   position: number;
   assignee: TaskMember | null;
   start_date: string | null;
@@ -241,6 +246,31 @@ export interface TaskDetail extends TaskRow {
   created_at: string;
 }
 
+export interface TaskColumn {
+  id: number;
+  module_id: number;
+  name: string;
+  status: TaskStatus;
+  position: number;
+}
+
+export interface TaskModule {
+  id: number;
+  project_id: number;
+  name: string;
+  position: number;
+  /** Archived tasks included, because it drives the delete guard. */
+  task_count: number;
+  columns: TaskColumn[];
+}
+
+export interface ProjectModulesResponse {
+  can_edit: boolean;
+  modules: TaskModule[];
+}
+
+export type BoardItemPatch = { name: string } | { move: "left" | "right" };
+
 export interface ProjectTasksResponse {
   project: { id: number; name: string };
   can_edit: boolean;
@@ -252,6 +282,8 @@ export interface TaskPatch {
   title?: string;
   description?: string;
   status?: TaskStatus;
+  module_id?: number;
+  column_id?: number | null;
   assignee_id?: number | null;
   start_date?: string | null;
   due_date?: string | null;
@@ -280,6 +312,7 @@ export const portalApi = createApi({
     "Share",
     "Tasks",
     "Task",
+    "Modules",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -548,13 +581,19 @@ export const portalApi = createApi({
       providesTags: (_r, _e, id) => [{ type: "Task", id }],
     }),
 
-    addTask: builder.mutation<TaskDetail, { projectId: number; title: string }>({
-      query: ({ projectId, title }) => ({
+    addTask: builder.mutation<
+      TaskDetail,
+      { projectId: number; title: string; moduleId?: number; columnId?: number | null }
+    >({
+      query: ({ projectId, title, moduleId, columnId }) => ({
         url: `projects/${projectId}/tasks`,
         method: "POST",
-        body: { title },
+        body: { title, module_id: moduleId, column_id: columnId },
       }),
-      invalidatesTags: (_r, _e, arg) => [{ type: "Tasks", id: arg.projectId }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Tasks", id: arg.projectId },
+        { type: "Modules", id: arg.projectId },
+      ],
     }),
 
     updateTask: builder.mutation<TaskDetail, { id: number; projectId: number; patch: TaskPatch }>({
@@ -562,24 +601,32 @@ export const portalApi = createApi({
       invalidatesTags: (_r, _e, arg) => [
         { type: "Tasks", id: arg.projectId },
         { type: "Task", id: arg.id },
+        { type: "Modules", id: arg.projectId },
       ],
     }),
 
     moveTask: builder.mutation<
       TaskDetail,
-      { id: number; projectId: number; status: TaskStatus; beforeId: number | null; expectedVersion: number }
+      {
+        id: number;
+        projectId: number;
+        status: TaskStatus;
+        columnId: number | null;
+        beforeId: number | null;
+        expectedVersion: number;
+      }
     >({
-      query: ({ id, status, beforeId, expectedVersion }) => ({
+      query: ({ id, status, columnId, beforeId, expectedVersion }) => ({
         url: `tasks/${id}/move`,
         method: "POST",
-        body: { status, before_id: beforeId, expected_version: expectedVersion },
+        body: { status, column_id: columnId, before_id: beforeId, expected_version: expectedVersion },
       }),
       // Move the card at once and restore it if the server refuses. The tags
       // below refetch in both cases, so a stale board corrects itself.
-      async onQueryStarted({ id, projectId, status, beforeId }, { dispatch, queryFulfilled }) {
+      async onQueryStarted({ id, projectId, status, columnId, beforeId }, { dispatch, queryFulfilled }) {
         const patch = dispatch(
           portalApi.util.updateQueryData("listProjectTasks", { projectId }, (draft) => {
-            draft.tasks = applyMove(draft.tasks, id, status, beforeId);
+            draft.tasks = applyMove(draft.tasks, id, status, columnId, beforeId);
           }),
         );
         try {
@@ -596,7 +643,61 @@ export const portalApi = createApi({
 
     deleteTask: builder.mutation<{ deleted: boolean }, { id: number; projectId: number }>({
       query: ({ id }) => ({ url: `tasks/${id}`, method: "DELETE" }),
-      invalidatesTags: (_r, _e, arg) => [{ type: "Tasks", id: arg.projectId }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Tasks", id: arg.projectId },
+        { type: "Modules", id: arg.projectId },
+      ],
+    }),
+
+    listProjectModules: builder.query<ProjectModulesResponse, number>({
+      query: (projectId) => `projects/${projectId}/modules`,
+      providesTags: (_r, _e, projectId) => [{ type: "Modules", id: projectId }],
+    }),
+
+    addModule: builder.mutation<{ id: number; name: string }, { projectId: number; name: string }>({
+      query: ({ projectId, name }) => ({ url: `projects/${projectId}/modules`, method: "POST", body: { name } }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Modules", id: arg.projectId }],
+    }),
+
+    updateModule: builder.mutation<{ id: number }, { id: number; projectId: number; patch: BoardItemPatch }>({
+      query: ({ id, patch }) => ({ url: `modules/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Modules", id: arg.projectId },
+        { type: "Tasks", id: arg.projectId },
+      ],
+    }),
+
+    deleteModule: builder.mutation<{ deleted: boolean }, { id: number; projectId: number }>({
+      query: ({ id }) => ({ url: `modules/${id}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Modules", id: arg.projectId }],
+    }),
+
+    addColumn: builder.mutation<
+      TaskColumn,
+      { moduleId: number; projectId: number; name: string; status: TaskStatus }
+    >({
+      query: ({ moduleId, name, status }) => ({
+        url: `modules/${moduleId}/columns`,
+        method: "POST",
+        body: { name, status },
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Modules", id: arg.projectId }],
+    }),
+
+    updateColumn: builder.mutation<TaskColumn, { id: number; projectId: number; patch: BoardItemPatch }>({
+      query: ({ id, patch }) => ({ url: `columns/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Modules", id: arg.projectId },
+        { type: "Tasks", id: arg.projectId },
+      ],
+    }),
+
+    deleteColumn: builder.mutation<{ deleted: boolean }, { id: number; projectId: number }>({
+      query: ({ id }) => ({ url: `columns/${id}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Modules", id: arg.projectId },
+        { type: "Tasks", id: arg.projectId },
+      ],
     }),
 
     getActivityLog: builder.query<
@@ -1019,6 +1120,13 @@ export const {
   useGetActivityLogQuery,
   useGetProjectCalendarQuery,
   useListProjectTasksQuery,
+  useListProjectModulesQuery,
+  useAddModuleMutation,
+  useUpdateModuleMutation,
+  useDeleteModuleMutation,
+  useAddColumnMutation,
+  useUpdateColumnMutation,
+  useDeleteColumnMutation,
   useListProjectMembersQuery,
   useGetTaskQuery,
   useGetTaskRenderedQuery,

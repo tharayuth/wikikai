@@ -5,6 +5,8 @@ const task = {
   title: "T",
   description: "Body",
   status: "todo" as const,
+  module_id: 1,
+  column_id: null,
   assignee: { id: 7, display_name: "Ann" },
   start_date: "2026-11-01",
   due_date: null,
@@ -13,12 +15,29 @@ const task = {
   blocked_reason: "waiting",
 };
 
+describe("placement in the draft", () => {
+  it("sends only the module and column that changed", () => {
+    expect(patchFrom({ ...draftOf(task), module_id: 2 }, task)).toEqual({ module_id: 2 });
+    expect(patchFrom({ ...draftOf(task), column_id: 7, status: "review" }, task)).toEqual({
+      column_id: 7,
+      status: "review",
+    });
+  });
+
+  it("sends an explicit null to leave a custom column", () => {
+    const inColumn = { ...task, column_id: 7 };
+    expect(patchFrom({ ...draftOf(inColumn), column_id: null }, inColumn)).toEqual({ column_id: null });
+  });
+});
+
 describe("draftOf", () => {
   it("turns nulls and lists into form values", () => {
     expect(draftOf(task)).toEqual({
       title: "T",
       description: "Body",
       status: "todo",
+      module_id: 1,
+      column_id: null,
       assignee_id: 7,
       start_date: "2026-11-01",
       due_date: "",

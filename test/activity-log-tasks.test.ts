@@ -65,3 +65,13 @@ describe("activity log: board_task rows", () => {
     expect(log.calendar({ project: "alpha", from: today, to: today, tz: "UTC" })).toEqual([]);
   });
 });
+
+describe("activity log: board structure rows", () => {
+  it("shows a member the structure rows of their projects only", () => {
+    const { log, alpha, beta } = setup();
+    log.record({ action: "add", target: "board_module", project_id: alpha, task_title: "Backend" });
+    log.record({ action: "add", target: "board_column", project_id: beta, task_title: "QA" });
+    const { entries } = log.list({ visibleProjects: ["alpha"] });
+    expect(entries.map((e) => [e.target, e.task_title])).toEqual([["board_module", "Backend"]]);
+  });
+});

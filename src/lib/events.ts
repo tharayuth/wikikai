@@ -32,6 +32,7 @@ export type WikikaiEvent =
   | { type: "knowledge-changed"; knowledge_id?: number }
   | { type: "activity-logged"; knowledge_id: number | null }
   | { type: "task-changed"; project_id: number; task_id: number }
+  | { type: "board-changed"; project_id: number }
   | { type: "tool-called"; tool_name: string; age_ms: number };
 
 const bus = new EventEmitter();

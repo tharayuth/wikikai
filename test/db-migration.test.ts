@@ -140,4 +140,111 @@ describe("projects id migration (legacy -> auto-increment)", () => {
     expect(after).toEqual(before);
     second.close();
   });
+
+  describe("task modules", () => {
+    /** A database as Project Tasks Core left it: tasks with no module or column. */
+    function makeCoreDb(): string {
+      const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "wikikai-mig-")), "core.db");
+      tmpFiles.push(file);
+      const raw = new Database(file);
+      raw.pragma("foreign_keys = ON");
+      raw.exec(`
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'todo',
+          position INTEGER NOT NULL,
+          assignee_id INTEGER,
+          start_date TEXT,
+          due_date TEXT,
+          labels TEXT,
+          session_id TEXT,
+          blocked_reason TEXT,
+          created_by INTEGER,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          archived_at TEXT
+        );
+      `);
+      const now = "2026-01-01T00:00:00.000Z";
+      raw.prepare("INSERT INTO projects (name, created_at) VALUES ('alpha', ?), ('empty', ?)").run(now, now);
+      const insert = raw.prepare(
+        "INSERT INTO tasks (project_id, title, status, position, created_at, updated_at) VALUES (1, ?, ?, ?, ?, ?)",
+      );
+      insert.run("second", "todo", 2, now, now);
+      insert.run("first", "todo", 1, now, now);
+      insert.run("doing", "doing", 1, now, now);
+      raw.close();
+      return file;
+    }
+
+    const tasksOf = (db: ReturnType<typeof openDb>) =>
+      db.prepare("SELECT title, status, position, module_id, column_id FROM tasks ORDER BY id").all() as {
+        title: string;
+        status: string;
+        position: number;
+        module_id: number | null;
+        column_id: number | null;
+      }[];
+
+    it("puts existing tasks in General with their order intact, and only projects with tasks", () => {
+      const db = openDb(makeCoreDb());
+      const modules = db.prepare("SELECT id, project_id, name, position FROM task_modules").all();
+      expect(modules).toEqual([{ id: 1, project_id: 1, name: "General", position: 1 }]);
+      expect(tasksOf(db)).toEqual([
+        { title: "second", status: "todo", position: 2, module_id: 1, column_id: null },
+        { title: "first", status: "todo", position: 1, module_id: 1, column_id: null },
+        { title: "doing", status: "doing", position: 1, module_id: 1, column_id: null },
+      ]);
+      expect(db.pragma("foreign_key_check")).toEqual([]);
+      db.close();
+    });
+
+    it("changes nothing on a second open", () => {
+      const file = makeCoreDb();
+      const first = openDb(file);
+      const before = [first.prepare("SELECT * FROM task_modules").all(), tasksOf(first)];
+      first.close();
+      const second = openDb(file);
+      expect([second.prepare("SELECT * FROM task_modules").all(), tasksOf(second)]).toEqual(before);
+      second.close();
+    });
+
+    it("repairs a task with no module, as a build from before modules would write", () => {
+      const file = makeCoreDb();
+      const first = openDb(file);
+      const now = "2026-01-01T00:00:00.000Z";
+      first
+        .prepare("INSERT INTO tasks (project_id, title, position, created_at, updated_at) VALUES (1, 'old build', 9, ?, ?)")
+        .run(now, now);
+      first.close();
+      const second = openDb(file);
+      expect(tasksOf(second).find((t) => t.title === "old build")?.module_id).toBe(1);
+      second.close();
+    });
+
+    it("clears a column that no longer matches its task's status", () => {
+      const file = makeCoreDb();
+      const first = openDb(file);
+      first
+        .prepare("INSERT INTO task_columns (module_id, name, status, position, created_at) VALUES (1, 'QA', 'review', 1, ?)")
+        .run("2026-01-01T00:00:00.000Z");
+      first.prepare("UPDATE tasks SET column_id = 1, status = 'review' WHERE title = 'first'").run();
+      first.prepare("UPDATE tasks SET column_id = 1 WHERE title = 'second'").run();
+      first.close();
+      const second = openDb(file);
+      const rows = tasksOf(second);
+      expect(rows.find((t) => t.title === "first")?.column_id).toBe(1);
+      expect(rows.find((t) => t.title === "second")?.column_id).toBeNull();
+      second.close();
+    });
+  });
 });

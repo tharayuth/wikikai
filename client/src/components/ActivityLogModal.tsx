@@ -237,6 +237,10 @@ function describeTarget(entry: ActivityLogEntry): string {
     }
     case "board_task":
       return `board task T${entry.task_id ?? "?"}${entry.task_title ? ` "${entry.task_title}"` : ""}`;
+    case "board_module":
+      return `module "${entry.task_title ?? "?"}"`;
+    case "board_column":
+      return `column "${entry.task_title ?? "?"}"`;
     case "image": {
       const where =
         entry.page_id && pgTitle

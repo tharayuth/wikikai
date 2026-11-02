@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useListProjectTasksQuery } from "../store/api";
 import { isOverdue, todayLocal } from "../lib/calendarGrid";
-import { filterTasks, sortTasks, type TaskFilter, type TaskSortKey } from "../lib/taskBoard";
+import { filterTasks, sortTasks, tasksInModule, type TaskFilter, type TaskSortKey } from "../lib/taskBoard";
 
 const COLUMNS: { key: TaskSortKey; label: string }[] = [
   { key: "id", label: "ID" },
@@ -14,11 +14,13 @@ const COLUMNS: { key: TaskSortKey; label: string }[] = [
 
 interface Props {
   projectId: number;
+  /** Null shows every module, and adds a Module column. */
+  moduleId: number | null;
   filter: TaskFilter;
   onOpenTask: (id: number) => void;
 }
 
-export function TaskListView({ projectId, filter, onOpenTask }: Props): JSX.Element {
+export function TaskListView({ projectId, moduleId, filter, onOpenTask }: Props): JSX.Element {
   const [showArchived, setShowArchived] = useState(false);
   const [sortKey, setSortKey] = useState<TaskSortKey>("status");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -27,8 +29,8 @@ export function TaskListView({ projectId, filter, onOpenTask }: Props): JSX.Elem
   );
 
   const rows = useMemo(
-    () => sortTasks(filterTasks(data?.tasks ?? [], filter), sortKey, sortDir),
-    [data, filter, sortKey, sortDir],
+    () => sortTasks(filterTasks(tasksInModule(data?.tasks ?? [], moduleId), filter), sortKey, sortDir),
+    [data, moduleId, filter, sortKey, sortDir],
   );
   const today = todayLocal();
 
@@ -76,6 +78,8 @@ export function TaskListView({ projectId, filter, onOpenTask }: Props): JSX.Elem
                     </button>
                   </th>
                 ))}
+                <th>Column</th>
+                {moduleId === null && <th>Module</th>}
                 <th>Labels</th>
               </tr>
             </thead>
@@ -98,6 +102,8 @@ export function TaskListView({ projectId, filter, onOpenTask }: Props): JSX.Elem
                   <td>{t.assignee?.display_name ?? ""}</td>
                   <td className={isOverdue(t, today) ? "task-overdue" : undefined}>{t.due_date ?? ""}</td>
                   <td title={t.updated_at}>{t.updated_at.slice(0, 10)}</td>
+                  <td>{t.column}</td>
+                  {moduleId === null && <td>{t.module}</td>}
                   <td>{t.labels.join(", ")}</td>
                 </tr>
               ))}

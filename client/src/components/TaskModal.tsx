@@ -7,6 +7,7 @@ import {
   useGetTaskQuery,
   useGetTaskRenderedQuery,
   useListProjectMembersQuery,
+  useListProjectModulesQuery,
   useListProjectTasksQuery,
   useUpdateTaskMutation,
   type TaskDetail,
@@ -14,7 +15,7 @@ import {
 } from "../store/api";
 import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { writeClipboard } from "../lib/badgeMenu";
-import { BOARD_STATUSES, apiErrorMessage, type BoardStatus } from "../lib/taskBoard";
+import { apiErrorMessage, boardColumns, columnKey, columnLabel } from "../lib/taskBoard";
 import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
 
 interface Props {
@@ -40,6 +41,7 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
   const rendered = useGetTaskRenderedQuery(taskId);
   const board = useListProjectTasksQuery({ projectId });
   const members = useListProjectMembersQuery(projectId, { refetchOnMountOrArgChange: true });
+  const modulesQuery = useListProjectModulesQuery(projectId);
   const me = useGetAuthMeQuery();
   const [updateTask, { isLoading: saving }] = useUpdateTaskMutation();
   const [deleteTask] = useDeleteTaskMutation();
@@ -186,6 +188,16 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
       ? [...memberList, base.assignee]
       : memberList;
 
+  const modules = modulesQuery.data?.modules ?? [];
+  const columnOptions = boardColumns(modules.find((m) => m.id === draft?.module_id)?.columns ?? []);
+  // A column deleted while this is open is no longer an option: show where its
+  // cards went.
+  const columnValue = draft
+    ? columnOptions.some((c) => c.key === columnKey(draft.status, draft.column_id))
+      ? columnKey(draft.status, draft.column_id)
+      : columnKey(draft.status, null)
+    : "";
+
   return (
     <div className="modal-backdrop show" onClick={requestClose}>
       <div
@@ -241,15 +253,37 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
 
             <div className="task-field-grid">
               <label className="task-field">
-                Status
+                Module
                 <select
-                  value={draft.status}
+                  value={draft.module_id}
                   disabled={!canEdit}
-                  onChange={(e) => set("status", e.target.value as BoardStatus)}
+                  onChange={(e) => {
+                    const moduleId = Number(e.target.value);
+                    setDraft((d) => (d ? { ...d, module_id: moduleId, column_id: null } : d));
+                  }}
                 >
-                  {BOARD_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {modules.length === 0 && <option value={draft.module_id}>{base.module}</option>}
+                  {modules.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="task-field">
+                Column
+                <select
+                  value={columnValue}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const column = columnOptions.find((c) => c.key === e.target.value);
+                    if (!column) return;
+                    setDraft((d) => (d ? { ...d, status: column.status, column_id: column.id } : d));
+                  }}
+                >
+                  {columnOptions.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {columnLabel(c)}
                     </option>
                   ))}
                 </select>

@@ -24,6 +24,7 @@ type ServerEvent =
   | { type: "knowledge-changed"; knowledge_id?: number }
   | { type: "activity-logged"; knowledge_id: number | null }
   | { type: "task-changed"; project_id: number; task_id: number }
+  | { type: "board-changed"; project_id: number }
   | { type: "tool-called"; tool_name: string; age_ms: number };
 
 const REFRESH_TAGS = [
@@ -37,6 +38,7 @@ const REFRESH_TAGS = [
   "Revisions",
   "Tasks",
   "Task",
+  "Modules",
 ] as const;
 
 export function useServerEvents(): void {
@@ -127,11 +129,24 @@ export function useServerEvents(): void {
           );
           break;
         }
+        case "board-changed": {
+          // Deleting a column moves its cards, so tasks refetch as well.
+          dispatch(
+            portalApi.util.invalidateTags([
+              { type: "Modules", id: e.project_id },
+              { type: "Tasks", id: e.project_id },
+              { type: "ActivityLog", id: "LIST" },
+            ]),
+          );
+          break;
+        }
         case "task-changed": {
           dispatch(
             portalApi.util.invalidateTags([
               { type: "Tasks", id: e.project_id },
               { type: "Task", id: e.task_id },
+              // A module's task count drives its delete guard.
+              { type: "Modules", id: e.project_id },
               // A task tool can register a project known only through its
               // documents, so the sidebar must refetch the registry to give
               // that group an id without a reload.

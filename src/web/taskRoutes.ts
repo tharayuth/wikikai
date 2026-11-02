@@ -4,6 +4,7 @@ import { ForbiddenError, assertProjectAccess, type AccessLevel } from "../lib/pe
 import { renderMarkdown } from "../render/markdown.js";
 import type { PermissionStore } from "../store/permissions.js";
 import {
+  BoardItemNotFoundError,
   TASK_STATUSES,
   TaskConflictError,
   TaskNotFoundError,
@@ -34,6 +35,8 @@ const AddBody = z.object({
   session_id: z.string().nullable().optional(),
   blocked_reason: z.string().nullable().optional(),
   position: z.enum(["top", "bottom"]).optional(),
+  module_id: z.number().int().positive().optional(),
+  column_id: z.number().int().positive().nullable().optional(),
 });
 
 const PatchBody = AddBody.omit({ links: true })
@@ -49,7 +52,16 @@ const MoveBody = z.object({
   status: z.enum(TASK_STATUSES),
   before_id: z.number().int().positive().nullable(),
   expected_version: z.number().int().positive(),
+  module_id: z.number().int().positive().optional(),
+  column_id: z.number().int().positive().nullable().optional(),
 });
+
+const ModuleBody = z.object({ name: z.string() });
+const ColumnBody = z.object({ name: z.string(), status: z.enum(TASK_STATUSES) });
+
+const BoardItemPatch = z
+  .object({ name: z.string().optional(), move: z.enum(["left", "right"]).optional() })
+  .refine((v) => v.name !== undefined || v.move !== undefined, { message: "name or move is required" });
 
 function parseId(raw: string): number {
   const n = Number(raw);
@@ -85,12 +97,25 @@ export function attachTaskRoutes(app: Express, opts: TaskRouteOptions): void {
     return task.project;
   };
 
+  /** The module's project, for the access check. Throws when it is gone. */
+  const projectOfModule = (id: number): string => {
+    const module = tasks.modules.getModule(id);
+    if (!module) throw new BoardItemNotFoundError("module", id);
+    return tasks.getProject(module.project_id)?.name ?? "";
+  };
+
+  const projectOfColumn = (id: number): string => {
+    const column = tasks.modules.getColumn(id);
+    if (!column) throw new BoardItemNotFoundError("column", id);
+    return projectOfModule(column.module_id);
+  };
+
   const fail = (e: unknown, res: Response, next: NextFunction): void => {
     if (e instanceof TaskStaleError) {
       res.status(409).json({ error: e.message, current_version: e.currentVersion });
     } else if (e instanceof TaskConflictError) {
       res.status(409).json({ error: e.message });
-    } else if (e instanceof TaskNotFoundError) {
+    } else if (e instanceof TaskNotFoundError || e instanceof BoardItemNotFoundError) {
       res.status(404).json({ error: e.message });
     } else {
       next(e);
@@ -105,7 +130,10 @@ export function attachTaskRoutes(app: Express, opts: TaskRouteOptions): void {
       res.json({
         project,
         can_edit: canEdit(req, project.name),
-        tasks: tasks.list(project.id, { includeArchived: req.query.include_archived === "1" }),
+        tasks: tasks.list(project.id, {
+          includeArchived: req.query.include_archived === "1",
+          ...(req.query.module_id ? { moduleId: parseId(String(req.query.module_id)) } : {}),
+        }),
       });
     } catch (e) {
       fail(e, res, next);
@@ -129,6 +157,80 @@ export function attachTaskRoutes(app: Express, opts: TaskRouteOptions): void {
       if (!project) return;
       gate(req, project.name, "view");
       res.json({ members: tasks.listMembers(project.name) });
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.get("/api/projects/:id/modules", (req, res, next) => {
+    try {
+      const project = loadProject(req, res);
+      if (!project) return;
+      gate(req, project.name, "view");
+      res.json({ can_edit: canEdit(req, project.name), modules: tasks.modules.list(project.id) });
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.post("/api/projects/:id/modules", (req, res, next) => {
+    try {
+      const project = loadProject(req, res);
+      if (!project) return;
+      gate(req, project.name, "edit");
+      res.status(201).json(tasks.modules.addModule(project.id, ModuleBody.parse(req.body).name));
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.patch("/api/modules/:id", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfModule(id), "edit");
+      res.json(tasks.modules.updateModule(id, BoardItemPatch.parse(req.body)));
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.delete("/api/modules/:id", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfModule(id), "edit");
+      tasks.modules.deleteModule(id);
+      res.json({ deleted: true });
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.post("/api/modules/:id/columns", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfModule(id), "edit");
+      res.status(201).json(tasks.modules.addColumn(id, ColumnBody.parse(req.body)));
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.patch("/api/columns/:id", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfColumn(id), "edit");
+      res.json(tasks.modules.updateColumn(id, BoardItemPatch.parse(req.body)));
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.delete("/api/columns/:id", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfColumn(id), "edit");
+      tasks.modules.deleteColumn(id);
+      res.json({ deleted: true });
     } catch (e) {
       fail(e, res, next);
     }

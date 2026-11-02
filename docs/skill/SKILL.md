@@ -63,11 +63,13 @@ Every fine-grained edit (`edit_lines`, `edit_section`, `insert_lines`, `add_line
 ### Project tasks (the board, not page checkboxes)
 A task is tracked work on a project's board, written `T12`. A page checkbox (`- [ ]`, `toggle_task`) is content inside a document. If the user says "next task on the board", or names `T12`, use these tools.
 
-- `add_task({ project, title, description?, status?, assignee?, start_date?, due_date?, labels?, links?, session_id?, position? })` — returns the full task with `version` and `url`.
-- `list_tasks({ project, status?, assignee?, label?, include_archived?, limit?, next? })` — compact rows in board order, defaulting to `todo`, `doing` and `review`. `next: true` returns only the next task to claim.
+- `add_task({ project, title, description?, status?, assignee?, start_date?, due_date?, labels?, links?, session_id?, position?, module?, column? })` — returns the full task with `version` and `url`.
+- `list_tasks({ project, status?, assignee?, label?, include_archived?, limit?, module?, next? })` — compact rows in board order, defaulting to `todo`, `doing` and `review`. `next: true` returns only the next task to claim, and combines only with `module`.
 - `get_task({ task_id })` — one task in full, with description and links.
-- `edit_task({ task_id, expected_version, ...fields, add_links?, remove_link_ids?, archived?, position? })` — returns the full task with its new `version`. Tasks cannot be deleted over MCP; archive instead.
+- `edit_task({ task_id, expected_version, ...fields, add_links?, remove_link_ids?, archived?, position?, module?, column? })` — returns the full task with its new `version`. Tasks cannot be deleted over MCP; archive instead.
 - `assignee` is `"me"`, or a project member's display name or email. These tools do not take `user_prompt`.
+
+**Modules and columns.** A project can have several boards, called modules, and each board can have columns people added, tied to one status. Name them with `module` and `column`; an unknown name fails with the valid ones listed. Choosing a `column` sets the status, and `column: null` returns a task to the built-in column of its status. Leave them out and everything below works as written. `next` takes only from built-in Todo columns, so a column like Backlog holds work that is not ready. Agents cannot create, rename or delete modules or columns: those are the portal's.
 
 **Picking up work.** When told to do the next task:
 

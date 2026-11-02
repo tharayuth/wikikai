@@ -13,19 +13,100 @@ export const DONE_PAGE_SIZE = 20;
 interface BoardCard {
   id: number;
   status: BoardStatus;
+  module_id: number;
+  column_id: number | null;
   position: number;
   archived: boolean;
 }
 
+export const LOCKED_COLUMN_TITLES: Record<BoardStatus, string> = {
+  todo: "Todo",
+  doing: "Doing",
+  review: "Review",
+  done: "Done",
+};
+
+/** One column as a board shows it. Locked columns have no id. */
+export interface BoardColumn {
+  /** The droppable id and React key. */
+  key: string;
+  id: number | null;
+  name: string;
+  status: BoardStatus;
+  locked: boolean;
+}
+
+interface CustomColumn {
+  id: number;
+  name: string;
+  status: BoardStatus;
+  position: number;
+}
+
+export function columnKey(status: BoardStatus, columnId: number | null): string {
+  return columnId === null ? `column:${status}` : `column:c${columnId}`;
+}
+
+/** Status order, and within a status the locked column sits at position 0. */
+export function boardColumns(custom: CustomColumn[]): BoardColumn[] {
+  return BOARD_STATUSES.flatMap((status) => {
+    const own = custom.filter((c) => c.status === status).sort((a, b) => a.position - b.position || a.id - b.id);
+    const toColumn = (c: CustomColumn): BoardColumn => ({
+      key: columnKey(status, c.id),
+      id: c.id,
+      name: c.name,
+      status,
+      locked: false,
+    });
+    return [
+      ...own.filter((c) => c.position < 0).map(toColumn),
+      { key: columnKey(status, null), id: null, name: LOCKED_COLUMN_TITLES[status], status, locked: true },
+      ...own.filter((c) => c.position > 0).map(toColumn),
+    ];
+  });
+}
+
+/** How the task modal names a column: a custom one says which status it is. */
+export function columnLabel(column: BoardColumn): string {
+  return column.locked ? column.name : `${column.name} (${LOCKED_COLUMN_TITLES[column.status]})`;
+}
+
 const byPosition = (a: BoardCard, b: BoardCard): number => a.position - b.position || a.id - b.id;
 
-export function columnsOf<T extends BoardCard>(tasks: T[]): Record<BoardStatus, T[]> {
-  const columns: Record<BoardStatus, T[]> = { todo: [], doing: [], review: [], done: [] };
+/** Cards per column key. A card whose column this client does not know yet shows
+ *  in the locked column of its status until the module list refreshes. */
+export function cardsByColumn<T extends BoardCard>(tasks: T[], columns: BoardColumn[]): Map<string, T[]> {
+  const out = new Map<string, T[]>(columns.map((c) => [c.key, []]));
   for (const task of tasks) {
-    if (!task.archived) columns[task.status].push(task);
+    if (task.archived) continue;
+    const list = out.get(columnKey(task.status, task.column_id)) ?? out.get(columnKey(task.status, null));
+    list?.push(task);
   }
-  for (const status of BOARD_STATUSES) columns[status].sort(byPosition);
-  return columns;
+  for (const list of out.values()) list.sort(byPosition);
+  return out;
+}
+
+/** One module's tasks, or all of them for the `All` choice. */
+export function tasksInModule<T extends { module_id: number }>(tasks: T[], moduleId: number | null): T[] {
+  return moduleId === null ? tasks : tasks.filter((t) => t.module_id === moduleId);
+}
+
+/**
+ * Which module a project tab shows. A missing or unknown id falls back without
+ * an error: the Board shows one module, while the List and Calendar show all
+ * (null). A task link names no module, so the Board opens on that task's.
+ */
+export function selectedModuleId(
+  modules: { id: number }[],
+  requested: number | null,
+  view: "calendar" | "board" | "list",
+  openTaskModuleId: number | null,
+): number | null {
+  const exists = (id: number | null): boolean => id !== null && modules.some((m) => m.id === id);
+  if (exists(requested)) return requested;
+  if (view !== "board") return null;
+  if (exists(openTaskModuleId)) return openTaskModuleId;
+  return modules[0]?.id ?? null;
 }
 
 /** The board after a drop, shown at once while the server confirms. Mirrors
@@ -34,47 +115,57 @@ export function applyMove<T extends BoardCard>(
   tasks: T[],
   id: number,
   status: BoardStatus,
+  columnId: number | null,
   beforeId: number | null,
 ): T[] {
   const moved = tasks.find((t) => t.id === id);
   if (!moved) return tasks;
-  const target = tasks.filter((t) => t.status === status && !t.archived && t.id !== id).sort(byPosition);
+  const target = tasks
+    .filter(
+      (t) =>
+        t.module_id === moved.module_id &&
+        t.status === status &&
+        t.column_id === columnId &&
+        !t.archived &&
+        t.id !== id,
+    )
+    .sort(byPosition);
   const at = beforeId == null ? -1 : target.findIndex((t) => t.id === beforeId);
-  target.splice(at < 0 ? target.length : at, 0, { ...moved, status });
+  target.splice(at < 0 ? target.length : at, 0, { ...moved, status, column_id: columnId });
   const renumbered = new Map(target.map((t, i) => [t.id, { ...t, position: i + 1 }]));
   return tasks.map((t) => renumbered.get(t.id) ?? t);
 }
 
 /**
- * Where a drop lands. `over` is a card id, or `column:<status>` for a column's
- * empty space. Moving down a column means landing after the card under the
- * pointer, which is what the sortable animation shows.
+ * Where a drop lands. `over` is a card id, or a column's key for its empty space.
+ * Moving down a column means landing after the card under the pointer, which is
+ * what the sortable animation shows.
  */
 export function resolveDrop<T extends { id: number }>(
-  columns: Record<BoardStatus, T[]>,
+  columns: BoardColumn[],
+  cards: Map<string, T[]>,
   activeId: number,
   over: number | string,
-): { status: BoardStatus; beforeId: number | null } | null {
+): { status: BoardStatus; columnId: number | null; beforeId: number | null } | null {
   if (over === activeId) return null;
   if (typeof over === "string") {
-    const status = over.replace(/^column:/, "") as BoardStatus;
-    if (!BOARD_STATUSES.includes(status)) return null;
+    const column = columns.find((c) => c.key === over);
+    if (!column) return null;
     // Done goes to the top: recent work stays visible there, and Done is paged,
     // so a card sent to the bottom could land past the cards shown.
-    if (status === "done") {
-      return { status, beforeId: columns.done.find((t) => t.id !== activeId)?.id ?? null };
-    }
-    return { status, beforeId: null };
+    const beforeId =
+      column.status === "done" ? (cards.get(column.key) ?? []).find((t) => t.id !== activeId)?.id ?? null : null;
+    return { status: column.status, columnId: column.id, beforeId };
   }
-  const to = BOARD_STATUSES.find((s) => columns[s].some((t) => t.id === over));
+  const to = columns.find((c) => cards.get(c.key)?.some((t) => t.id === over));
   if (!to) return null;
-  const list = columns[to];
+  const list = cards.get(to.key) ?? [];
   const overIndex = list.findIndex((t) => t.id === over);
   const activeIndex = list.findIndex((t) => t.id === activeId);
   if (activeIndex >= 0 && activeIndex < overIndex) {
-    return { status: to, beforeId: list[overIndex + 1]?.id ?? null };
+    return { status: to.status, columnId: to.id, beforeId: list[overIndex + 1]?.id ?? null };
   }
-  return { status: to, beforeId: over };
+  return { status: to.status, columnId: to.id, beforeId: over };
 }
 
 export interface TaskFilter {

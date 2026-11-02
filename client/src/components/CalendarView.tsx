@@ -21,6 +21,7 @@ import {
   todayLocal,
   type CalendarTaskEntry,
 } from "../lib/calendarGrid";
+import { tasksInModule } from "../lib/taskBoard";
 
 /**
  * Google-Calendar-style month view of one project: each day lists the
@@ -99,12 +100,14 @@ function goMonth(projectId: number, month: string | null): void {
 
 interface Props {
   projectId: number;
+  /** Only this module's tasks, or all with null. Page activity is not filtered. */
+  moduleId: number | null;
   /** `YYYY-MM`, or null for the current month. */
   month: string | null;
   onOpenTask: (id: number) => void;
 }
 
-export function CalendarView({ projectId, month, onOpenTask }: Props): JSX.Element {
+export function CalendarView({ projectId, month, moduleId, onOpenTask }: Props): JSX.Element {
   const today = todayLocal();
   const shown = month ?? monthOf(today);
   const grid = useMemo(() => monthGrid(shown), [shown]);
@@ -137,8 +140,8 @@ export function CalendarView({ projectId, month, onOpenTask }: Props): JSX.Eleme
 
   const taskQuery = useListProjectTasksQuery({ projectId });
   const tasksOnDay = useMemo(
-    () => tasksByDate(showTasks ? taskQuery.data?.tasks ?? [] : [], grid.from, grid.to),
-    [showTasks, taskQuery.data, grid.from, grid.to],
+    () => tasksByDate(showTasks ? tasksInModule(taskQuery.data?.tasks ?? [], moduleId) : [], grid.from, grid.to),
+    [showTasks, taskQuery.data, moduleId, grid.from, grid.to],
   );
   const tasksDue = useMemo(() => {
     let n = 0;

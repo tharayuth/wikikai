@@ -8,6 +8,9 @@ const schemaPath = path.join(here, "schema.sql");
 
 export type Db = Database.Database;
 
+/** The module a project gets before anyone has made one. */
+export const DEFAULT_MODULE_NAME = "General";
+
 export function openDb(dbPath: string): Db {
   if (dbPath !== ":memory:") {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -54,6 +57,16 @@ export function openDb(dbPath: string): Db {
   if (!hasColumn(db, "projects", "id")) {
     migrateProjectsAddId(db);
   }
+  if (!hasColumn(db, "tasks", "module_id")) {
+    // Nullable in SQL only: SQLite cannot add a NOT NULL foreign key to an
+    // existing table. TaskStore and the backfill below guarantee a value.
+    db.exec(`ALTER TABLE tasks ADD COLUMN module_id INTEGER REFERENCES task_modules(id) ON DELETE RESTRICT`);
+  }
+  if (!hasColumn(db, "tasks", "column_id")) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN column_id INTEGER REFERENCES task_columns(id) ON DELETE SET NULL`);
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(module_id, status, column_id, position)`);
+  backfillTaskPlacement(db);
   if (!hasColumn(db, "pages", "archived_at")) {
     // Soft-archive flag for pages. NULL = active; ISO timestamp = archived.
     // Archived pages are hidden from the sidebar + search by default but
@@ -120,6 +133,46 @@ export function purgeOrphanFtsRows(db: Db): number {
     .prepare(`DELETE FROM pages_fts WHERE rowid NOT IN (SELECT id FROM pages)`)
     .run();
   return Number(info.changes ?? 0);
+}
+
+/**
+ * Put tasks with no module into their project's first module, and drop a column
+ * that no longer matches its task. Runs on every open, not just once, because a
+ * build from before modules can still open this database after a rollback: it
+ * inserts tasks with no module and changes status without clearing `column_id`.
+ * Positions stay as they are, since these tasks all land in one module's locked
+ * columns.
+ */
+function backfillTaskPlacement(db: Database.Database): void {
+  db.transaction(() => {
+    const projects = db
+      .prepare(`SELECT DISTINCT project_id FROM tasks WHERE module_id IS NULL`)
+      .all() as { project_id: number }[];
+    for (const { project_id } of projects) {
+      const first = db
+        .prepare(`SELECT id FROM task_modules WHERE project_id = ? ORDER BY position, id LIMIT 1`)
+        .get(project_id) as { id: number } | undefined;
+      const moduleId =
+        first?.id ??
+        Number(
+          db
+            .prepare(`INSERT INTO task_modules (project_id, name, position, created_at) VALUES (?, ?, 1, ?)`)
+            .run(project_id, DEFAULT_MODULE_NAME, new Date().toISOString()).lastInsertRowid,
+        );
+      db.prepare(`UPDATE tasks SET module_id = ? WHERE project_id = ? AND module_id IS NULL`).run(
+        moduleId,
+        project_id,
+      );
+    }
+    db.exec(
+      `UPDATE tasks SET column_id = NULL
+       WHERE column_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM task_columns c
+                         WHERE c.id = tasks.column_id
+                           AND c.status = tasks.status
+                           AND c.module_id = tasks.module_id)`,
+    );
+  })();
 }
 
 /**

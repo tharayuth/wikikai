@@ -12,6 +12,7 @@ import {
   buildProjectViewSearch,
   buildTaskLink,
   buildTaskSearch,
+  buildModuleSearch,
   parseCalendar,
   withoutCalendar,
 } from "../client/src/hooks/useHash.js";
@@ -167,12 +168,13 @@ describe("calendar grid + URL helpers", () => {
   it("round-trips the calendar query and keeps other params", () => {
     const q = buildCalendarSearch("?projects=1,2", 7, "2026-09");
     expect(q).toBe("?projects=1,2&calendar=7&month=2026-09");
-    expect(parseCalendar(q)).toEqual({ projectId: 7, month: "2026-09", view: "calendar", taskId: null });
+    expect(parseCalendar(q)).toEqual({ projectId: 7, month: "2026-09", view: "calendar", taskId: null, moduleId: null });
     expect(parseCalendar("?calendar=7&month=2026-13")).toEqual({
       projectId: 7,
       month: null,
       view: "calendar",
       taskId: null,
+      moduleId: null,
     });
     expect(parseCalendar("?projects=1")).toBeNull();
     expect(withoutCalendar(q)).toBe("?projects=1,2");
@@ -184,6 +186,15 @@ describe("calendar grid + URL helpers", () => {
     expect(parseCalendar("?calendar=7&view=nope&task=abc")).toMatchObject({ view: "calendar", taskId: null });
     expect(parseCalendar("?calendar=7&task=-1")).toMatchObject({ taskId: null });
     expect(parseCalendar("?calendar=7&task=1.5")).toMatchObject({ taskId: null });
+  });
+
+  it("reads and builds the module, ignoring bad values", () => {
+    expect(parseCalendar("?calendar=7&view=board&module=3")).toMatchObject({ moduleId: 3 });
+    expect(parseCalendar("?calendar=7&module=abc")).toMatchObject({ moduleId: null });
+    expect(buildModuleSearch("?calendar=7&view=board", 3)).toBe("?calendar=7&view=board&module=3");
+    expect(buildModuleSearch("?calendar=7&view=board&module=3", null)).toBe("?calendar=7&view=board");
+    expect(buildProjectViewSearch("?calendar=7&view=board&module=3", "list")).toBe("?calendar=7&view=list&module=3");
+    expect(withoutCalendar("?calendar=7&view=board&module=3")).toBe("");
   });
 
   it("builds view and task queries, keeping other params", () => {

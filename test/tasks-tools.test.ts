@@ -9,6 +9,8 @@ import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
 import { PermissionStore } from "../src/store/permissions.js";
 import { PromptLogStore } from "../src/store/promptLog.js";
+import { TaskStore } from "../src/store/tasks.js";
+import type { TaskModuleStore } from "../src/store/taskModules.js";
 import { UserStore, type User } from "../src/store/users.js";
 import { buildToolHandlers, type ToolHandlers } from "../src/mcp/handlers.js";
 import { withCallContext } from "../src/lib/callContext.js";
@@ -20,6 +22,8 @@ describe("task tools", () => {
   let bob: User;
   let carol: User;
   let dave: User;
+  let modules: TaskModuleStore;
+  let alphaId: number;
 
   const as = <T>(user: User, fn: () => T): T =>
     withCallContext({ source: "mcp", user_id: user.id }, fn);
@@ -39,6 +43,9 @@ describe("task tools", () => {
     permissions.replaceForUser(alice.id, [{ project: "alpha", level: "edit" }], admin.id);
     permissions.replaceForUser(bob.id, [{ project: "alpha", level: "edit" }], admin.id);
     permissions.replaceForUser(carol.id, [{ project: "alpha", level: "view" }], admin.id);
+    const taskStore = new TaskStore(db, new ActivityLogStore(db));
+    modules = taskStore.modules;
+    alphaId = taskStore.ensureProject("alpha").id;
     h = buildToolHandlers(
       knowledge,
       new PageStore(db, path.join(dir, "items")),
@@ -122,7 +129,7 @@ describe("task tools", () => {
     const { tasks } = await as(alice, () => h.list_tasks({ project: "alpha" }));
     expect(tasks.map((t) => t.title)).toEqual(["Open"]);
     expect(Object.keys(tasks[0]).sort()).toEqual(
-      ["assignee", "blocked_reason", "due_date", "id", "labels", "status", "title", "url", "version"].sort(),
+      ["assignee", "blocked_reason", "column", "due_date", "id", "labels", "module", "status", "title", "url", "version"].sort(),
     );
     const { tasks: closed } = await as(alice, () => h.list_tasks({ project: "alpha", status: ["done"] }));
     expect(closed.map((t) => t.title)).toEqual(["Closed"]);
@@ -198,5 +205,89 @@ describe("task tools", () => {
     const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", assignee: "me" }));
     const cleared = await as(alice, () => h.edit_task({ task_id: t.id, expected_version: 1, assignee: null }));
     expect(cleared.assignee).toBeNull();
+  });
+
+  describe("modules and columns", () => {
+    const backend = (): { id: number } => modules.addModule(alphaId, "Backend");
+
+    it("reports the module and column in the full task and the compact row", async () => {
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T" }));
+      expect(t).toMatchObject({ module: "General", column: "Todo" });
+      const { tasks } = await as(alice, () => h.list_tasks({ project: "alpha" }));
+      expect(tasks[0]).toMatchObject({ module: "General", column: "Todo" });
+    });
+
+    it("adds to a named module and column, and the status follows the column", async () => {
+      modules.addColumn(backend().id, { name: "QA", status: "review" });
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", module: "backend", column: "qa" }));
+      expect(t).toMatchObject({ module: "Backend", column: "QA", status: "review" });
+    });
+
+    it("accepts a locked column by name, which sets the status", async () => {
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", column: "Doing" }));
+      expect(t).toMatchObject({ column: "Doing", column_id: null, status: "doing" });
+    });
+
+    it("lists valid names when a module or column is unknown", async () => {
+      await expect(as(alice, () => h.add_task({ project: "alpha", title: "T", module: "Nope" }))).rejects.toThrow(
+        "module 'Nope' not found. Valid modules: General",
+      );
+      await expect(as(alice, () => h.add_task({ project: "alpha", title: "T", column: "Nope" }))).rejects.toThrow(
+        "column 'Nope' not found in module 'General'. Valid columns: Todo, Doing, Review, Done",
+      );
+    });
+
+    it("refuses a status against the column", async () => {
+      await expect(
+        as(alice, () => h.add_task({ project: "alpha", title: "T", column: "Done", status: "doing" })),
+      ).rejects.toThrow("column 'Done' has status done, not doing");
+    });
+
+    it("filters list_tasks by module, and next combines with module only", async () => {
+      backend();
+      await as(alice, () => h.add_task({ project: "alpha", title: "general" }));
+      await as(alice, () => h.add_task({ project: "alpha", title: "backend", module: "Backend" }));
+      const listed = await as(alice, () => h.list_tasks({ project: "alpha", module: "Backend" }));
+      expect(listed.tasks.map((t) => t.title)).toEqual(["backend"]);
+      const next = await as(alice, () => h.list_tasks({ project: "alpha", module: "Backend", next: true }));
+      expect(next.tasks.map((t) => t.title)).toEqual(["backend"]);
+      await expect(as(alice, () => h.list_tasks({ project: "alpha", label: "x", next: true }))).rejects.toThrow(
+        /next cannot be combined/,
+      );
+    });
+
+    it("does not offer a task in a custom Todo column as next", async () => {
+      modules.addColumn(modules.list(alphaId)[0].id, { name: "Backlog", status: "todo" });
+      await as(alice, () => h.add_task({ project: "alpha", title: "later", column: "Backlog" }));
+      expect((await as(alice, () => h.list_tasks({ project: "alpha", next: true }))).tasks).toEqual([]);
+    });
+
+    it("moves with edit_task, and null returns to the locked column", async () => {
+      const b = backend();
+      modules.addColumn(b.id, { name: "QA", status: "review" });
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T" }));
+      const moved = await as(alice, () =>
+        h.edit_task({ task_id: t.id, expected_version: t.version, module: "Backend", column: "QA" }),
+      );
+      expect(moved).toMatchObject({ module: "Backend", column: "QA", status: "review", version: t.version + 1 });
+      const back = await as(alice, () =>
+        h.edit_task({ task_id: t.id, expected_version: moved.version, column: null }),
+      );
+      expect(back).toMatchObject({ column: "Review", column_id: null, version: moved.version });
+    });
+
+    it("finds a column in the task's own module when no module is named", async () => {
+      const b = backend();
+      modules.addColumn(b.id, { name: "QA", status: "review" });
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", module: "Backend" }));
+      const moved = await as(alice, () => h.edit_task({ task_id: t.id, expected_version: t.version, column: "QA" }));
+      expect(moved.column).toBe("QA");
+    });
+
+    it("keeps the url free of the module, so old links keep working", async () => {
+      backend();
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", module: "Backend" }));
+      expect(t.url).toBe(`http://test/?calendar=${t.project_id}&view=board&task=${t.id}`);
+    });
   });
 });

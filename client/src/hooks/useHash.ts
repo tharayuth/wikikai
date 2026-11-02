@@ -37,6 +37,8 @@ export interface CalendarLocation {
   view: ProjectViewKind;
   /** `task=<id>`: the task modal open over that view. */
   taskId: number | null;
+  /** `module=<id>`: which of the project's boards. Null lets the view choose. */
+  moduleId: number | null;
 }
 
 function toSearch(params: URLSearchParams): string {
@@ -67,8 +69,8 @@ export function parseProjectFilter(search: string): ProjectFilter | null {
   return { ids, noProject };
 }
 
-/** Parse `?calendar=7&month=2026-09&view=board&task=12`. Null when `calendar`
- *  is absent or malformed; a bad `month`, `view` or `task` falls back alone. */
+/** Parse `?calendar=7&month=2026-09&view=board&module=3&task=12`. Null when
+ *  `calendar` is absent or malformed; any other bad value falls back alone. */
 export function parseCalendar(search: string): CalendarLocation | null {
   const params = new URLSearchParams(search);
   const projectId = Number(params.get("calendar"));
@@ -76,11 +78,13 @@ export function parseCalendar(search: string): CalendarLocation | null {
   const month = params.get("month");
   const view = params.get("view");
   const taskId = Number(params.get("task"));
+  const moduleId = Number(params.get("module"));
   return {
     projectId,
     month: month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null,
     view: view === "board" || view === "list" ? view : "calendar",
     taskId: Number.isInteger(taskId) && taskId > 0 ? taskId : null,
+    moduleId: Number.isInteger(moduleId) && moduleId > 0 ? moduleId : null,
   };
 }
 
@@ -105,6 +109,7 @@ export function withoutCalendar(search: string): string {
   params.delete("month");
   params.delete("view");
   params.delete("task");
+  params.delete("module");
   return toSearch(params);
 }
 
@@ -121,6 +126,14 @@ export function buildTaskSearch(search: string, taskId: number | null): string {
   const params = new URLSearchParams(search);
   if (taskId == null) params.delete("task");
   else params.set("task", String(taskId));
+  return toSearch(params);
+}
+
+/** Show one module, or with null let the view choose. */
+export function buildModuleSearch(search: string, moduleId: number | null): string {
+  const params = new URLSearchParams(search);
+  if (moduleId == null) params.delete("module");
+  else params.set("module", String(moduleId));
   return toSearch(params);
 }
 
