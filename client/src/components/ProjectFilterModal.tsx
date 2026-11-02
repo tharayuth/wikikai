@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useAddProjectMutation,
   useDeleteKnowledgeMutation,
@@ -10,6 +9,7 @@ import {
 import { useAppDispatch, useAppSelector } from "../store";
 import { closeProjectFilter, showToast } from "../store/uiSlice";
 import { buildProjectsSearch, useHash } from "../hooks/useHash";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 const NO_PROJECT_KEY = "(no project)";
 
@@ -186,10 +186,7 @@ export function ProjectFilterModal() {
     return () => window.removeEventListener("keydown", onEsc);
   }, [open, dispatch]);
 
-  // Close only when the press AND the release both happen on the backdrop —
-  // prevents the dialog from closing while the user drags to select text
-  // inside the modal and the mouseup ends outside the inner card.
-  const downOnBackdropRef = useRef(false);
+  const backdrop = useBackdropClose(() => dispatch(closeProjectFilter()));
 
   if (!open) return null;
 
@@ -219,21 +216,10 @@ export function ProjectFilterModal() {
   const activeCount =
     selectedSet == null ? projects.length : selectedSet.size;
 
-  const onBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    downOnBackdropRef.current = e.target === e.currentTarget;
-  };
-  const onBackdropMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (downOnBackdropRef.current && e.target === e.currentTarget) {
-      dispatch(closeProjectFilter());
-    }
-    downOnBackdropRef.current = false;
-  };
-
   return (
     <div
       className="modal-backdrop show"
-      onMouseDown={onBackdropMouseDown}
-      onMouseUp={onBackdropMouseUp}
+      {...backdrop}
     >
       <div
         className="modal project-filter-modal"

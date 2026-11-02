@@ -15,6 +15,7 @@ import {
   type NoteDraft,
   type NoteItemDraft,
 } from "../lib/notes";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 /** How long typing has to pause before it saves. */
 const AUTOSAVE_MS = 800;
@@ -353,8 +354,10 @@ export function NoteModal({ noteId, projectId, onClose }: ModalProps): JSX.Eleme
 
   const color = note?.color ?? "default";
 
+  const backdrop = useBackdropClose(() => void requestClose());
+
   return (
-    <div className="modal-backdrop show" onClick={() => void requestClose()}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className={`modal note-modal color-${color}`}
         role="dialog"

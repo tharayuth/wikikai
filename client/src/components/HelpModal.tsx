@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import { closeHelp, setHelpLang, setHelpTab } from "../store/uiSlice";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 export function HelpModal() {
   const dispatch = useAppDispatch();
+  const backdrop = useBackdropClose(() => dispatch(closeHelp()));
   const open = useAppSelector((s) => s.ui.helpOpen);
   const tab = useAppSelector((s) => s.ui.helpTab);
   const lang = useAppSelector((s) => s.ui.helpLang);
@@ -20,7 +22,7 @@ export function HelpModal() {
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop show" onClick={() => dispatch(closeHelp())}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div className="modal help-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header help-header">
           <div className="help-tabs">

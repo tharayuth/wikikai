@@ -10,6 +10,7 @@ import {
   useGetShareStatusQuery,
   useRotateShareMutation,
 } from "../store/api";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 /**
  * Public-share dialog for a single knowledge (`&N`). Opened from the badge
@@ -22,6 +23,7 @@ import {
 export function ShareModal(): JSX.Element | null {
   const kid = useAppSelector((s) => s.ui.shareKnowledgeId);
   const dispatch = useAppDispatch();
+  const backdrop = useBackdropClose(() => dispatch(closeShareModal()));
   const open = kid != null;
 
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: !open });
@@ -64,7 +66,7 @@ export function ShareModal(): JSX.Element | null {
     dispatch(showToast({ message: `${action}ไม่สำเร็จ`, kind: "error" }));
 
   return (
-    <div className="modal-backdrop show" onClick={() => dispatch(closeShareModal())}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className={`modal share-modal${shared ? " share-modal-wide" : ""}`}
         onClick={(e) => e.stopPropagation()}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useGetPageRawQuery } from "../store/api";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 interface Props {
   pageId: number;
@@ -94,20 +95,12 @@ export function PageDiffModal({
   }, [lines]);
 
   // mousedown/up pair so dragging-to-select doesn't close the modal
-  const downRef = useRef(false);
-  const onDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    downRef.current = e.target === e.currentTarget;
-  };
-  const onUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (downRef.current && e.target === e.currentTarget) onClose();
-    downRef.current = false;
-  };
+  const backdrop = useBackdropClose(onClose);
 
   return (
     <div
       className="modal-backdrop show"
-      onMouseDown={onDown}
-      onMouseUp={onUp}
+      {...backdrop}
     >
       <div
         className="modal page-diff-modal"

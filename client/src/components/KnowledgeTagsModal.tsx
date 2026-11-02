@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
-import type React from "react";
+import { useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import {
   useGetKnowledgeQuery,
@@ -11,6 +10,7 @@ import {
   showToast,
 } from "../store/uiSlice";
 import { KnowledgeTagEditor } from "./KnowledgeTagEditor";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 export function KnowledgeTagsModal(): JSX.Element | null {
   const kid = useAppSelector((state) => state.ui.tagsKnowledgeId);
@@ -19,7 +19,7 @@ export function KnowledgeTagsModal(): JSX.Element | null {
   const knowledge = useGetKnowledgeQuery(kid as number, { skip: !open });
   const { data: knowledges = [] } = useListKnowledgeQuery();
   const [updateKnowledge, updateState] = useUpdateKnowledgeMutation();
-  const downOnBackdropRef = useRef(false);
+  const backdrop = useBackdropClose(() => close());
 
   const suggestions = useMemo(
     () =>
@@ -46,21 +46,10 @@ export function KnowledgeTagsModal(): JSX.Element | null {
 
   const meta = knowledge.data;
   const close = () => dispatch(closeKnowledgeTagsModal());
-  const onBackdropMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    downOnBackdropRef.current = event.target === event.currentTarget;
-  };
-  const onBackdropMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (downOnBackdropRef.current && event.target === event.currentTarget) {
-      close();
-    }
-    downOnBackdropRef.current = false;
-  };
-
   return (
     <div
       className="modal-backdrop show"
-      onMouseDown={onBackdropMouseDown}
-      onMouseUp={onBackdropMouseUp}
+      {...backdrop}
     >
       <div
         className="modal knowledge-tags-modal"

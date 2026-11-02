@@ -25,6 +25,7 @@ import {
   formatDate,
   formatDateTime,
 } from "./userUi";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 type Tab = "profile" | "access" | "token";
 type Selection = { kind: "user"; id: number } | { kind: "add" } | null;
@@ -75,6 +76,7 @@ export function UsersAdminModal(): JSX.Element | null {
     () => guard(() => dispatch(closeUsersAdmin())),
     [guard, dispatch],
   );
+  const backdrop = useBackdropClose(close);
 
   useEffect(() => {
     if (!open) return;
@@ -146,7 +148,7 @@ export function UsersAdminModal(): JSX.Element | null {
     });
 
   return (
-    <div className="modal-backdrop show" onClick={close}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className="modal users-admin-modal"
         onClick={(e) => e.stopPropagation()}

@@ -22,6 +22,7 @@ import {
   type CalendarTaskEntry,
 } from "../lib/calendarGrid";
 import { tasksInModule } from "../lib/taskBoard";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 /**
  * Google-Calendar-style month view of one project: each day lists the
@@ -484,8 +485,10 @@ function DayPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const backdrop = useBackdropClose(onClose);
+
   return (
-    <div className="modal-backdrop show" onClick={onClose}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className="modal cal-panel"
         role="dialog"

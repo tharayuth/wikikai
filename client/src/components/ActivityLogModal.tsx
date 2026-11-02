@@ -6,6 +6,7 @@ import {
   type ActivityLogEntry,
 } from "../store/api";
 import { buildTaskLink, currentQueryString, navigateTo } from "../hooks/useHash";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 /**
  * Tall, scrollable audit-log dialog opened from the topbar. Lists
@@ -21,6 +22,7 @@ import { buildTaskLink, currentQueryString, navigateTo } from "../hooks/useHash"
 export function ActivityLogModal(): JSX.Element | null {
   const open = useAppSelector((s) => s.ui.activityLogOpen);
   const dispatch = useAppDispatch();
+  const backdrop = useBackdropClose(() => dispatch(closeActivityLog()));
   const { data, isFetching } = useGetActivityLogQuery(
     { limit: 200 },
     { skip: !open },
@@ -40,7 +42,7 @@ export function ActivityLogModal(): JSX.Element | null {
   return (
     <div
       className="modal-backdrop show activity-log-backdrop"
-      onClick={() => dispatch(closeActivityLog())}
+      {...backdrop}
     >
       <div
         className="modal activity-log-modal"

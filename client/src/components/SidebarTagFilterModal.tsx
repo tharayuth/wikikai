@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 export interface SidebarTagFilterOption {
   tag: string;
@@ -27,7 +27,7 @@ export function SidebarTagFilterModal({
   onClose,
 }: Props): JSX.Element | null {
   const [query, setQuery] = useState("");
-  const downOnBackdropRef = useRef(false);
+  const backdrop = useBackdropClose(onClose);
   const selectedKeys = useMemo(
     () => new Set(selectedTags.map(tagKey)),
     [selectedTags],
@@ -52,21 +52,10 @@ export function SidebarTagFilterModal({
 
   if (!open) return null;
 
-  const onBackdropMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    downOnBackdropRef.current = event.target === event.currentTarget;
-  };
-  const onBackdropMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (downOnBackdropRef.current && event.target === event.currentTarget) {
-      onClose();
-    }
-    downOnBackdropRef.current = false;
-  };
-
   return createPortal(
     <div
       className="modal-backdrop show"
-      onMouseDown={onBackdropMouseDown}
-      onMouseUp={onBackdropMouseUp}
+      {...backdrop}
     >
       <div
         className="modal project-filter-modal tag-filter-modal"

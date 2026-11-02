@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 const ACCEPT = "image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml";
 const MAX_BYTES = 10 * 1024 * 1024; // ~10 MB per file
@@ -55,6 +56,9 @@ function fileToBase64(file: File): Promise<string> {
 export function ImageUploadModal({ open, onClose, onInsert }: Props) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  const backdrop = useBackdropClose(() => {
+    if (!busy) onClose();
+  });
   const [dragOver, setDragOver] = useState(false);
   const [width, setWidth] = useState<number>(DEFAULT_WIDTH);
   const [height, setHeight] = useState<number>(DEFAULT_HEIGHT);
@@ -180,7 +184,7 @@ export function ImageUploadModal({ open, onClose, onInsert }: Props) {
   const validCount = entries.filter((e) => !e.error).length;
 
   return (
-    <div className="modal-backdrop show" onClick={() => !busy && onClose()}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className="modal image-upload-modal"
         onClick={(e) => e.stopPropagation()}

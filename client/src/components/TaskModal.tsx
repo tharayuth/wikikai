@@ -18,6 +18,7 @@ import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { writeClipboard } from "../lib/badgeMenu";
 import { apiErrorMessage, boardColumns, columnKey, columnLabel } from "../lib/taskBoard";
 import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 interface Props {
   projectId: number;
@@ -200,8 +201,10 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
       : columnKey(draft.status, null)
     : "";
 
+  const backdrop = useBackdropClose(requestClose);
+
   return (
-    <div className="modal-backdrop show" onClick={requestClose}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className="modal task-modal"
         role="dialog"

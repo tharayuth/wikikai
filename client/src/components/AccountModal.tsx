@@ -7,6 +7,7 @@ import {
   useRegenerateMcpTokenMutation,
 } from "../store/api";
 import { Avatar, CloseIcon, RoleBadge, formatDate, formatDateTime } from "./userUi";
+import { useBackdropClose } from "../hooks/useBackdropClose";
 
 /**
  * Account profile dialog reached from the topbar user widget. Shows
@@ -19,6 +20,7 @@ import { Avatar, CloseIcon, RoleBadge, formatDate, formatDateTime } from "./user
 export function AccountModal(): JSX.Element | null {
   const open = useAppSelector((s) => s.ui.accountOpen);
   const dispatch = useAppDispatch();
+  const backdrop = useBackdropClose(() => dispatch(closeAccount()));
   const { data } = useGetAuthMeQuery(undefined, { skip: !open });
   const [regen, { isLoading: regenerating }] = useRegenerateMcpTokenMutation();
   const [showToken, setShowToken] = useState(false);
@@ -79,7 +81,7 @@ export function AccountModal(): JSX.Element | null {
   };
 
   return (
-    <div className="modal-backdrop show" onClick={() => dispatch(closeAccount())}>
+    <div className="modal-backdrop show" {...backdrop}>
       <div
         className="modal account-modal"
         onClick={(e) => e.stopPropagation()}
