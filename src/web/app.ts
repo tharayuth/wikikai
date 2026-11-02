@@ -904,7 +904,11 @@ export function buildApp(opts: BuildAppOptions): Express {
   // ─── Projects: registry + derived names ───
   app.get("/api/projects", (req, res, next) => {
     try {
-      const all = opts.knowledge.listProjects();
+      const summaries = opts.tasks?.openTaskSummaries();
+      const all = opts.knowledge.listProjects().map((p) => {
+        const summary = p.id != null ? summaries?.get(p.id) : undefined;
+        return { ...p, open_tasks: summary?.open_tasks ?? 0, earliest_due: summary?.earliest_due ?? null };
+      });
       if (!req.user || !aclEnabled || req.user.is_admin) {
         res.json({ projects: all });
         return;

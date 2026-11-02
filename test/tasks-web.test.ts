@@ -195,6 +195,17 @@ describe("task routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("reports open tasks on the project list, only to callers who see the project", async () => {
+    tasks.add(projectId, { title: "Open", due_date: "2026-11-01" });
+    tasks.add(projectId, { title: "Finished", status: "done", due_date: "2020-01-01" });
+    const alpha = (await api().get("/api/projects").set("Cookie", carolCookie)).body.projects.find(
+      (p: { name: string }) => p.name === "alpha",
+    );
+    expect(alpha).toMatchObject({ open_tasks: 1, earliest_due: "2026-11-01" });
+    const seenByDave = (await api().get("/api/projects").set("Cookie", daveCookie)).body.projects;
+    expect(seenByDave.some((p: { name: string }) => p.name === "alpha")).toBe(false);
+  });
+
   it("lists assignable members by id and display name only", async () => {
     const res = await api().get(`/api/projects/${projectId}/members`).set("Cookie", carolCookie);
     expect(res.status).toBe(200);

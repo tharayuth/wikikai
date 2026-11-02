@@ -847,6 +847,9 @@ button.ki-id-badge::after {
   border-color: var(--border);
   color: var(--accent);
 }
+/* After :hover on purpose, so the task state stays readable under the mouse. */
+.sidebar-group-calendar-btn.has-open-tasks { color: var(--blue-text); }
+.sidebar-group-calendar-btn.has-overdue-tasks { color: var(--red-text); }
 /* Project id pill — hidden until the mouse hovers the project header;
    click opens the project menu (new knowledge, copy id, open alone, rename). */
 .sidebar-group-id-badge {

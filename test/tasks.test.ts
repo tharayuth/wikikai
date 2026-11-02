@@ -384,6 +384,36 @@ describe("TaskStore", () => {
     });
   });
 
+  describe("openTaskSummaries", () => {
+    it("counts open tasks per project with the earliest due date", () => {
+      const { tasks, knowledge, alpha } = setup();
+      knowledge.registerProject("beta");
+      const beta = tasks.ensureProject("beta");
+      tasks.add(alpha.id, { title: "Later", due_date: "2026-12-01" });
+      tasks.add(alpha.id, { title: "Sooner", status: "doing", due_date: "2026-11-01" });
+      tasks.add(alpha.id, { title: "No date", status: "review" });
+      tasks.add(beta.id, { title: "No date" });
+      const summaries = tasks.openTaskSummaries();
+      expect(summaries.get(alpha.id)).toEqual({ open_tasks: 3, earliest_due: "2026-11-01" });
+      expect(summaries.get(beta.id)).toEqual({ open_tasks: 1, earliest_due: null });
+    });
+
+    it("leaves out done and archived tasks, and projects with nothing open", () => {
+      const { tasks, alpha } = setup();
+      tasks.add(alpha.id, { title: "Done", status: "done", due_date: "2020-01-01" });
+      const gone = tasks.add(alpha.id, { title: "Gone", due_date: "2020-01-01" });
+      tasks.edit(gone.id, { expected_version: 1, archived: true });
+      expect(tasks.openTaskSummaries().has(alpha.id)).toBe(false);
+    });
+
+    it("counts a blocked task as open", () => {
+      const { tasks, alpha } = setup();
+      const stuck = tasks.add(alpha.id, { title: "Stuck", due_date: "2020-01-01" });
+      tasks.edit(stuck.id, { expected_version: 1, blocked_reason: "Waiting" });
+      expect(tasks.openTaskSummaries().get(alpha.id)).toEqual({ open_tasks: 1, earliest_due: "2020-01-01" });
+    });
+  });
+
   describe("members and assignees", () => {
     it("lists users with edit access plus admins, with no emails", () => {
       const { tasks } = setup();

@@ -262,6 +262,12 @@ function toRow(r: TaskDbRow): TaskRow {
   };
 }
 
+export interface OpenTaskSummary {
+  open_tasks: number;
+  /** Earliest due date among open tasks; null when none has one. */
+  earliest_due: string | null;
+}
+
 export class TaskStore {
   private readonly aclEnabled: boolean;
 
@@ -394,6 +400,20 @@ export class TaskStore {
       )
       .get(projectId, callerId) as TaskDbRow | undefined;
     return row ? toRow(row) : null;
+  }
+
+  /** Per project, the tasks still open (not done, not archived). A project
+   *  with nothing open has no entry. */
+  openTaskSummaries(): Map<number, OpenTaskSummary> {
+    const rows = this.db
+      .prepare(
+        `SELECT project_id, COUNT(*) AS open_tasks, MIN(due_date) AS earliest_due
+         FROM tasks
+         WHERE status != 'done' AND archived_at IS NULL
+         GROUP BY project_id`,
+      )
+      .all() as (OpenTaskSummary & { project_id: number })[];
+    return new Map(rows.map(({ project_id, ...summary }) => [project_id, summary]));
   }
 
   // ─── Writes ───

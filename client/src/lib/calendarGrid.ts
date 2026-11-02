@@ -123,3 +123,15 @@ export function tasksByDate<T extends DatedTask>(
 export function isOverdue(task: { due_date: string | null; status: string }, today: string): boolean {
   return task.due_date !== null && task.due_date < today && task.status !== "done";
 }
+
+export type CalendarIconState = "open" | "overdue";
+
+/** What a project's calendar icon shows: overdue when an open task is past its
+ *  due date, open when tasks remain, nothing when none do. */
+export function calendarIconState(
+  summary: { open_tasks: number; earliest_due: string | null },
+  today: string,
+): CalendarIconState | null {
+  if (summary.open_tasks === 0) return null;
+  return summary.earliest_due !== null && summary.earliest_due < today ? "overdue" : "open";
+}

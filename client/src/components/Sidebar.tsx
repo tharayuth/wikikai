@@ -36,6 +36,7 @@ import {
 } from "../lib/starredKnowledge";
 import { matchesAnyKnowledgeTag } from "../lib/knowledgeTags";
 import { withDocumentlessProjects } from "../lib/sidebarGroups";
+import { calendarIconState, todayLocal, type CalendarIconState } from "../lib/calendarGrid";
 import {
   SidebarTagFilterModal,
   type SidebarTagFilterOption,
@@ -423,16 +424,18 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
 
   // name <-> id maps from the project registry (ids power the sidebar badge
   // and the `?projects=` menu filter).
-  const { nameToId, idToName } = useMemo(() => {
+  const { nameToId, idToName, nameToProject } = useMemo(() => {
     const nameToId = new Map<string, number>();
     const idToName = new Map<number, string>();
+    const nameToProject = new Map<string, { open_tasks: number; earliest_due: string | null }>();
     for (const p of projectList?.projects ?? []) {
       if (p.id != null) {
         nameToId.set(p.name, p.id);
         idToName.set(p.id, p.name);
+        nameToProject.set(p.name, p);
       }
     }
-    return { nameToId, idToName };
+    return { nameToId, idToName, nameToProject };
   }, [projectList]);
   const [starredOnly, setStarredOnly] = useState(false);
   const [archivedOnly, setArchivedOnly] = useState(false);
@@ -890,11 +893,13 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
             activeKid != null && list.some((it) => it.id === activeKid)
               ? activeKid
               : null;
+          const registered = nameToProject.get(project);
           return (
           <ProjectGroup
             key={project}
             project={project}
             projectId={nameToId.get(project) ?? null}
+            calendarState={registered ? calendarIconState(registered, todayLocal()) : null}
             activeKidInGroup={activeKidInGroup}
           >
             {list.length === 0 && (
@@ -961,12 +966,15 @@ function writeStoredOpen(project: string, open: boolean): void {
 function ProjectGroup({
   project,
   projectId,
+  calendarState,
   activeKidInGroup,
   children,
 }: {
   project: string;
   /** Registry id, or null for unregistered names like "(no project)". */
   projectId: number | null;
+  /** Colours the calendar icon; null when the project has no open tasks. */
+  calendarState: CalendarIconState | null;
   /** Id of the currently-active knowledge when it belongs to this project,
    *  else null. Drives the initial state and the auto-open below — carrying
    *  the id rather than a boolean is what lets the group react to moving
@@ -1083,6 +1091,11 @@ function ProjectGroup({
     }
   };
 
+  // Spelled out as well as coloured, so the state is not carried by colour alone.
+  const calendarLabel = `Calendar and tasks of ${project}${
+    calendarState === "overdue" ? ": has overdue tasks" : calendarState === "open" ? ": has open tasks" : ""
+  }`;
+
   return (
     <div className={`sidebar-group${open ? "" : " collapsed"}`}>
       <div className="sidebar-group-header">
@@ -1111,10 +1124,10 @@ function ProjectGroup({
         {projectId != null && (
           <button
             type="button"
-            className="sidebar-group-calendar-btn"
+            className={`sidebar-group-calendar-btn${calendarState ? ` has-${calendarState}-tasks` : ""}`}
             onClick={openCalendar}
-            title={`Calendar and tasks of ${project}`}
-            aria-label={`Calendar and tasks of ${project}`}
+            title={calendarLabel}
+            aria-label={calendarLabel}
           >
             <svg
               viewBox="0 0 24 24"

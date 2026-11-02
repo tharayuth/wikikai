@@ -6,7 +6,7 @@ import { openDb, type Db } from "../src/store/db.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
 import { bucketEvents, projectCalendar, type CalendarEvent } from "../src/store/calendar.js";
-import { filterDays, isOverdue, monthGrid, shiftMonth, tasksByDate } from "../client/src/lib/calendarGrid.js";
+import { calendarIconState, filterDays, isOverdue, monthGrid, shiftMonth, tasksByDate } from "../client/src/lib/calendarGrid.js";
 import {
   buildCalendarSearch,
   buildProjectViewSearch,
@@ -289,5 +289,26 @@ describe("tasks on the calendar", () => {
     expect(isOverdue(task(1, { due_date: "2026-11-02" }), "2026-11-02")).toBe(false);
     expect(isOverdue(task(1, { due_date: "2026-11-01", status: "done" }), "2026-11-02")).toBe(false);
     expect(isOverdue(task(1), "2026-11-02")).toBe(false);
+  });
+});
+
+describe("calendarIconState", () => {
+  const today = "2026-11-02";
+
+  it("has no state when no task is open", () => {
+    expect(calendarIconState({ open_tasks: 0, earliest_due: null }, today)).toBeNull();
+  });
+
+  it("is open for tasks with no due date", () => {
+    expect(calendarIconState({ open_tasks: 2, earliest_due: null }, today)).toBe("open");
+  });
+
+  it("is open while the earliest due date is today or later", () => {
+    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-02" }, today)).toBe("open");
+    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-03" }, today)).toBe("open");
+  });
+
+  it("is overdue once the earliest due date has passed", () => {
+    expect(calendarIconState({ open_tasks: 3, earliest_due: "2026-11-01" }, today)).toBe("overdue");
   });
 });
