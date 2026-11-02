@@ -86,6 +86,16 @@ function rowToMetadata(row: Row): KnowledgeMetadata {
   };
 }
 
+export class ProjectHasMilestonesError extends Error {
+  constructor(
+    name: string,
+    public readonly count: number,
+  ) {
+    super(`project "${name}" has ${count} milestone(s). Delete them first.`);
+    this.name = "ProjectHasMilestonesError";
+  }
+}
+
 export class ProjectHasNotesError extends Error {
   constructor(
     name: string,
@@ -152,6 +162,12 @@ export class KnowledgeStore {
       )
       .get(trimmed) as { notes: number };
     if (notes > 0) throw new ProjectHasNotesError(trimmed, notes);
+    const { milestones } = this.db
+      .prepare(
+        `SELECT COUNT(*) AS milestones FROM milestones ms JOIN projects p ON p.id = ms.project_id WHERE p.name = ?`,
+      )
+      .get(trimmed) as { milestones: number };
+    if (milestones > 0) throw new ProjectHasMilestonesError(trimmed, milestones);
     const r = this.db.prepare(`DELETE FROM projects WHERE name = ?`).run(trimmed);
     return { name: trimmed, removed: r.changes > 0 };
   }

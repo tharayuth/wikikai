@@ -7,6 +7,7 @@ import {
   useGetTaskQuery,
   useGetTaskRenderedQuery,
   useListProjectMembersQuery,
+  useListProjectMilestonesQuery,
   useListProjectModulesQuery,
   useListProjectTasksQuery,
   useUpdateTaskMutation,
@@ -42,6 +43,7 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
   const board = useListProjectTasksQuery({ projectId });
   const members = useListProjectMembersQuery(projectId, { refetchOnMountOrArgChange: true });
   const modulesQuery = useListProjectModulesQuery(projectId);
+  const milestonesQuery = useListProjectMilestonesQuery(projectId);
   const me = useGetAuthMeQuery();
   const [updateTask, { isLoading: saving }] = useUpdateTaskMutation();
   const [deleteTask] = useDeleteTaskMutation();
@@ -284,6 +286,25 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
                   {columnOptions.map((c) => (
                     <option key={c.key} value={c.key}>
                       {columnLabel(c)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="task-field">
+                Milestone
+                <select
+                  value={draft.milestone_id ?? ""}
+                  disabled={!canEdit}
+                  onChange={(e) => set("milestone_id", e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">No milestone</option>
+                  {/* Shows the current one until the list arrives. */}
+                  {!milestonesQuery.data && base.milestone_id !== null && (
+                    <option value={base.milestone_id}>{base.milestone}</option>
+                  )}
+                  {(milestonesQuery.data?.milestones ?? []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.date})
                     </option>
                   ))}
                 </select>

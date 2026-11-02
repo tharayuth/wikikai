@@ -7,6 +7,7 @@ const task = {
   status: "todo" as const,
   module_id: 1,
   column_id: null,
+  milestone_id: null,
   assignee: { id: 7, display_name: "Ann" },
   start_date: "2026-11-01",
   due_date: null,
@@ -14,6 +15,14 @@ const task = {
   session_id: null,
   blocked_reason: "waiting",
 };
+
+describe("the milestone in the draft", () => {
+  it("sends a change, and an explicit null to clear it", () => {
+    expect(patchFrom({ ...draftOf(task), milestone_id: 3 }, task)).toEqual({ milestone_id: 3 });
+    const linked = { ...task, milestone_id: 3 };
+    expect(patchFrom({ ...draftOf(linked), milestone_id: null }, linked)).toEqual({ milestone_id: null });
+  });
+});
 
 describe("placement in the draft", () => {
   it("sends only the module and column that changed", () => {
@@ -38,6 +47,7 @@ describe("draftOf", () => {
       status: "todo",
       module_id: 1,
       column_id: null,
+      milestone_id: null,
       assignee_id: 7,
       start_date: "2026-11-01",
       due_date: "",

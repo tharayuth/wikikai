@@ -150,7 +150,7 @@ export interface ActivityLogEntry {
   source: "mcp" | "web";
   tool_name: string | null;
   action: "add" | "edit" | "delete" | "reorder" | "toggle" | "caption" | "upload" | "resize";
-  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task" | "board_module" | "board_column" | "note";
+  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task" | "board_module" | "board_column" | "note" | "milestone";
   knowledge_id: number | null;
   knowledge_title: string | null;
   page_id: number | null;
@@ -227,6 +227,8 @@ export interface TaskRow {
   /** Null in the locked column of its status. */
   column_id: number | null;
   column: string;
+  milestone_id: number | null;
+  milestone: string | null;
   position: number;
   assignee: TaskMember | null;
   start_date: string | null;
@@ -263,6 +265,17 @@ export interface TaskModule {
   /** Archived tasks included, because it drives the delete guard. */
   task_count: number;
   columns: TaskColumn[];
+}
+
+export interface Milestone {
+  id: number;
+  project_id: number;
+  name: string;
+  date: string;
+  done: boolean;
+  /** Not counting archived tasks. */
+  task_count: number;
+  done_count: number;
 }
 
 // ─── Notes ───
@@ -329,6 +342,7 @@ export interface TaskPatch {
   status?: TaskStatus;
   module_id?: number;
   column_id?: number | null;
+  milestone_id?: number | null;
   assignee_id?: number | null;
   start_date?: string | null;
   due_date?: string | null;
@@ -358,6 +372,7 @@ export const portalApi = createApi({
     "Tasks",
     "Task",
     "Modules",
+    "Milestones",
     "Notes",
     "Note",
   ],
@@ -645,10 +660,35 @@ export const portalApi = createApi({
 
     updateTask: builder.mutation<TaskDetail, { id: number; projectId: number; patch: TaskPatch }>({
       query: ({ id, patch }) => ({ url: `tasks/${id}`, method: "PATCH", body: patch }),
+      // Dates move at once, so a dragged Gantt bar stays where it was dropped. The
+      // reply's version goes in too, so a second drag right after does not go stale.
+      async onQueryStarted({ id, projectId, patch }, { dispatch, queryFulfilled }) {
+        if (patch.start_date === undefined && patch.due_date === undefined) return;
+        const edit = (change: (task: TaskRow) => void) =>
+          dispatch(
+            portalApi.util.updateQueryData("listProjectTasks", { projectId }, (draft) => {
+              const task = draft.tasks.find((t) => t.id === id);
+              if (task) change(task);
+            }),
+          );
+        const optimistic = edit((task) => {
+          if (patch.start_date !== undefined) task.start_date = patch.start_date;
+          if (patch.due_date !== undefined) task.due_date = patch.due_date;
+        });
+        try {
+          const { data } = await queryFulfilled;
+          edit((task) => {
+            task.version = data.version;
+          });
+        } catch {
+          optimistic.undo();
+        }
+      },
       invalidatesTags: (_r, _e, arg) => [
         { type: "Tasks", id: arg.projectId },
         { type: "Task", id: arg.id },
         { type: "Modules", id: arg.projectId },
+        { type: "Milestones", id: arg.projectId },
       ],
     }),
 
@@ -693,6 +733,53 @@ export const portalApi = createApi({
       invalidatesTags: (_r, _e, arg) => [
         { type: "Tasks", id: arg.projectId },
         { type: "Modules", id: arg.projectId },
+      ],
+    }),
+
+    listProjectMilestones: builder.query<{ can_edit: boolean; milestones: Milestone[] }, number>({
+      query: (projectId) => `projects/${projectId}/milestones`,
+      providesTags: (_r, _e, projectId) => [{ type: "Milestones", id: projectId }],
+    }),
+
+    addMilestone: builder.mutation<Milestone, { projectId: number; name: string; date: string }>({
+      query: ({ projectId, name, date }) => ({
+        url: `projects/${projectId}/milestones`,
+        method: "POST",
+        body: { name, date },
+      }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Milestones", id: arg.projectId }],
+    }),
+
+    updateMilestone: builder.mutation<
+      Milestone,
+      { id: number; projectId: number; patch: { name?: string; date?: string; done?: boolean } }
+    >({
+      query: ({ id, patch }) => ({ url: `milestones/${id}`, method: "PATCH", body: patch }),
+      // Moves at once, so a dragged diamond stays where it was dropped.
+      async onQueryStarted({ id, projectId, patch }, { dispatch, queryFulfilled }) {
+        const optimistic = dispatch(
+          portalApi.util.updateQueryData("listProjectMilestones", projectId, (draft) => {
+            const milestone = draft.milestones.find((m) => m.id === id);
+            if (milestone) Object.assign(milestone, patch);
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          optimistic.undo();
+        }
+      },
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Milestones", id: arg.projectId },
+        { type: "Tasks", id: arg.projectId },
+      ],
+    }),
+
+    deleteMilestone: builder.mutation<{ deleted: boolean }, { id: number; projectId: number }>({
+      query: ({ id }) => ({ url: `milestones/${id}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Milestones", id: arg.projectId },
+        { type: "Tasks", id: arg.projectId },
       ],
     }),
 
@@ -1222,6 +1309,10 @@ export const {
   useGetProjectCalendarQuery,
   useListProjectTasksQuery,
   useListProjectModulesQuery,
+  useListProjectMilestonesQuery,
+  useAddMilestoneMutation,
+  useUpdateMilestoneMutation,
+  useDeleteMilestoneMutation,
   useListProjectNotesQuery,
   useGetNoteQuery,
   useAddNoteMutation,

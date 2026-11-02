@@ -3,6 +3,7 @@ import type { ActivityAction, ActivityLogStore } from "./activityLog.js";
 import { parseDate } from "./calendar.js";
 import { getCallContext } from "../lib/callContext.js";
 import { emitEvent } from "../lib/events.js";
+import { MilestoneStore } from "./milestones.js";
 import {
   LOCKED_COLUMN_NAMES,
   TaskConflictError,
@@ -74,6 +75,8 @@ export interface TaskRow {
   /** Null in the locked column of its status. */
   column_id: number | null;
   column: string;
+  milestone_id: number | null;
+  milestone: string | null;
   position: number;
   assignee: TaskMember | null;
   start_date: string | null;
@@ -106,6 +109,7 @@ interface TaskFieldsInput {
   position?: TaskPlacement;
   module_id?: number;
   column_id?: number | null;
+  milestone_id?: number | null;
 }
 
 export interface AddTaskInput extends TaskFieldsInput {
@@ -180,6 +184,8 @@ interface TaskDbRow {
   module_name: string;
   column_id: number | null;
   column_name: string | null;
+  milestone_id: number | null;
+  milestone_name: string | null;
   position: number;
   assignee_id: number | null;
   assignee_name: string | null;
@@ -197,11 +203,12 @@ interface TaskDbRow {
 
 const SELECT_TASK = `
   SELECT t.*, p.name AS project_name, u.display_name AS assignee_name,
-         m.name AS module_name, c.name AS column_name
+         m.name AS module_name, c.name AS column_name, ms.name AS milestone_name
   FROM tasks t
   JOIN projects p ON p.id = t.project_id
   JOIN task_modules m ON m.id = t.module_id
   LEFT JOIN task_columns c ON c.id = t.column_id
+  LEFT JOIN milestones ms ON ms.id = t.milestone_id
   LEFT JOIN users u ON u.id = t.assignee_id`;
 
 const STATUS_ORDER = `CASE t.status WHEN 'todo' THEN 1 WHEN 'doing' THEN 2 WHEN 'review' THEN 3 ELSE 4 END`;
@@ -287,6 +294,8 @@ function toRow(r: TaskDbRow): TaskRow {
     module: r.module_name,
     column_id: r.column_id,
     column: r.column_name ?? LOCKED_COLUMN_NAMES[r.status],
+    milestone_id: r.milestone_id,
+    milestone: r.milestone_name,
     position: r.position,
     assignee:
       r.assignee_id != null && r.assignee_name != null
@@ -311,6 +320,7 @@ export interface OpenTaskSummary {
 export class TaskStore {
   private readonly aclEnabled: boolean;
   readonly modules: TaskModuleStore;
+  readonly milestones: MilestoneStore;
 
   constructor(
     private readonly db: Db,
@@ -319,6 +329,7 @@ export class TaskStore {
   ) {
     this.aclEnabled = opts.aclEnabled ?? true;
     this.modules = new TaskModuleStore(db, activityLog);
+    this.milestones = new MilestoneStore(db, activityLog);
   }
 
   // ─── Projects ───
@@ -389,6 +400,12 @@ export class TaskStore {
         ? `assignee '${ref}' is ambiguous. Valid members: ${names}`
         : `assignee '${ref}' is not a member of this project. Valid members: ${names}`,
     );
+  }
+
+  private assertMilestone(projectId: number, milestoneId: number): void {
+    if (this.milestones.get(milestoneId)?.project_id !== projectId) {
+      throw new Error(`milestone ${milestoneId} is not in this project`);
+    }
   }
 
   private assertAssignable(project: string, userId: number): void {
@@ -505,15 +522,16 @@ export class TaskStore {
     const blocked = cleanOptionalText(input.blocked_reason, "blocked_reason", BLOCKED_MAX);
     const links = (input.links ?? []).map(cleanLink);
     if (input.assignee_id != null) this.assertAssignable(project.name, input.assignee_id);
+    if (input.milestone_id != null) this.assertMilestone(projectId, input.milestone_id);
     const now = new Date().toISOString();
 
     const id = this.db.transaction(() => {
       const info = this.db
         .prepare(
           `INSERT INTO tasks
-             (project_id, title, description, status, module_id, column_id, position, assignee_id,
+             (project_id, title, description, status, module_id, column_id, milestone_id, position, assignee_id,
               start_date, due_date, labels, session_id, blocked_reason, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           projectId,
@@ -522,6 +540,7 @@ export class TaskStore {
           target.status,
           target.moduleId,
           target.columnId,
+          input.milestone_id ?? null,
           input.assignee_id ?? null,
           start,
           due,
@@ -566,6 +585,10 @@ export class TaskStore {
           this.assertAssignable(cur.project_name, input.assignee_id);
         }
         set("assignee_id", input.assignee_id);
+      }
+      if (input.milestone_id !== undefined) {
+        if (input.milestone_id !== null) this.assertMilestone(cur.project_id, input.milestone_id);
+        set("milestone_id", input.milestone_id);
       }
       // The order check uses the merged dates, so moving one date across the
       // other is refused even though that date alone is valid.

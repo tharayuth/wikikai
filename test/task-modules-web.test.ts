@@ -226,6 +226,60 @@ describe("module and column routes", () => {
     expect(moved.body.column_id).toBe(qa.id);
   });
 
+  describe("milestones", () => {
+    it("lists, creates, updates and deletes for a member with edit access", async () => {
+      const created = await api().post(`/api/projects/${alpha}/milestones`).set("Cookie", alice).send({ name: "Beta", date: "2026-12-01" });
+      expect(created.status).toBe(201);
+      const id = created.body.id;
+      const list = await api().get(`/api/projects/${alpha}/milestones`).set("Cookie", carol);
+      expect(list.status).toBe(200);
+      expect(list.body.can_edit).toBe(false);
+      expect(list.body.milestones[0]).toMatchObject({ name: "Beta", date: "2026-12-01", done: false, task_count: 0, done_count: 0 });
+      const patched = await api().patch(`/api/milestones/${id}`).set("Cookie", alice).send({ date: "2026-12-05", done: true });
+      expect(patched.body).toMatchObject({ date: "2026-12-05", done: true });
+      expect((await api().delete(`/api/milestones/${id}`).set("Cookie", alice)).status).toBe(200);
+    });
+
+    it("answers 400, 404 and 409 as tasks do", async () => {
+      const post = (body: object) => api().post(`/api/projects/${alpha}/milestones`).set("Cookie", alice).send(body);
+      await post({ name: "Beta", date: "2026-12-01" });
+      expect((await post({ name: "Bad", date: "soon" })).status).toBe(400);
+      expect((await post({ name: "beta", date: "2026-12-01" })).status).toBe(409);
+      expect((await api().get(`/api/projects/999/milestones`).set("Cookie", alice)).status).toBe(404);
+      expect((await api().patch(`/api/milestones/999`).set("Cookie", alice).send({ name: "x" })).status).toBe(404);
+      expect((await api().delete(`/api/milestones/999`).set("Cookie", alice)).status).toBe(404);
+    });
+
+    it("refuses a viewer and a non-member", async () => {
+      const m = tasks.milestones.add(alpha, { name: "M", date: "2026-12-01" });
+      expect((await api().post(`/api/projects/${alpha}/milestones`).set("Cookie", carol).send({ name: "B", date: "2026-12-01" })).status).toBe(403);
+      expect((await api().patch(`/api/milestones/${m.id}`).set("Cookie", carol).send({ name: "B" })).status).toBe(403);
+      expect((await api().delete(`/api/milestones/${m.id}`).set("Cookie", carol)).status).toBe(403);
+      expect((await api().get(`/api/projects/${alpha}/milestones`).set("Cookie", dave)).status).toBe(403);
+      expect((await api().patch(`/api/milestones/${m.id}`).set("Cookie", dave).send({ name: "B" })).status).toBe(403);
+    });
+
+    it("sets a task's milestone and dates through PATCH", async () => {
+      const m = tasks.milestones.add(alpha, { name: "M", date: "2026-12-01" });
+      const t = tasks.add(alpha, { title: "T" });
+      const res = await api()
+        .patch(`/api/tasks/${t.id}`)
+        .set("Cookie", alice)
+        .send({ expected_version: t.version, milestone_id: m.id, start_date: "2026-11-10", due_date: "2026-11-12" });
+      expect(res.body).toMatchObject({ milestone_id: m.id, milestone: "M", start_date: "2026-11-10", due_date: "2026-11-12" });
+      const other = tasks.milestones.add(beta, { name: "Other", date: "2026-12-01" });
+      const refused = await api().patch(`/api/tasks/${t.id}`).set("Cookie", alice).send({ expected_version: res.body.version, milestone_id: other.id });
+      expect(refused.status).toBe(400);
+    });
+
+    it("answers 409 when unregistering a project that has milestones", async () => {
+      tasks.milestones.add(alpha, { name: "M", date: "2026-12-01" });
+      const res = await api().delete("/api/projects/alpha").set("Cookie", await adminCookie());
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/1 milestone/);
+    });
+  });
+
   it("answers 400 for a body id from another project, or a status against the column", async () => {
     const other = tasks.modules.list(beta)[0];
     const otherColumn = tasks.modules.addColumn(other.id, { name: "QA", status: "review" });

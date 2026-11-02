@@ -27,7 +27,7 @@ export interface HashLocation {
   calendar: CalendarLocation | null;
 }
 
-export type ProjectViewKind = "calendar" | "board" | "list" | "notes";
+export type ProjectViewKind = "calendar" | "board" | "list" | "gantt" | "notes";
 
 export interface CalendarLocation {
   projectId: number;
@@ -85,7 +85,7 @@ export function parseCalendar(search: string): CalendarLocation | null {
   return {
     projectId,
     month: month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null,
-    view: view === "board" || view === "list" || view === "notes" ? view : "calendar",
+    view: view === "board" || view === "list" || view === "gantt" || view === "notes" ? view : "calendar",
     taskId: Number.isInteger(taskId) && taskId > 0 ? taskId : null,
     moduleId: Number.isInteger(moduleId) && moduleId > 0 ? moduleId : null,
     noteId: Number.isInteger(noteId) && noteId > 0 ? noteId : null,

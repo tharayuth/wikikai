@@ -23,6 +23,7 @@ describe("task tools", () => {
   let carol: User;
   let dave: User;
   let modules: TaskModuleStore;
+  let milestones: TaskStore["milestones"];
   let alphaId: number;
 
   const as = <T>(user: User, fn: () => T): T =>
@@ -45,6 +46,7 @@ describe("task tools", () => {
     permissions.replaceForUser(carol.id, [{ project: "alpha", level: "view" }], admin.id);
     const taskStore = new TaskStore(db, new ActivityLogStore(db));
     modules = taskStore.modules;
+    milestones = taskStore.milestones;
     alphaId = taskStore.ensureProject("alpha").id;
     h = buildToolHandlers(
       knowledge,
@@ -129,7 +131,7 @@ describe("task tools", () => {
     const { tasks } = await as(alice, () => h.list_tasks({ project: "alpha" }));
     expect(tasks.map((t) => t.title)).toEqual(["Open"]);
     expect(Object.keys(tasks[0]).sort()).toEqual(
-      ["assignee", "blocked_reason", "column", "due_date", "id", "labels", "module", "status", "title", "url", "version"].sort(),
+      ["assignee", "blocked_reason", "column", "due_date", "id", "labels", "milestone", "module", "status", "title", "url", "version"].sort(),
     );
     const { tasks: closed } = await as(alice, () => h.list_tasks({ project: "alpha", status: ["done"] }));
     expect(closed.map((t) => t.title)).toEqual(["Closed"]);
@@ -205,6 +207,32 @@ describe("task tools", () => {
     const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", assignee: "me" }));
     const cleared = await as(alice, () => h.edit_task({ task_id: t.id, expected_version: 1, assignee: null }));
     expect(cleared.assignee).toBeNull();
+  });
+
+  describe("milestones", () => {
+    it("sets a milestone by name, and reports it in rows", async () => {
+      milestones.add(alphaId, { name: "Beta", date: "2026-12-01" });
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T", milestone: "beta" }));
+      expect(t.milestone).toBe("Beta");
+      const { tasks } = await as(alice, () => h.list_tasks({ project: "alpha" }));
+      expect(tasks[0].milestone).toBe("Beta");
+    });
+
+    it("lists valid names when a milestone is unknown", async () => {
+      milestones.add(alphaId, { name: "Beta", date: "2026-12-01" });
+      await expect(as(alice, () => h.add_task({ project: "alpha", title: "T", milestone: "Nope" }))).rejects.toThrow(
+        "milestone 'Nope' not found. Valid milestones: Beta",
+      );
+    });
+
+    it("changes and clears a milestone with edit_task", async () => {
+      milestones.add(alphaId, { name: "Beta", date: "2026-12-01" });
+      const t = await as(alice, () => h.add_task({ project: "alpha", title: "T" }));
+      const set = await as(alice, () => h.edit_task({ task_id: t.id, expected_version: t.version, milestone: "Beta" }));
+      expect(set.milestone).toBe("Beta");
+      const cleared = await as(alice, () => h.edit_task({ task_id: t.id, expected_version: set.version, milestone: null }));
+      expect(cleared.milestone).toBeNull();
+    });
   });
 
   describe("modules and columns", () => {

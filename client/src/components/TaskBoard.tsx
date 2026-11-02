@@ -441,6 +441,7 @@ function CardBody({ task, onOpen }: { task: TaskRow; onOpen?: () => void }): JSX
       <div className="task-card-meta">
         {task.assignee && <span>{task.assignee.display_name}</span>}
         {task.due_date && <span className={overdue ? "task-overdue" : undefined}>{task.due_date}</span>}
+        {task.milestone && <span className="task-card-milestone">◆ {task.milestone}</span>}
       </div>
       {task.labels.length > 0 && (
         <div className="task-card-labels">

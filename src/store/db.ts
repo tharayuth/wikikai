@@ -66,6 +66,9 @@ export function openDb(dbPath: string): Db {
     db.exec(`ALTER TABLE tasks ADD COLUMN column_id INTEGER REFERENCES task_columns(id) ON DELETE SET NULL`);
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(module_id, status, column_id, position)`);
+  if (!hasColumn(db, "tasks", "milestone_id")) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN milestone_id INTEGER REFERENCES milestones(id) ON DELETE SET NULL`);
+  }
   backfillTaskPlacement(db);
   if (!hasColumn(db, "pages", "archived_at")) {
     // Soft-archive flag for pages. NULL = active; ISO timestamp = archived.

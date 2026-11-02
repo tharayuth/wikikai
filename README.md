@@ -15,7 +15,7 @@ Both guides include working examples of every block type, reusable prompts, and 
 
 - **Let AI do the work.** Create documents, edit sections, update tables, and upload images and files through MCP.
 - **Jot things down.** Each project has quick notes and checklists in the style of Google Keep: colours, pins, labels, archive and trash.
-- **Track the work too.** Each project has boards, a task list and a calendar. Split a project into modules, add your own columns, and let AI pick up the next task, link what it produced, and leave it for your review.
+- **Track the work too.** Each project has boards, a task list, a calendar and a Gantt chart with milestones. Split a project into modules, add your own columns, and let AI pick up the next task, link what it produced, and leave it for your review.
 - **Pick up where you left off.** Organize knowledge into projects and pages, then ask AI to find and reuse it in your next conversation.
 - **Point to exactly what you mean.** Reference a document with `&N`, a page with `#N`, or a table, chart or other supported block with `@N`.
 - **Make knowledge easy to understand.** Combine Markdown, diagrams, charts, KPI cards, step cards, interactive checkboxes, galleries, code and custom HTML layouts.

@@ -291,6 +291,20 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id, pinned, position);
 
+-- A named date on a project's Gantt. See store/milestones.ts. RESTRICT for the
+-- same reason as tasks: unregistering must not silently take them.
+CREATE TABLE IF NOT EXISTS milestones (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  name       TEXT NOT NULL,
+  date       TEXT NOT NULL,              -- YYYY-MM-DD
+  done_at    TEXT,                       -- NULL = not reached yet
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_milestones_name ON milestones(project_id, name COLLATE NOCASE);
+-- NOTE: `tasks.milestone_id` is added by the in-place migration in db.ts.
+
 -- A project's boards. Unregistering a project needs its tasks gone first (see
 -- `tasks.project_id`), so the cascade only ever removes empty modules; RESTRICT
 -- here would stop a project being unregistered once anyone opened its board.

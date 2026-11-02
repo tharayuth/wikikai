@@ -72,6 +72,7 @@ src/
   store/pages.ts       page CRUD + line-range ops + FTS sync
   store/tasks.ts       project tasks: where a task lands, claims, validation — every task rule
   store/taskModules.ts a project's boards: modules, custom columns, name resolution
+  store/milestones.ts  a project's milestones: named dates on the Gantt that tasks can join
   store/notes.ts       Keep-style notes on a project: content versioning, pin, archive, trash
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
   mcp/server.ts        registers 39 tools on McpServer (input schemas come from handlers.ts)
@@ -79,7 +80,7 @@ src/
   mcp/examples.ts      get_example helper (outline + slice)
   examples/*.md        markdown reference content (copied to dist/ by build:assets)
   web/app.ts           Express routes — /api, /mcp (auth-gated), /mermaid, /chart, static
-  web/taskRoutes.ts    REST routes for project tasks, modules and columns, thin over TaskStore
+  web/taskRoutes.ts    REST routes for tasks, modules, columns and milestones, thin over TaskStore
   web/noteRoutes.ts    REST routes for notes, thin over NoteStore
   web/mcpRoute.ts      MCP transport handler + session map
   web/mermaidViewer.ts standalone fullscreen Mermaid HTML (pan/zoom/export PNG)

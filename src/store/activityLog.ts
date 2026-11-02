@@ -25,6 +25,7 @@ export type ActivityTarget =
   | "board_module"
   | "board_column"
   | "note"
+  | "milestone"
   | "secret";
 
 /** What a single recorded row looks like — what callers pass in (no

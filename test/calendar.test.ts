@@ -209,6 +209,11 @@ describe("calendar grid + URL helpers", () => {
     expect(buildProjectViewSearch("?calendar=7&view=notes&note=3", "board")).toBe("?calendar=7&view=board");
   });
 
+  it("reads the gantt tab", () => {
+    expect(parseCalendar("?calendar=7&view=gantt&module=2")).toMatchObject({ view: "gantt", moduleId: 2 });
+    expect(buildProjectViewSearch("?calendar=7", "gantt")).toBe("?calendar=7&view=gantt");
+  });
+
   it("builds view and task queries, keeping other params", () => {
     expect(buildProjectViewSearch("?calendar=7&month=2026-09", "board")).toBe("?calendar=7&month=2026-09&view=board");
     expect(buildProjectViewSearch("?calendar=7&view=board", "calendar")).toBe("?calendar=7");

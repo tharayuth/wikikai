@@ -37,6 +37,7 @@ const AddBody = z.object({
   position: z.enum(["top", "bottom"]).optional(),
   module_id: z.number().int().positive().optional(),
   column_id: z.number().int().positive().nullable().optional(),
+  milestone_id: z.number().int().positive().nullable().optional(),
 });
 
 const PatchBody = AddBody.omit({ links: true })
@@ -54,6 +55,13 @@ const MoveBody = z.object({
   expected_version: z.number().int().positive(),
   module_id: z.number().int().positive().optional(),
   column_id: z.number().int().positive().nullable().optional(),
+});
+
+const MilestoneBody = z.object({ name: z.string(), date: z.string() });
+const MilestonePatch = z.object({
+  name: z.string().optional(),
+  date: z.string().optional(),
+  done: z.boolean().optional(),
 });
 
 const ModuleBody = z.object({ name: z.string() });
@@ -108,6 +116,12 @@ export function attachTaskRoutes(app: Express, opts: TaskRouteOptions): void {
     const column = tasks.modules.getColumn(id);
     if (!column) throw new BoardItemNotFoundError("column", id);
     return projectOfModule(column.module_id);
+  };
+
+  const projectOfMilestone = (id: number): string => {
+    const milestone = tasks.milestones.get(id);
+    if (!milestone) throw new BoardItemNotFoundError("milestone", id);
+    return tasks.getProject(milestone.project_id)?.name ?? "";
   };
 
   const fail = (e: unknown, res: Response, next: NextFunction): void => {
@@ -230,6 +244,49 @@ export function attachTaskRoutes(app: Express, opts: TaskRouteOptions): void {
       const id = parseId(req.params.id);
       gate(req, projectOfColumn(id), "edit");
       tasks.modules.deleteColumn(id);
+      res.json({ deleted: true });
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.get("/api/projects/:id/milestones", (req, res, next) => {
+    try {
+      const project = loadProject(req, res);
+      if (!project) return;
+      gate(req, project.name, "view");
+      res.json({ can_edit: canEdit(req, project.name), milestones: tasks.milestones.list(project.id) });
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.post("/api/projects/:id/milestones", (req, res, next) => {
+    try {
+      const project = loadProject(req, res);
+      if (!project) return;
+      gate(req, project.name, "edit");
+      res.status(201).json(tasks.milestones.add(project.id, MilestoneBody.parse(req.body)));
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.patch("/api/milestones/:id", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfMilestone(id), "edit");
+      res.json(tasks.milestones.update(id, MilestonePatch.parse(req.body)));
+    } catch (e) {
+      fail(e, res, next);
+    }
+  });
+
+  app.delete("/api/milestones/:id", (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      gate(req, projectOfMilestone(id), "edit");
+      tasks.milestones.remove(id);
       res.json({ deleted: true });
     } catch (e) {
       fail(e, res, next);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarView } from "./CalendarView";
+import { GanttView } from "./GanttView";
 import { ModuleBar } from "./ModuleBar";
 import { NotesView } from "./NotesView";
 import { TaskBoard } from "./TaskBoard";
@@ -23,12 +24,13 @@ const TABS: { view: ProjectViewKind; label: string }[] = [
   { view: "calendar", label: "Calendar" },
   { view: "board", label: "Board" },
   { view: "list", label: "List" },
+  { view: "gantt", label: "Gantt" },
   { view: "notes", label: "Notes" },
 ];
 
 /**
  * Everything behind a project's calendar icon: one tab bar over the Calendar,
- * Board, List and Notes. Rendered in place of the viewer for `/?calendar=<id>`.
+ * Board, List, Gantt and Notes. Rendered in place of the viewer for `/?calendar=<id>`.
  */
 export function ProjectView({ location }: { location: CalendarLocation }): JSX.Element {
   const { projectId, month, view, taskId, moduleId, noteId } = location;
@@ -79,7 +81,7 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
             {tab.label}
           </button>
         ))}
-        {(view === "board" || view === "list") && <TaskFilters projectId={projectId} filter={filter} onChange={setFilter} />}
+        {(view === "board" || view === "list" || view === "gantt") && <TaskFilters projectId={projectId} filter={filter} onChange={setFilter} />}
       </div>
       {modules.length > 0 && view !== "notes" && (
         <ModuleBar
@@ -105,6 +107,9 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
       )}
       {view === "list" && (
         <TaskListView projectId={projectId} moduleId={selectedId} filter={filter} onOpenTask={openTask} />
+      )}
+      {view === "gantt" && (
+        <GanttView projectId={projectId} moduleId={selectedId} filter={filter} onOpenTask={openTask} />
       )}
       {view === "notes" && <NotesView projectId={projectId} noteId={noteId} onOpenNote={openNote} />}
       {taskId != null && <TaskModal key={taskId} projectId={projectId} taskId={taskId} onClose={closeTask} />}

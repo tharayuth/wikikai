@@ -40,6 +40,7 @@ const REFRESH_TAGS = [
   "Tasks",
   "Task",
   "Modules",
+  "Milestones",
   "Notes",
   "Note",
 ] as const;
@@ -143,10 +144,12 @@ export function useServerEvents(): void {
           break;
         }
         case "board-changed": {
-          // Deleting a column moves its cards, so tasks refetch as well.
+          // Deleting a column moves its cards, and tasks show a milestone's name,
+          // so tasks refetch as well.
           dispatch(
             portalApi.util.invalidateTags([
               { type: "Modules", id: e.project_id },
+              { type: "Milestones", id: e.project_id },
               { type: "Tasks", id: e.project_id },
               { type: "ActivityLog", id: "LIST" },
             ]),
@@ -158,8 +161,10 @@ export function useServerEvents(): void {
             portalApi.util.invalidateTags([
               { type: "Tasks", id: e.project_id },
               { type: "Task", id: e.task_id },
-              // A module's task count drives its delete guard.
+              // A module's task count drives its delete guard, and a milestone
+              // shows how many of its tasks are done.
               { type: "Modules", id: e.project_id },
+              { type: "Milestones", id: e.project_id },
               // A task tool can register a project known only through its
               // documents, so the sidebar must refetch the registry to give
               // that group an id without a reload.

@@ -779,6 +779,7 @@ export const AddTaskSchema = z.object({
   position: TaskPlacementSchema,
   module: z.string().min(1).max(50).optional().describe("Module name. Default: the first."),
   column: z.string().min(1).max(50).optional().describe(TASK_COLUMN_NOTE),
+  milestone: z.string().min(1).max(100).optional().describe("Milestone name."),
 });
 
 export const ListTasksSchema = z
@@ -834,6 +835,7 @@ export const EditTaskSchema = z.object({
   position: TaskPlacementSchema,
   module: z.string().min(1).max(50).optional().describe("Move to this module."),
   column: z.string().min(1).max(50).nullable().optional().describe(`${TASK_COLUMN_NOTE} null: the built-in column.`),
+  milestone: z.string().min(1).max(100).nullable().optional().describe("Milestone name. null clears."),
 });
 
 export type TaskResult = Task & { url: string };
@@ -844,6 +846,7 @@ export interface TaskListEntry {
   status: TaskStatus;
   module: string;
   column: string;
+  milestone: string | null;
   assignee: TaskMember | null;
   due_date: string | null;
   labels: string[];
@@ -1554,6 +1557,7 @@ export function buildToolHandlers(
     status: row.status,
     module: row.module,
     column: row.column,
+    milestone: row.milestone,
     assignee: row.assignee,
     due_date: row.due_date,
     labels: row.labels,
@@ -2885,11 +2889,12 @@ export function buildToolHandlers(
       const parsed = AddTaskSchema.parse(input);
       gateEditByProject(parsed.project);
       const project = tasks.ensureProject(parsed.project);
-      const { project: _project, assignee, module, column, ...fields } = parsed;
+      const { project: _project, assignee, module, column, milestone, ...fields } = parsed;
       return withTaskUrl(
         tasks.add(project.id, {
           ...fields,
           ...tasks.placementByName(project.id, null, { module, column, status: parsed.status }),
+          ...(milestone === undefined ? {} : { milestone_id: tasks.milestones.resolve(project.id, milestone).id }),
           assignee_id: assignee === undefined ? undefined : tasks.resolveAssignee(project.name, assignee, callerId()),
         }),
       );
@@ -2929,11 +2934,14 @@ export function buildToolHandlers(
       const current = tasks.get(parsed.task_id);
       if (!current) throw new Error(`task T${parsed.task_id} not found`);
       gateEditByProject(current.project);
-      const { task_id, assignee, module, column, ...fields } = parsed;
+      const { task_id, assignee, module, column, milestone, ...fields } = parsed;
       return withTaskUrl(
         tasks.edit(task_id, {
           ...fields,
           ...tasks.placementByName(current.project_id, current.module_id, { module, column, status: parsed.status }),
+          ...(milestone === undefined
+            ? {}
+            : { milestone_id: milestone === null ? null : tasks.milestones.resolve(current.project_id, milestone).id }),
           ...(assignee === undefined
             ? {}
             : { assignee_id: assignee === null ? null : tasks.resolveAssignee(current.project, assignee, callerId()) }),

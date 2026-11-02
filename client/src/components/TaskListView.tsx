@@ -79,6 +79,7 @@ export function TaskListView({ projectId, moduleId, filter, onOpenTask }: Props)
                   </th>
                 ))}
                 <th>Column</th>
+                <th>Milestone</th>
                 {moduleId === null && <th>Module</th>}
                 <th>Labels</th>
               </tr>
@@ -103,6 +104,7 @@ export function TaskListView({ projectId, moduleId, filter, onOpenTask }: Props)
                   <td className={isOverdue(t, today) ? "task-overdue" : undefined}>{t.due_date ?? ""}</td>
                   <td title={t.updated_at}>{t.updated_at.slice(0, 10)}</td>
                   <td>{t.column}</td>
+                  <td>{t.milestone ?? ""}</td>
                   {moduleId === null && <td>{t.module}</td>}
                   <td>{t.labels.join(", ")}</td>
                 </tr>

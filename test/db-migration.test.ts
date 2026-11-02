@@ -208,6 +208,13 @@ describe("projects id migration (legacy -> auto-increment)", () => {
       db.close();
     });
 
+    it("gives an older database the milestone column, empty", () => {
+      const db = openDb(makeCoreDb());
+      expect(db.prepare("SELECT DISTINCT milestone_id FROM tasks").all()).toEqual([{ milestone_id: null }]);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM milestones").get()).toEqual({ n: 0 });
+      db.close();
+    });
+
     it("changes nothing on a second open", () => {
       const file = makeCoreDb();
       const first = openDb(file);

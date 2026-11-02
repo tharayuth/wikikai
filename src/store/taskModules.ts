@@ -56,7 +56,7 @@ export class TaskConflictError extends Error {
 }
 
 export class BoardItemNotFoundError extends Error {
-  constructor(kind: "module" | "column", id: number) {
+  constructor(kind: "module" | "column" | "milestone", id: number) {
     super(`${kind} ${id} not found`);
     this.name = "BoardItemNotFoundError";
   }

@@ -44,7 +44,12 @@ import {
   resolveShareViewer,
   setShareCookie,
 } from "./shareAccess.js";
-import { ProjectHasNotesError, ProjectHasTasksError, type KnowledgeMetadata } from "../store/knowledge.js";
+import {
+  ProjectHasMilestonesError,
+  ProjectHasNotesError,
+  ProjectHasTasksError,
+  type KnowledgeMetadata,
+} from "../store/knowledge.js";
 import type { NoteStore } from "../store/notes.js";
 import type { TaskStore } from "../store/tasks.js";
 import { attachNoteRoutes } from "./noteRoutes.js";
@@ -953,7 +958,11 @@ export function buildApp(opts: BuildAppOptions): Express {
       const result = opts.knowledge.unregisterProject(req.params.name);
       res.json(result);
     } catch (e) {
-      if (e instanceof ProjectHasTasksError || e instanceof ProjectHasNotesError) {
+      if (
+        e instanceof ProjectHasTasksError ||
+        e instanceof ProjectHasNotesError ||
+        e instanceof ProjectHasMilestonesError
+      ) {
         res.status(409).json({ error: e.message });
         return;
       }
