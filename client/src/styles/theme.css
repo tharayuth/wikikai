@@ -6532,15 +6532,17 @@ button.ki-id-badge::after {
   touch-action: manipulation;
 }
 .task-card-overlay { cursor: grabbing; border-color: var(--accent); }
-.task-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.task-card-head { display: flex; align-items: flex-start; gap: 6px; }
 .task-card-id { font-size: 11px; color: var(--text-3); }
 .task-card-blocked {
+  flex: none;
   padding: 0 6px;
   border-radius: var(--radius-sm);
   background: var(--red-light); color: var(--red);
   font-size: 11px; font-weight: 600;
 }
 .task-card-title {
+  flex: 1; min-width: 0;
   padding: 0; border: none; background: transparent;
   color: var(--text); text-align: left;
   font: inherit; font-size: 13.5px; line-height: 1.35;
@@ -6548,6 +6550,7 @@ button.ki-id-badge::after {
 }
 .task-card-title:hover { color: var(--accent-strong); }
 .task-card-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-2); }
+.task-card-meta:empty { display: none; }
 .task-overdue { color: var(--red); font-weight: 600; }
 .task-card-labels { display: flex; flex-wrap: wrap; gap: 4px; }
 .task-card-labels span {

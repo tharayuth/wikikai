@@ -420,24 +420,23 @@ function CardBody({ task, onOpen }: { task: TaskRow; onOpen?: () => void }): JSX
   const overdue = isOverdue(task, todayLocal());
   return (
     <>
-      <div className="task-card-top">
-        <span className="task-card-id">T{task.id}</span>
+      <div className="task-card-head">
+        <button
+          type="button"
+          className="task-card-title"
+          onClick={onOpen}
+          // Enter here opens the task. Without this, the card's keyboard drag
+          // handler would take the key first.
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <span className="task-card-id">T{task.id}</span> {task.title}
+        </button>
         {task.blocked_reason && (
           <span className="task-card-blocked" title={task.blocked_reason}>
             Blocked
           </span>
         )}
       </div>
-      <button
-        type="button"
-        className="task-card-title"
-        onClick={onOpen}
-        // Enter here opens the task. Without this, the card's keyboard drag
-        // handler would take the key first.
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        {task.title}
-      </button>
       <div className="task-card-meta">
         {task.assignee && <span>{task.assignee.display_name}</span>}
         {task.due_date && <span className={overdue ? "task-overdue" : undefined}>{task.due_date}</span>}
