@@ -303,9 +303,9 @@ describe("calendarIconState", () => {
     expect(calendarIconState({ open_tasks: 2, earliest_due: null }, today)).toBe("open");
   });
 
-  it("is open while the earliest due date is today or later", () => {
-    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-02" }, today)).toBe("open");
-    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-03" }, today)).toBe("open");
+  it("is upcoming while the earliest due date is today or later", () => {
+    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-02" }, today)).toBe("upcoming");
+    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-03" }, today)).toBe("upcoming");
   });
 
   it("is overdue once the earliest due date has passed", () => {

@@ -1092,9 +1092,12 @@ function ProjectGroup({
   };
 
   // Spelled out as well as coloured, so the state is not carried by colour alone.
-  const calendarLabel = `Calendar and tasks of ${project}${
-    calendarState === "overdue" ? ": has overdue tasks" : calendarState === "open" ? ": has open tasks" : ""
-  }`;
+  const calendarHints: Record<CalendarIconState, string> = {
+    overdue: ": has overdue tasks",
+    upcoming: ": has upcoming due dates",
+    open: ": has open tasks",
+  };
+  const calendarLabel = `Calendar and tasks of ${project}${calendarState ? calendarHints[calendarState] : ""}`;
 
   return (
     <div className={`sidebar-group${open ? "" : " collapsed"}`}>

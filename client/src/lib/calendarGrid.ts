@@ -124,14 +124,16 @@ export function isOverdue(task: { due_date: string | null; status: string }, tod
   return task.due_date !== null && task.due_date < today && task.status !== "done";
 }
 
-export type CalendarIconState = "open" | "overdue";
+export type CalendarIconState = "open" | "upcoming" | "overdue";
 
 /** What a project's calendar icon shows: overdue when an open task is past its
- *  due date, open when tasks remain, nothing when none do. */
+ *  due date, upcoming when open tasks have due dates and none has passed, open
+ *  when no open task has a due date, nothing when no task is open. */
 export function calendarIconState(
   summary: { open_tasks: number; earliest_due: string | null },
   today: string,
 ): CalendarIconState | null {
   if (summary.open_tasks === 0) return null;
-  return summary.earliest_due !== null && summary.earliest_due < today ? "overdue" : "open";
+  if (summary.earliest_due === null) return "open";
+  return summary.earliest_due < today ? "overdue" : "upcoming";
 }
