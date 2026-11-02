@@ -27,7 +27,7 @@ export interface HashLocation {
   calendar: CalendarLocation | null;
 }
 
-export type ProjectViewKind = "calendar" | "board" | "list";
+export type ProjectViewKind = "calendar" | "board" | "list" | "notes";
 
 export interface CalendarLocation {
   projectId: number;
@@ -39,6 +39,8 @@ export interface CalendarLocation {
   taskId: number | null;
   /** `module=<id>`: which of the project's boards. Null lets the view choose. */
   moduleId: number | null;
+  /** `note=<id>`: the note editor open over the Notes tab. */
+  noteId: number | null;
 }
 
 function toSearch(params: URLSearchParams): string {
@@ -79,12 +81,14 @@ export function parseCalendar(search: string): CalendarLocation | null {
   const view = params.get("view");
   const taskId = Number(params.get("task"));
   const moduleId = Number(params.get("module"));
+  const noteId = Number(params.get("note"));
   return {
     projectId,
     month: month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null,
-    view: view === "board" || view === "list" ? view : "calendar",
+    view: view === "board" || view === "list" || view === "notes" ? view : "calendar",
     taskId: Number.isInteger(taskId) && taskId > 0 ? taskId : null,
     moduleId: Number.isInteger(moduleId) && moduleId > 0 ? moduleId : null,
+    noteId: Number.isInteger(noteId) && noteId > 0 ? noteId : null,
   };
 }
 
@@ -110,12 +114,15 @@ export function withoutCalendar(search: string): string {
   params.delete("view");
   params.delete("task");
   params.delete("module");
+  params.delete("note");
   return toSearch(params);
 }
 
 /** Switch project tab. The calendar is the default, so it needs no param. */
 export function buildProjectViewSearch(search: string, view: ProjectViewKind): string {
   const params = new URLSearchParams(search);
+  // A note opens over its own tab, so it closes on leaving that tab.
+  params.delete("note");
   if (view === "calendar") params.delete("view");
   else params.set("view", view);
   return toSearch(params);
@@ -126,6 +133,14 @@ export function buildTaskSearch(search: string, taskId: number | null): string {
   const params = new URLSearchParams(search);
   if (taskId == null) params.delete("task");
   else params.set("task", String(taskId));
+  return toSearch(params);
+}
+
+/** Open a note's editor, or close it with null. */
+export function buildNoteSearch(search: string, noteId: number | null): string {
+  const params = new URLSearchParams(search);
+  if (noteId == null) params.delete("note");
+  else params.set("note", String(noteId));
   return toSearch(params);
 }
 

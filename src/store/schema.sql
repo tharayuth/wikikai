@@ -265,6 +265,32 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_board ON tasks(project_id, status, position);
 
+-- Keep-style notes on a project: quick text or checklists, separate from tasks
+-- (no status or assignee) and from documents (no revisions). `items` is JSON
+-- [{id,text,checked}]; non-NULL makes it a checklist. `version` guards content
+-- only, so pinning or colouring a note cannot fail someone typing in it. RESTRICT
+-- for the same reason as tasks: unregistering must not silently take them.
+-- See store/notes.ts for the rules.
+CREATE TABLE IF NOT EXISTS notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  title       TEXT NOT NULL DEFAULT '',
+  body        TEXT NOT NULL DEFAULT '',
+  items       TEXT,
+  color       TEXT NOT NULL DEFAULT 'default'
+              CHECK (color IN ('default','red','amber','green','cyan','blue','purple')),
+  labels      TEXT,                      -- comma-separated, like tasks.labels
+  pinned      INTEGER NOT NULL DEFAULT 0,
+  position    INTEGER NOT NULL,          -- lower comes first, within pinned or not
+  version     INTEGER NOT NULL DEFAULT 1,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL,
+  archived_at TEXT,
+  trashed_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id, pinned, position);
+
 -- A project's boards. Unregistering a project needs its tasks gone first (see
 -- `tasks.project_id`), so the cascade only ever removes empty modules; RESTRICT
 -- here would stop a project being unregistered once anyone opened its board.

@@ -6104,6 +6104,193 @@ button.ki-id-badge::after {
   font-weight: 600;
 }
 
+/* ─── Notes ─── */
+.notes-view { flex: 1; min-height: 0; overflow: auto; padding: 12px 18px 24px; }
+.notes-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.notes-search {
+  flex: 0 1 280px; min-width: 120px; margin-left: auto;
+  padding: 5px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit; font-size: 13px;
+}
+.notes-labels { margin-top: 8px; }
+.notes-empty { padding: 40px 0; color: var(--text-3); text-align: center; }
+.notes-section {
+  margin: 18px 0 8px;
+  color: var(--text-3);
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* The colours a note can take: each pale tint already has a dark-mode value. */
+.color-default { --note-bg: var(--surface); }
+.color-red { --note-bg: var(--red-light); }
+.color-amber { --note-bg: var(--amber-light); }
+.color-green { --note-bg: var(--green-light); }
+.color-cyan { --note-bg: var(--cyan-light); }
+.color-blue { --note-bg: var(--blue-light); }
+.color-purple { --note-bg: var(--purple-light); }
+
+.note-composer {
+  max-width: 560px; margin: 14px auto 6px;
+  padding: 10px 12px;
+  background: var(--note-bg, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+.note-composer.collapsed { display: flex; align-items: center; gap: 4px; padding: 4px 8px 4px 4px; }
+.note-composer-open {
+  flex: 1; padding: 8px 10px;
+  background: none; border: none;
+  color: var(--text-3);
+  font: inherit; font-size: 14px; text-align: left;
+  cursor: text;
+}
+.note-composer textarea, .note-modal textarea {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  padding: 6px 0;
+  background: none; border: none; outline: none;
+  color: var(--text);
+  font: inherit; font-size: 14px; line-height: 1.5;
+}
+
+/* Masonry: small fixed rows, each card spanning as many as its height needs. The
+   row height and gap are mirrored in NotesView.tsx. */
+.note-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-rows: 8px;
+  column-gap: 12px;
+  margin-top: 12px;
+}
+.note-cell { min-width: 0; }
+.note-card {
+  position: relative;
+  padding: 10px 12px 34px;
+  background: var(--note-bg, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.note-card:hover, .note-card:focus-visible { box-shadow: var(--shadow-md); outline: none; border-color: var(--text-3); }
+.note-card.dragging { opacity: .4; }
+.note-card.drop-target { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.note-card-overlay { box-shadow: var(--shadow-md); cursor: grabbing; }
+.note-card-title { margin: 0 24px 6px 0; font-size: 14px; font-weight: 600; color: var(--text); }
+.note-card-text {
+  margin: 0 0 6px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 14;
+  overflow: hidden;
+  white-space: pre-wrap;
+  color: var(--text); font-size: 13px; line-height: 1.45;
+}
+.note-card-text a { color: var(--accent); }
+.note-card-empty { margin: 0; color: var(--text-3); font-size: 13px; }
+.note-card-items { margin: 0 0 6px; padding: 0; list-style: none; font-size: 13px; color: var(--text); }
+.note-card-items li { display: flex; align-items: flex-start; gap: 6px; padding: 2px 0; }
+.note-card-items input { margin: 2px 0 0; flex: none; }
+.note-card-more { color: var(--text-3); font-size: 12px; }
+
+.note-tool {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  background: none; border: none; border-radius: 50%;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.note-tool:hover { background: var(--surface-2); color: var(--text); }
+.note-tool.active { color: var(--accent); }
+.note-pin { position: absolute; top: 4px; right: 4px; }
+.note-card-tools {
+  position: absolute; left: 6px; bottom: 3px;
+  display: flex; align-items: center; gap: 2px;
+}
+/* Keep's quiet card: tools appear on hover. Touch screens have no hover, so they
+   stay visible there, and keyboard focus reveals them as well. */
+@media (hover: hover) {
+  .note-pin:not(.active), .note-card-tools { opacity: 0; transition: opacity .12s; }
+  .note-card:hover .note-pin, .note-card:hover .note-card-tools,
+  .note-card:focus-within .note-pin, .note-card:focus-within .note-card-tools { opacity: 1; }
+}
+
+.note-palette { position: relative; display: inline-flex; }
+.note-palette-swatches {
+  position: absolute; bottom: 100%; left: 0; z-index: 30;
+  display: flex; gap: 4px;
+  margin-bottom: 4px; padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+.note-swatch {
+  width: 22px; height: 22px; padding: 0;
+  background: var(--note-bg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.note-swatch.selected { border: 2px solid var(--accent); }
+
+.modal.note-modal {
+  width: min(600px, calc(100vw - 32px));
+  background: var(--note-bg, var(--surface));
+}
+.note-modal-body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; max-height: 80vh; overflow: auto; }
+.note-modal-title { display: flex; align-items: center; gap: 6px; }
+.note-modal-title input {
+  flex: 1; min-width: 0;
+  padding: 4px 0;
+  background: none; border: none; outline: none;
+  color: var(--text);
+  font: inherit; font-size: 16px; font-weight: 600;
+}
+.note-modal-actions { display: flex; align-items: center; gap: 2px; margin-top: 4px; }
+.note-modal-spacer { flex: 1; }
+.note-saved { margin-right: 8px; color: var(--text-3); font-size: 11px; }
+.note-close {
+  padding: 5px 12px;
+  background: none; border: none; border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer;
+}
+.note-close:hover { background: var(--surface-2); }
+.note-trashed-hint { margin: 0; color: var(--text-3); font-size: 12px; }
+.note-labels-field { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px; }
+.note-labels-field input {
+  flex: 1; min-width: 0;
+  padding: 3px 0;
+  background: none; border: none; border-bottom: 1px solid var(--border); outline: none;
+  color: var(--text);
+  font: inherit; font-size: 12px;
+}
+.note-checklist ul { margin: 0; padding: 0; list-style: none; }
+.note-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.note-item input[type="checkbox"] { flex: none; margin: 0; }
+.note-item input[type="text"], .note-item-new {
+  flex: 1; min-width: 0; width: 100%; box-sizing: border-box;
+  padding: 3px 0;
+  background: none; border: none; outline: none;
+  color: var(--text);
+  font: inherit; font-size: 14px;
+}
+.note-item.checked input[type="text"] { color: var(--text-3); text-decoration: line-through; }
+.note-item-new { padding-left: 21px; }
+.note-item-remove {
+  flex: none; width: 22px; height: 22px; padding: 0;
+  background: none; border: none; border-radius: 50%;
+  color: var(--text-3);
+  font-size: 15px; line-height: 1;
+  cursor: pointer;
+}
+.note-item-remove:hover { background: var(--surface-2); color: var(--text); }
+.note-checked-count { margin: 8px 0 2px; color: var(--text-3); font-size: 12px; }
+
 .board-menu { position: relative; display: inline-flex; }
 .board-menu-button {
   padding: 0 6px;
@@ -6156,7 +6343,7 @@ button.ki-id-badge::after {
   font: inherit; font-size: 12px;
   cursor: pointer;
 }
-.board-name-form button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.board-name-form button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .board-name-form button:disabled { opacity: .5; cursor: default; }
 .task-column-cards { display: flex; flex-direction: column; gap: 8px; min-height: 48px; }
 .task-card {

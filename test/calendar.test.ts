@@ -13,6 +13,7 @@ import {
   buildTaskLink,
   buildTaskSearch,
   buildModuleSearch,
+  buildNoteSearch,
   parseCalendar,
   withoutCalendar,
 } from "../client/src/hooks/useHash.js";
@@ -168,13 +169,14 @@ describe("calendar grid + URL helpers", () => {
   it("round-trips the calendar query and keeps other params", () => {
     const q = buildCalendarSearch("?projects=1,2", 7, "2026-09");
     expect(q).toBe("?projects=1,2&calendar=7&month=2026-09");
-    expect(parseCalendar(q)).toEqual({ projectId: 7, month: "2026-09", view: "calendar", taskId: null, moduleId: null });
+    expect(parseCalendar(q)).toEqual({ projectId: 7, month: "2026-09", view: "calendar", taskId: null, moduleId: null, noteId: null });
     expect(parseCalendar("?calendar=7&month=2026-13")).toEqual({
       projectId: 7,
       month: null,
       view: "calendar",
       taskId: null,
       moduleId: null,
+      noteId: null,
     });
     expect(parseCalendar("?projects=1")).toBeNull();
     expect(withoutCalendar(q)).toBe("?projects=1,2");
@@ -195,6 +197,16 @@ describe("calendar grid + URL helpers", () => {
     expect(buildModuleSearch("?calendar=7&view=board&module=3", null)).toBe("?calendar=7&view=board");
     expect(buildProjectViewSearch("?calendar=7&view=board&module=3", "list")).toBe("?calendar=7&view=list&module=3");
     expect(withoutCalendar("?calendar=7&view=board&module=3")).toBe("");
+  });
+
+  it("reads the notes tab and an open note, ignoring bad values", () => {
+    expect(parseCalendar("?calendar=7&view=notes&note=3")).toMatchObject({ view: "notes", noteId: 3 });
+    expect(parseCalendar("?calendar=7&view=notes&note=abc")).toMatchObject({ view: "notes", noteId: null });
+    expect(buildProjectViewSearch("?calendar=7", "notes")).toBe("?calendar=7&view=notes");
+    expect(buildNoteSearch("?calendar=7&view=notes", 3)).toBe("?calendar=7&view=notes&note=3");
+    expect(buildNoteSearch("?calendar=7&view=notes&note=3", null)).toBe("?calendar=7&view=notes");
+    expect(withoutCalendar("?calendar=7&view=notes&note=3")).toBe("");
+    expect(buildProjectViewSearch("?calendar=7&view=notes&note=3", "board")).toBe("?calendar=7&view=board");
   });
 
   it("builds view and task queries, keeping other params", () => {

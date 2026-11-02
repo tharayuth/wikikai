@@ -99,7 +99,7 @@ export function tasksInModule<T extends { module_id: number }>(tasks: T[], modul
 export function selectedModuleId(
   modules: { id: number }[],
   requested: number | null,
-  view: "calendar" | "board" | "list",
+  view: string,
   openTaskModuleId: number | null,
 ): number | null {
   const exists = (id: number | null): boolean => id !== null && modules.some((m) => m.id === id);

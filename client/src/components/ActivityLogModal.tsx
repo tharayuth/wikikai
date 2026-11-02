@@ -241,6 +241,8 @@ function describeTarget(entry: ActivityLogEntry): string {
       return `module "${entry.task_title ?? "?"}"`;
     case "board_column":
       return `column "${entry.task_title ?? "?"}"`;
+    case "note":
+      return `note "${entry.task_title ?? "?"}"`;
     case "image": {
       const where =
         entry.page_id && pgTitle

@@ -24,6 +24,7 @@ export type ActivityTarget =
   | "board_task"
   | "board_module"
   | "board_column"
+  | "note"
   | "secret";
 
 /** What a single recorded row looks like — what callers pass in (no

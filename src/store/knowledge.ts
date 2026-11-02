@@ -86,6 +86,16 @@ function rowToMetadata(row: Row): KnowledgeMetadata {
   };
 }
 
+export class ProjectHasNotesError extends Error {
+  constructor(
+    name: string,
+    public readonly count: number,
+  ) {
+    super(`project "${name}" has ${count} note(s), trashed ones included. Delete them first.`);
+    this.name = "ProjectHasNotesError";
+  }
+}
+
 /** Unregistering keeps a project's documents, so it must not silently take its
  *  tasks. Checked up front because a raw constraint error says nothing useful. */
 export class ProjectHasTasksError extends Error {
@@ -136,6 +146,12 @@ export class KnowledgeStore {
       )
       .get(trimmed) as { n: number };
     if (n > 0) throw new ProjectHasTasksError(trimmed, n);
+    const { notes } = this.db
+      .prepare(
+        `SELECT COUNT(*) AS notes FROM notes n JOIN projects p ON p.id = n.project_id WHERE p.name = ?`,
+      )
+      .get(trimmed) as { notes: number };
+    if (notes > 0) throw new ProjectHasNotesError(trimmed, notes);
     const r = this.db.prepare(`DELETE FROM projects WHERE name = ?`).run(trimmed);
     return { name: trimmed, removed: r.changes > 0 };
   }

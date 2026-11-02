@@ -44,8 +44,10 @@ import {
   resolveShareViewer,
   setShareCookie,
 } from "./shareAccess.js";
-import { ProjectHasTasksError, type KnowledgeMetadata } from "../store/knowledge.js";
+import { ProjectHasNotesError, ProjectHasTasksError, type KnowledgeMetadata } from "../store/knowledge.js";
+import type { NoteStore } from "../store/notes.js";
 import type { TaskStore } from "../store/tasks.js";
+import { attachNoteRoutes } from "./noteRoutes.js";
 import { attachTaskRoutes } from "./taskRoutes.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +68,7 @@ export interface BuildAppOptions {
   files?: FileStore;
   /** Project tasks. Optional so lightweight test apps can skip it. */
   tasks?: TaskStore;
+  notes?: NoteStore;
   /** Defaults to true. When false, project-level ACL is bypassed. */
   projectAclEnabled?: boolean;
   handlers: ToolHandlers;
@@ -136,6 +139,9 @@ export function buildApp(opts: BuildAppOptions): Express {
   attachAuthRoutes(app, authOpts);
   if (opts.tasks) {
     attachTaskRoutes(app, { tasks: opts.tasks, permissions: opts.permissions, aclEnabled });
+  }
+  if (opts.notes && opts.permissions) {
+    attachNoteRoutes(app, { notes: opts.notes, permissions: opts.permissions, aclEnabled });
   }
 
   // ─── Images: content-addressed binary serving ───
@@ -947,7 +953,7 @@ export function buildApp(opts: BuildAppOptions): Express {
       const result = opts.knowledge.unregisterProject(req.params.name);
       res.json(result);
     } catch (e) {
-      if (e instanceof ProjectHasTasksError) {
+      if (e instanceof ProjectHasTasksError || e instanceof ProjectHasNotesError) {
         res.status(409).json({ error: e.message });
         return;
       }

@@ -9,6 +9,7 @@ import { ActivityLogStore } from "./store/activityLog.js";
 import { SessionStore, UserStore } from "./store/users.js";
 import { PermissionStore } from "./store/permissions.js";
 import { ShareUserStore } from "./store/shareUsers.js";
+import { NoteStore } from "./store/notes.js";
 import { TaskStore } from "./store/tasks.js";
 import { sweepOrphanedAssets } from "./store/orphanGc.js";
 import { buildToolHandlers } from "./mcp/handlers.js";
@@ -42,6 +43,7 @@ export async function startServer(): Promise<RunningServer> {
   const promptLog = new PromptLogStore(db);
   const activityLog = new ActivityLogStore(db);
   const tasks = new TaskStore(db, activityLog, { aclEnabled: config.projectAclEnabled });
+  const notes = new NoteStore(db, activityLog);
   const users = new UserStore(db);
   const sessions = new SessionStore(db, users);
   const permissions = new PermissionStore(db);
@@ -115,6 +117,7 @@ export async function startServer(): Promise<RunningServer> {
     shareUsers,
     files,
     tasks,
+    notes,
     projectAclEnabled: config.projectAclEnabled,
     handlers,
     publicBaseUrl: config.publicBaseUrl,

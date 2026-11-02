@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { applyMove } from "../lib/taskBoard";
+import { applyNoteMove } from "../lib/notes";
 
 // ─── Types mirrored from server ───
 export interface KnowledgeMeta {
@@ -149,7 +150,7 @@ export interface ActivityLogEntry {
   source: "mcp" | "web";
   tool_name: string | null;
   action: "add" | "edit" | "delete" | "reorder" | "toggle" | "caption" | "upload" | "resize";
-  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task" | "board_module" | "board_column";
+  target: "knowledge" | "page" | "block" | "image" | "task" | "board_task" | "board_module" | "board_column" | "note";
   knowledge_id: number | null;
   knowledge_title: string | null;
   page_id: number | null;
@@ -264,6 +265,50 @@ export interface TaskModule {
   columns: TaskColumn[];
 }
 
+// ─── Notes ───
+export type NoteColor = "default" | "red" | "amber" | "green" | "cyan" | "blue" | "purple";
+export type NoteState = "active" | "archived" | "trashed";
+
+export interface NoteItem {
+  id: number;
+  text: string;
+  checked: boolean;
+}
+
+export interface Note {
+  id: number;
+  project_id: number;
+  title: string;
+  body: string;
+  /** Non-null makes it a checklist. */
+  items: NoteItem[] | null;
+  color: NoteColor;
+  labels: string[];
+  pinned: boolean;
+  position: number;
+  version: number;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+  trashed: boolean;
+}
+
+export interface NoteInput {
+  title?: string;
+  body?: string;
+  items?: { id?: number; text: string; checked: boolean }[] | null;
+  color?: NoteColor;
+  labels?: string[];
+  pinned?: boolean;
+}
+
+export interface NotePatch extends NoteInput {
+  expected_version?: number;
+  archived?: boolean;
+  trashed?: boolean;
+}
+
 export interface ProjectModulesResponse {
   can_edit: boolean;
   modules: TaskModule[];
@@ -313,6 +358,8 @@ export const portalApi = createApi({
     "Tasks",
     "Task",
     "Modules",
+    "Notes",
+    "Note",
   ],
   endpoints: (builder) => ({
     listProjects: builder.query<
@@ -698,6 +745,60 @@ export const portalApi = createApi({
         { type: "Modules", id: arg.projectId },
         { type: "Tasks", id: arg.projectId },
       ],
+    }),
+
+    listProjectNotes: builder.query<{ can_edit: boolean; notes: Note[] }, { projectId: number; state: NoteState }>({
+      query: ({ projectId, state }) => ({ url: `projects/${projectId}/notes`, params: { state } }),
+      providesTags: (_r, _e, arg) => [{ type: "Notes", id: arg.projectId }],
+    }),
+
+    getNote: builder.query<{ can_edit: boolean; note: Note }, number>({
+      query: (id) => `notes/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "Note", id }],
+    }),
+
+    addNote: builder.mutation<Note, { projectId: number; note: NoteInput }>({
+      query: ({ projectId, note }) => ({ url: `projects/${projectId}/notes`, method: "POST", body: note }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Notes", id: arg.projectId }],
+    }),
+
+    updateNote: builder.mutation<Note, { id: number; projectId: number; patch: NotePatch }>({
+      query: ({ id, patch }) => ({ url: `notes/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Notes", id: arg.projectId },
+        { type: "Note", id: arg.id },
+      ],
+    }),
+
+    toggleNoteItem: builder.mutation<Note, { id: number; projectId: number; itemId: number; checked: boolean }>({
+      query: ({ id, itemId, checked }) => ({ url: `notes/${id}/items/${itemId}`, method: "POST", body: { checked } }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Notes", id: arg.projectId },
+        { type: "Note", id: arg.id },
+      ],
+    }),
+
+    moveNote: builder.mutation<Note, { id: number; projectId: number; beforeId: number | null }>({
+      query: ({ id, beforeId }) => ({ url: `notes/${id}/move`, method: "POST", body: { before_id: beforeId } }),
+      // Move the card at once and restore it if the server refuses.
+      async onQueryStarted({ id, projectId, beforeId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          portalApi.util.updateQueryData("listProjectNotes", { projectId, state: "active" }, (draft) => {
+            draft.notes = applyNoteMove(draft.notes, id, beforeId);
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+      invalidatesTags: (_r, _e, arg) => [{ type: "Notes", id: arg.projectId }],
+    }),
+
+    deleteNote: builder.mutation<{ deleted: boolean }, { id: number; projectId: number }>({
+      query: ({ id }) => ({ url: `notes/${id}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Notes", id: arg.projectId }],
     }),
 
     getActivityLog: builder.query<
@@ -1121,6 +1222,13 @@ export const {
   useGetProjectCalendarQuery,
   useListProjectTasksQuery,
   useListProjectModulesQuery,
+  useListProjectNotesQuery,
+  useGetNoteQuery,
+  useAddNoteMutation,
+  useUpdateNoteMutation,
+  useToggleNoteItemMutation,
+  useMoveNoteMutation,
+  useDeleteNoteMutation,
   useAddModuleMutation,
   useUpdateModuleMutation,
   useDeleteModuleMutation,

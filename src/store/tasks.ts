@@ -237,7 +237,7 @@ function assertDateOrder(start: string | null, due: string | null): void {
   if (start && due && start > due) throw new Error("start_date must not be after due_date");
 }
 
-function cleanLabels(values: string[]): string | null {
+export function cleanLabels(values: string[]): string | null {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of values) {
@@ -254,7 +254,7 @@ function cleanLabels(values: string[]): string | null {
   return out.length ? out.join(",") : null;
 }
 
-function parseLabels(stored: string | null): string[] {
+export function parseLabels(stored: string | null): string[] {
   return stored ? stored.split(",") : [];
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarView } from "./CalendarView";
 import { ModuleBar } from "./ModuleBar";
+import { NotesView } from "./NotesView";
 import { TaskBoard } from "./TaskBoard";
 import { TaskFilters } from "./TaskFilters";
 import { TaskListView } from "./TaskListView";
@@ -8,6 +9,7 @@ import { TaskModal } from "./TaskModal";
 import { useListProjectModulesQuery, useListProjectTasksQuery } from "../store/api";
 import {
   buildModuleSearch,
+  buildNoteSearch,
   buildProjectViewSearch,
   buildTaskSearch,
   currentQueryString,
@@ -21,14 +23,15 @@ const TABS: { view: ProjectViewKind; label: string }[] = [
   { view: "calendar", label: "Calendar" },
   { view: "board", label: "Board" },
   { view: "list", label: "List" },
+  { view: "notes", label: "Notes" },
 ];
 
 /**
  * Everything behind a project's calendar icon: one tab bar over the Calendar,
- * Board and List. Rendered in place of the viewer for `/?calendar=<id>`.
+ * Board, List and Notes. Rendered in place of the viewer for `/?calendar=<id>`.
  */
 export function ProjectView({ location }: { location: CalendarLocation }): JSX.Element {
-  const { projectId, month, view, taskId, moduleId } = location;
+  const { projectId, month, view, taskId, moduleId, noteId } = location;
   const [filter, setFilter] = useState<TaskFilter>(NO_FILTER);
   const modulesQuery = useListProjectModulesQuery(projectId);
   const tasksQuery = useListProjectTasksQuery({ projectId });
@@ -51,6 +54,10 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
     navigateTo({ kid: null }, { search });
   }, [view, moduleId, selectedId]);
 
+  const openNote = useCallback((id: number | null) => {
+    navigateTo({ kid: null }, { search: buildNoteSearch(currentQueryString(), id) });
+  }, []);
+
   const selectModule = useCallback((id: number | null) => {
     navigateTo({ kid: null }, { search: buildModuleSearch(currentQueryString(), id) });
   }, []);
@@ -72,9 +79,9 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
             {tab.label}
           </button>
         ))}
-        {view !== "calendar" && <TaskFilters projectId={projectId} filter={filter} onChange={setFilter} />}
+        {(view === "board" || view === "list") && <TaskFilters projectId={projectId} filter={filter} onChange={setFilter} />}
       </div>
-      {modules.length > 0 && (
+      {modules.length > 0 && view !== "notes" && (
         <ModuleBar
           projectId={projectId}
           modules={modules}
@@ -99,6 +106,7 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
       {view === "list" && (
         <TaskListView projectId={projectId} moduleId={selectedId} filter={filter} onOpenTask={openTask} />
       )}
+      {view === "notes" && <NotesView projectId={projectId} noteId={noteId} onOpenNote={openNote} />}
       {taskId != null && <TaskModal key={taskId} projectId={projectId} taskId={taskId} onClose={closeTask} />}
     </section>
   );
