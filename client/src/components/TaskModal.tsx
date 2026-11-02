@@ -18,7 +18,15 @@ import { useMermaidCharts } from "../hooks/useMermaidCharts";
 import { openDatePicker } from "../lib/datePicker";
 import { writeClipboard } from "../lib/badgeMenu";
 import { apiErrorMessage, boardColumns, columnKey, columnLabel } from "../lib/taskBoard";
-import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom, type TaskDraft } from "../lib/taskDraft";
+import {
+  adoptsServerCopy,
+  changedElsewhere,
+  closesAfterSave,
+  draftAfterSave,
+  draftOf,
+  patchFrom,
+  type TaskDraft,
+} from "../lib/taskDraft";
 import { useBackdropClose } from "../hooks/useBackdropClose";
 
 interface Props {
@@ -55,6 +63,12 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
   // The draft as of the latest render, for a save reply to compare against.
   const draftRef = useRef<TaskDraft | null>(null);
   draftRef.current = draft;
+  useEffect(
+    () => () => {
+      draftRef.current = null;
+    },
+    [],
+  );
   const [editingDescription, setEditingDescription] = useState(false);
   const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null);
   const [newLinkUrl, setNewLinkUrl] = useState("");
@@ -123,10 +137,10 @@ export function TaskModal({ projectId, taskId, onClose }: Props): JSX.Element {
       .then((next) => {
         // The reply must not overwrite what was typed while it was in flight:
         // the base moves on either way, so those edits stay dirty and savable.
-        const untouched = draftRef.current === draft;
+        const done = closesAfterSave(draftRef.current, draft);
         setBase(next);
         setDraft((current) => (current ? draftAfterSave(current, draft, next) : current));
-        if (untouched) setEditingDescription(false);
+        if (done) onClose();
       })
       .catch(toastError("Could not save the task"));
   };

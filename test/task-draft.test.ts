@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adoptsServerCopy, changedElsewhere, draftAfterSave, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
+import { adoptsServerCopy, changedElsewhere, closesAfterSave, draftAfterSave, draftOf, patchFrom } from "../client/src/lib/taskDraft.js";
 
 const task = {
   title: "T",
@@ -148,5 +148,23 @@ describe("draftAfterSave", () => {
     const typed = { ...submitted, description: "More words" };
     const kept = draftAfterSave(typed, submitted, saved);
     expect(patchFrom(kept, saved)).toEqual({ description: "More words" });
+  });
+});
+
+describe("closesAfterSave", () => {
+  it("closes when the form still holds what was sent", () => {
+    const submitted = { ...draftOf(task), title: "Saved" };
+    expect(closesAfterSave(submitted, submitted)).toBe(true);
+  });
+
+  it("stays open when the person kept typing, so those edits are not lost", () => {
+    const submitted = { ...draftOf(task), title: "Saved" };
+    const typed = { ...submitted, description: "More words" };
+    expect(closesAfterSave(typed, submitted)).toBe(false);
+  });
+
+  it("does nothing once the dialog has gone, so a late reply cannot close the next task", () => {
+    const submitted = { ...draftOf(task), title: "Saved" };
+    expect(closesAfterSave(null, submitted)).toBe(false);
   });
 });

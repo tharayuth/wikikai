@@ -121,3 +121,11 @@ export function adoptsServerCopy(dirty: boolean, baseVersion: number | null, lat
 export function draftAfterSave(current: TaskDraft, submitted: TaskDraft, saved: DraftableTask): TaskDraft {
   return current === submitted ? draftOf(saved) : current;
 }
+
+/** Whether a save's reply closes the form. Only when `current` is still the
+ *  object that was sent: text typed during the request is unsaved and has to
+ *  stay on screen. `null` means the form has already gone, and a late reply must
+ *  not close whichever task is open by then. */
+export function closesAfterSave(current: TaskDraft | null, submitted: TaskDraft): boolean {
+  return current === submitted;
+}
