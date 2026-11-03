@@ -15,7 +15,7 @@ import {
   useListProjectsQuery,
   useLogoutMutation,
 } from "../store/api";
-import { useHash } from "../hooks/useHash";
+import { isSearchIdLookup, useHash } from "../hooks/useHash";
 import { SearchResults } from "./SearchResults";
 import { KnowledgeInfo } from "./KnowledgeInfo";
 import { SseStatus } from "./SseStatus";
@@ -72,9 +72,9 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
 
   useEffect(() => {
     const q = searchText.trim();
-    // `&N` / `#N` / `@N` are id lookups — let them through with as little as
-    // 2 chars and skip the project filter (they bypass it server-side too).
-    const isIdLookup = /^[&#@]\d+$/.test(q);
+    // Id lookups — let them through with as little as 2 chars and skip the
+    // project filter (they bypass it server-side too).
+    const isIdLookup = isSearchIdLookup(q);
     if (!isIdLookup && [...q].length < 3) {
       setOpen(false);
       return;
@@ -186,11 +186,16 @@ export function Topbar({ searchText, onSearchText, activeKid, activePid }: Topba
                       }
                     }}
                   />
-                  Include archived pages
+                  Include archived
                 </label>
                 <SearchResults
+                  key={searchText}
                   hits={result.data.hits}
                   total={result.data.total}
+                  tasks={result.data.tasks}
+                  tasksTotal={result.data.tasks_total}
+                  notes={result.data.notes}
+                  notesTotal={result.data.notes_total}
                   query={searchText}
                   onPick={() => setOpen(false)}
                 />

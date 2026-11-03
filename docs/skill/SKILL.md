@@ -82,8 +82,10 @@ A task is tracked work on a project's board, written `T12`. A page checkbox (`- 
 
 **If stuck**, set `blocked_reason` and stop, leaving the task in `doing`. `next` skips blocked tasks.
 
+**Finding a task.** `search` also returns matching tasks in `tasks` and notes in `notes`, beside the page `hits`, each with `snippet`, `match_ratio` and `url`. `T12` or `N12` as the whole query finds that one, and ignores the project filter. Archived items need `include_archived`; a trashed note never appears.
+
 ### Project notes (quick notes, not documents)
-A note is a short text or checklist on a project's Notes tab, written `N12`. Use a knowledge page for anything to present or share, and a task for tracked work. The `search` tool does not cover notes, so look there with `list_notes` when the user asks about a note.
+A note is a short text or checklist on a project's Notes tab, written `N12`. Use a knowledge page for anything to present or share, and a task for tracked work. `search` finds notes as well as pages and tasks; use `list_notes` for archived or trashed notes.
 
 - `list_notes({ project?, query?, state?, limit? })` — compact rows with a `preview`, active notes by default. `query` finds text in the title, body, list items or labels. With no `project` it covers every project you can see. `total` counts every match, past `limit`.
 - `get_note({ note_id })` — one note in full, with `items` and `version`.

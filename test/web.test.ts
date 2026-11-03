@@ -1037,7 +1037,7 @@ describe("HTTP routes", () => {
 
   it("GET /api/search returns empty when q missing", async () => {
     const res = await req(app).get(`/api/search`);
-    expect(res.body).toEqual({ hits: [], total: 0 });
+    expect(res.body).toEqual({ hits: [], total: 0, tasks: [], tasks_total: 0, notes: [], notes_total: 0 });
   });
 
   it("DELETE /api/knowledge/:id cascades pages", async () => {

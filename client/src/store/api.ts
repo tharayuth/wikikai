@@ -102,9 +102,39 @@ export interface SearchHit {
   block_id?: number;
 }
 
+export interface TaskSearchHit {
+  id: number;
+  project_id: number;
+  project: string;
+  title: string;
+  status: string;
+  column: string;
+  archived: boolean;
+  snippet: string;
+  matched_terms: string[];
+  match_ratio: number;
+  url: string;
+}
+
+export interface NoteSearchHit {
+  id: number;
+  project_id: number;
+  project: string;
+  title: string;
+  archived: boolean;
+  snippet: string;
+  matched_terms: string[];
+  match_ratio: number;
+  url: string;
+}
+
 export interface SearchResponse {
   hits: SearchHit[];
   total: number;
+  tasks: TaskSearchHit[];
+  tasks_total: number;
+  notes: NoteSearchHit[];
+  notes_total: number;
 }
 
 export interface KnowledgeListQuery {

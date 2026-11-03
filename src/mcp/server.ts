@@ -350,9 +350,9 @@ export function createMcpServer(
   server.registerTool(
     "search",
     {
-      title: "Search pages",
+      title: "Search",
       description:
-        "Ranked search over page content, titles and keywords, across every project you can see unless filtered. Rare words decide the ranking and filler words cost nothing; words under 3 characters are ignored. Matching is literal — a Thai question won't find a page written only in English. Each hit gives the document and page, the best line with its heading, a snippet and `match_ratio` (share of your terms it contains — well below 1 means a weak hit), usually enough to answer without read_page. `total` counts all relevant pages; raise `limit` to get more of them.",
+        "Ranked search over page content, titles and keywords, across every project you can see unless filtered. Rare words decide the ranking and filler words cost nothing; words under 3 characters are ignored. Matching is literal — a Thai question won't find a page written only in English. Each hit gives the document and page, the best line with its heading, a snippet and `match_ratio` (share of your terms it contains — well below 1 means a weak hit), usually enough to answer without read_page. `total` counts all relevant pages; raise `limit` to get more of them. Matching board tasks and project notes come back in `tasks` and `notes`.",
       inputSchema: shapeOf(SearchSchema),
     },
     async (input) => jsonContent(await handlers.search(input)),
@@ -518,7 +518,7 @@ export function createMcpServer(
     {
       title: "Search notes",
       description:
-        "Search or list notes as compact rows with a text preview. `search` does not cover notes. `total` counts every match, past `limit`.",
+        "List notes as compact rows with a text preview, including archived or trashed ones. `total` counts every match, past `limit`.",
       inputSchema: shapeOf(ListNotesSchema),
     },
     async (input) => jsonContent(await handlers.list_notes(input)),

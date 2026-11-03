@@ -270,7 +270,7 @@ a:hover { text-decoration: underline; }
   box-shadow: none;
   max-height: calc(100vh - var(--topbar-h) - 16vh);
 }
-/* "Include archived pages" row sits atop the search results popover. */
+/* "Include archived" row sits atop the search results popover. */
 .search-archived-toggle {
   display: flex;
   align-items: center;
@@ -3087,6 +3087,29 @@ button.ki-id-badge::after {
 }
 /* Flags a hit that matched only part of the query — worth a glance before a
    click. Hover shows which terms it did match. */
+.sr-meta .sr-archived {
+  background: var(--surface-2);
+  color: var(--text-2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.sr-more {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.sr-more:hover { background: var(--surface-2); }
 .sr-meta .sr-partial {
   background: var(--amber-light);
   color: var(--amber);

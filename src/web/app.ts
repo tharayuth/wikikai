@@ -1621,7 +1621,7 @@ export function buildApp(opts: BuildAppOptions): Express {
     try {
       const q = optional(req.query.q);
       if (!q) {
-        res.json({ hits: [], total: 0 });
+        res.json({ hits: [], total: 0, tasks: [], tasks_total: 0, notes: [], notes_total: 0 });
         return;
       }
       const r = await opts.handlers.search({

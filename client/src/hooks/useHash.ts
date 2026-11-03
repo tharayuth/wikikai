@@ -160,6 +160,20 @@ export function buildTaskLink(search: string, projectId: number, taskId: number)
   );
 }
 
+/** A note on its project's Notes tab, from anywhere. Keeps `?projects=`. */
+export function buildNoteLink(search: string, projectId: number, noteId: number): string {
+  return buildNoteSearch(
+    buildProjectViewSearch(buildCalendarSearch(withoutCalendar(search), projectId, null), "notes"),
+    noteId,
+  );
+}
+
+/** `&N`, `#N`, `@N`, `T12` and `N12` name one thing, so the search box lets them
+ *  through at two characters and with no project filter. */
+export function isSearchIdLookup(query: string): boolean {
+  return /^(?:[&#@]|[tn])\d+$/i.test(query);
+}
+
 /** Build the `?projects=` query string for a set of selected tokens (project
  *  ids and/or the "none" sentinel). An empty list yields `?projects=` (explicit
  *  "show nothing"); pass null to clear the param entirely ("All projects"). */

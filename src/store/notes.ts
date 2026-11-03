@@ -2,6 +2,8 @@ import type { Db } from "./db.js";
 import type { ActivityAction, ActivityLogStore } from "./activityLog.js";
 import { getCallContext } from "../lib/callContext.js";
 import { emitEvent } from "../lib/events.js";
+import { buildExcerpt } from "./search/snippet.js";
+import { rankRecords } from "./search/records.js";
 import { cleanLabels, parseLabels } from "./tasks.js";
 
 /**
@@ -81,6 +83,13 @@ export interface NoteSearch {
   query?: string;
   state?: NoteState;
   limit: number;
+}
+
+export interface NoteSearchResult {
+  note: Note;
+  snippet: string;
+  matched: string[];
+  matchRatio: number;
 }
 
 export class NoteNotFoundError extends Error {
@@ -194,6 +203,11 @@ function noteMatches(note: Note, query: string | undefined): boolean {
   return haystack.some((text) => text.toLocaleLowerCase().includes(q));
 }
 
+/** The text a search looks through and quotes. */
+function searchableBody(note: Note): string {
+  return [note.body, ...(note.items ?? []).map((i) => i.text)].filter(Boolean).join("\n");
+}
+
 const STATE_FILTER: Record<NoteState, string> = {
   active: `archived_at IS NULL AND trashed_at IS NULL ORDER BY pinned DESC, position, id`,
   archived: `archived_at IS NOT NULL AND trashed_at IS NULL ORDER BY position, id`,
@@ -233,6 +247,35 @@ export class NoteStore {
       .all(...(filter.projectIds ? [JSON.stringify(filter.projectIds)] : [])) as NoteDbRow[];
     const found = rows.map(toNote).filter((n) => noteMatches(n, filter.query));
     return { notes: found.slice(0, filter.limit), total: found.length };
+  }
+
+  /** Ranked text search for the main search box. A trashed note never appears:
+   *  it is on its way out, and `list_notes` can still reach it. */
+  searchRanked(query: string, scope: { projectIds?: number[]; includeArchived?: boolean }): NoteSearchResult[] {
+    const conditions = [`trashed_at IS NULL`];
+    const params: string[] = [];
+    if (!scope.includeArchived) conditions.push(`archived_at IS NULL`);
+    if (scope.projectIds) {
+      conditions.push(`project_id IN (SELECT value FROM json_each(?))`);
+      params.push(JSON.stringify(scope.projectIds));
+    }
+    const rows = this.db.prepare(`SELECT * FROM notes WHERE ${conditions.join(" AND ")}`).all(...params) as NoteDbRow[];
+    const notes = new Map(rows.map((r) => [r.id, toNote(r)]));
+    const hits = rankRecords(
+      [...notes.values()].map((n) => ({ id: n.id, title: n.title, body: searchableBody(n), keywords: n.labels })),
+      query,
+    );
+    return hits.flatMap((hit) => {
+      const note = notes.get(hit.id);
+      return note ? [{ note, snippet: hit.snippet, matched: hit.matched, matchRatio: hit.matchRatio }] : [];
+    });
+  }
+
+  /** One note as a search result, for `N12`. Null when it is missing or trashed. */
+  searchResultById(id: number): NoteSearchResult | null {
+    const note = this.get(id);
+    if (!note || note.trashed) return null;
+    return { note, snippet: buildExcerpt(searchableBody(note), []).text, matched: [], matchRatio: 1 };
   }
 
   projectIdsNamed(names: string[]): number[] {

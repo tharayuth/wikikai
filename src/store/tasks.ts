@@ -4,6 +4,8 @@ import { parseDate } from "./calendar.js";
 import { getCallContext } from "../lib/callContext.js";
 import { emitEvent } from "../lib/events.js";
 import { MilestoneStore } from "./milestones.js";
+import { rankRecords } from "./search/records.js";
+import { buildExcerpt } from "./search/snippet.js";
 import {
   LOCKED_COLUMN_NAMES,
   TaskConflictError,
@@ -321,6 +323,13 @@ export interface TaskSummary {
   earliest_start: string | null;
 }
 
+export interface TaskSearchResult extends TaskRow {
+  project: string;
+  snippet: string;
+  matched: string[];
+  matchRatio: number;
+}
+
 export class TaskStore {
   private readonly aclEnabled: boolean;
   readonly modules: TaskModuleStore;
@@ -453,6 +462,48 @@ export class TaskStore {
       out = out.filter((t) => t.labels.some((l) => l.toLocaleLowerCase() === wanted));
     }
     return opts.limit != null ? out.slice(0, opts.limit) : out;
+  }
+
+  /** Ranked text search over titles, descriptions, blocked reasons and labels.
+   *  `projectIds` is the caller's scope; leaving it out means every project. */
+  searchRanked(query: string, scope: { projectIds?: number[]; includeArchived?: boolean }): TaskSearchResult[] {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (!scope.includeArchived) conditions.push(`t.archived_at IS NULL`);
+    if (scope.projectIds) {
+      conditions.push(`t.project_id IN (SELECT value FROM json_each(?))`);
+      params.push(JSON.stringify(scope.projectIds));
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const rows = this.db.prepare(`${SELECT_TASK} ${where}`).all(...params) as TaskDbRow[];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const hits = rankRecords(
+      rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        body: [r.description, r.blocked_reason].filter(Boolean).join("\n"),
+        keywords: parseLabels(r.labels),
+      })),
+      query,
+    );
+    return hits.flatMap((hit) => {
+      const row = byId.get(hit.id);
+      if (!row) return [];
+      return [{ ...toRow(row), project: row.project_name, snippet: hit.snippet, matched: hit.matched, matchRatio: hit.matchRatio }];
+    });
+  }
+
+  /** One task as a search result, for `T12`. Null when there is no such task. */
+  searchResultById(id: number): TaskSearchResult | null {
+    const row = this.dbRow(id);
+    if (!row) return null;
+    return {
+      ...toRow(row),
+      project: row.project_name,
+      snippet: buildExcerpt(row.description, []).text,
+      matched: [],
+      matchRatio: 1,
+    };
   }
 
   /** The task an agent should claim next: the board order is the queue. Only

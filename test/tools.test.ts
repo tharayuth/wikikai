@@ -717,7 +717,7 @@ describe("MCP tool handlers", () => {
         );
 
       for (const q of [`&${kB.id}`, `#${pB.id}`, `@${blockOf(pB.id)}`]) {
-        expect(await asAlice(q), q).toEqual({ hits: [], total: 0 });
+        expect(await asAlice(q), q).toEqual({ hits: [], total: 0, tasks: [], tasks_total: 0, notes: [], notes_total: 0 });
       }
       for (const q of [`&${kA.id}`, `#${pA.id}`, `@${blockOf(pA.id)}`]) {
         const r = await asAlice(q);

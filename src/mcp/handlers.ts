@@ -484,12 +484,12 @@ export const SearchSchema = z.object({
   query: z
     .string()
     .min(1)
-    .describe("A whole-sentence question works best, in Thai, English or both. `&N`, `#N` or `@N` jumps to that document, page or block."),
+    .describe("A whole-sentence question works best, in Thai, English or both. `&N`, `#N`, `@N`, `T12` or `N12` jumps to that document, page, block, task or note."),
   project: z.string().optional(),
   projects: z.array(z.string()).optional().describe("Several projects (combined with `project`)."),
   knowledge_id: z.number().int().positive().optional(),
   limit: z.number().int().min(1).max(200).optional().describe("Default 50."),
-  include_archived: z.boolean().optional().describe("Include archived pages."),
+  include_archived: z.boolean().optional().describe("Include archived items."),
 });
 
 const IMPORT_PATH_NOTE =
@@ -891,6 +891,39 @@ export const EditNoteSchema = z.object({
   trashed: z.boolean().optional().describe("true moves it to the trash; false restores it."),
 });
 
+export interface TaskSearchHit {
+  id: number;
+  project_id: number;
+  project: string;
+  title: string;
+  status: TaskStatus;
+  column: string;
+  archived: boolean;
+  snippet: string;
+  matched_terms: string[];
+  match_ratio: number;
+  url: string;
+}
+
+export interface NoteSearchHit {
+  id: number;
+  project_id: number;
+  project: string;
+  title: string;
+  archived: boolean;
+  snippet: string;
+  matched_terms: string[];
+  match_ratio: number;
+  url: string;
+}
+
+export interface ProjectItemHits {
+  tasks: TaskSearchHit[];
+  tasks_total: number;
+  notes: NoteSearchHit[];
+  notes_total: number;
+}
+
 export type NoteResult = Note & { project: string; url: string };
 
 export interface NoteListEntry {
@@ -1196,7 +1229,7 @@ export interface ToolHandlers {
     total: number;
   }>;
 
-  search(input: ToolInputs["search"]): Promise<{
+  search(input: ToolInputs["search"]): Promise<ProjectItemHits & {
     hits: {
       knowledge_id: number;
       knowledge_title: string;
@@ -1667,6 +1700,67 @@ export function buildToolHandlers(
     const note = notes.get(id);
     if (!note) throw new Error(`note N${id} not found`);
     return note;
+  };
+
+  /** The tasks and notes half of `search`. `names` is the project scope, with
+   *  null meaning every project. `T12` and `N12` ignore it, as `&N` does for
+   *  pages, but never what the caller may see. */
+  const searchProjectItems = (
+    parsed: z.infer<typeof SearchSchema>,
+    visible: Set<string> | null,
+    names: string[] | null,
+  ): ProjectItemHits => {
+    if (parsed.knowledge_id !== undefined) return { tasks: [], tasks_total: 0, notes: [], notes_total: 0 };
+    const query = parsed.query.trim();
+    const canSee = (project: string): boolean => visible === null || visible.has(project);
+    const scope = {
+      projectIds: names === null ? undefined : notes.projectIdsNamed(names),
+      includeArchived: parsed.include_archived,
+    };
+    const limit = parsed.limit ?? 50;
+
+    const taskId = /^t(\d+)$/i.exec(query)?.[1];
+    const taskById = taskId ? tasks.searchResultById(Number(taskId)) : null;
+    const foundTasks = [
+      ...(taskById && canSee(taskById.project) ? [taskById] : []),
+      ...tasks.searchRanked(query, scope).filter((t) => t.id !== taskById?.id),
+    ];
+
+    const noteId = /^n(\d+)$/i.exec(query)?.[1];
+    const noteById = noteId ? notes.searchResultById(Number(noteId)) : null;
+    const foundNotes = [
+      ...(noteById && canSee(noteProjectName(noteById.note)) ? [noteById] : []),
+      ...notes.searchRanked(query, scope).filter((n) => n.note.id !== noteById?.note.id),
+    ];
+
+    return {
+      tasks: foundTasks.slice(0, limit).map((t) => ({
+        id: t.id,
+        project_id: t.project_id,
+        project: t.project,
+        title: t.title,
+        status: t.status,
+        column: t.column,
+        archived: t.archived,
+        snippet: t.snippet,
+        matched_terms: t.matched,
+        match_ratio: t.matchRatio,
+        url: taskUrl(ctx, t.project_id, t.id),
+      })),
+      tasks_total: foundTasks.length,
+      notes: foundNotes.slice(0, limit).map(({ note, snippet, matched, matchRatio }) => ({
+        id: note.id,
+        project_id: note.project_id,
+        project: noteProjectName(note),
+        title: note.title,
+        archived: note.archived,
+        snippet,
+        matched_terms: matched,
+        match_ratio: matchRatio,
+        url: noteUrl(ctx, note.project_id, note.id),
+      })),
+      notes_total: foundNotes.length,
+    };
   };
 
   /** Attachment references in a page body, for diff-based cleanup after
@@ -2384,7 +2478,7 @@ export function buildToolHandlers(
         // No overlap between what was asked for and what is visible — including
         // the case of a caller with no grants at all, where an absent filter
         // would mean "everything".
-        if (allowed.length === 0) return { hits: [], total: 0 };
+        if (allowed.length === 0) return { hits: [], total: 0, ...searchProjectItems(parsed, visible, []) };
         filters = { projects: allowed };
       }
       const scope = {
@@ -2404,15 +2498,21 @@ export function buildToolHandlers(
             url: urlFor(ctx, h.knowledge_id, h.page_id, h.line),
           })),
           total: hits.length,
+          tasks: [],
+          tasks_total: 0,
+          notes: [],
+          notes_total: 0,
         };
       }
       const { hits, total } = pages.searchWithTotal(parsed.query, { ...scope, limit: parsed.limit });
+      const projectNames = visible === null ? (requested.length ? requested : null) : (filters.projects ?? []);
       return {
         hits: hits.map((h) => ({
           ...h,
           url: urlFor(ctx, h.knowledge_id, h.page_id, h.line),
         })),
         total,
+        ...searchProjectItems(parsed, visible, projectNames),
       };
     },
 
