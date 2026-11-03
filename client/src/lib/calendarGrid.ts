@@ -124,16 +124,26 @@ export function isOverdue(task: { due_date: string | null; status: string }, tod
   return task.due_date !== null && task.due_date < today && task.status !== "done";
 }
 
-export type CalendarIconState = "open" | "upcoming" | "overdue";
+export type CalendarIconState = "open" | "done" | "upcoming" | "active" | "overdue";
 
-/** What a project's calendar icon shows: overdue when an open task is past its
- *  due date, upcoming when open tasks have due dates and none has passed, open
- *  when no open task has a due date, nothing when no task is open. */
-export function calendarIconState(
-  summary: { open_tasks: number; earliest_due: string | null },
-  today: string,
-): CalendarIconState | null {
-  if (summary.open_tasks === 0) return null;
+export interface CalendarIconSummary {
+  open_tasks: number;
+  done_tasks: number;
+  earliest_due: string | null;
+  earliest_start: string | null;
+}
+
+/** What a project's calendar icon shows, first match wins: overdue when an open
+ *  task is past its due date, active when an open task's date range has started,
+ *  upcoming when open tasks have due dates still ahead, open when no open task
+ *  has a due date, done when every task is done, nothing when there are no tasks.
+ *
+ *  `earliest_start` is enough to tell active from upcoming. Once nothing is
+ *  overdue, every range still ends today or later, so a range is running exactly
+ *  when the earliest one has started. */
+export function calendarIconState(summary: CalendarIconSummary, today: string): CalendarIconState | null {
+  if (summary.open_tasks === 0) return summary.done_tasks > 0 ? "done" : null;
   if (summary.earliest_due === null) return "open";
-  return summary.earliest_due < today ? "overdue" : "upcoming";
+  if (summary.earliest_due < today) return "overdue";
+  return summary.earliest_start !== null && summary.earliest_start <= today ? "active" : "upcoming";
 }

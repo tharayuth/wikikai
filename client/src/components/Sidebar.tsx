@@ -36,7 +36,7 @@ import {
 } from "../lib/starredKnowledge";
 import { matchesAnyKnowledgeTag } from "../lib/knowledgeTags";
 import { withDocumentlessProjects } from "../lib/sidebarGroups";
-import { calendarIconState, todayLocal, type CalendarIconState } from "../lib/calendarGrid";
+import { calendarIconState, todayLocal, type CalendarIconState, type CalendarIconSummary } from "../lib/calendarGrid";
 import {
   SidebarTagFilterModal,
   type SidebarTagFilterOption,
@@ -427,7 +427,7 @@ export function Sidebar({ activeKid, activePid, onPick }: Props) {
   const { nameToId, idToName, nameToProject } = useMemo(() => {
     const nameToId = new Map<string, number>();
     const idToName = new Map<number, string>();
-    const nameToProject = new Map<string, { open_tasks: number; earliest_due: string | null }>();
+    const nameToProject = new Map<string, CalendarIconSummary>();
     for (const p of projectList?.projects ?? []) {
       if (p.id != null) {
         nameToId.set(p.name, p.id);
@@ -1094,8 +1094,10 @@ function ProjectGroup({
   // Spelled out as well as coloured, so the state is not carried by colour alone.
   const calendarHints: Record<CalendarIconState, string> = {
     overdue: ": has overdue tasks",
+    active: ": has tasks within their date range",
     upcoming: ": has upcoming due dates",
     open: ": has open tasks",
+    done: ": all tasks are done",
   };
   const calendarLabel = `Calendar and tasks of ${project}${calendarState ? calendarHints[calendarState] : ""}`;
 

@@ -384,33 +384,60 @@ describe("TaskStore", () => {
     });
   });
 
-  describe("openTaskSummaries", () => {
-    it("counts open tasks per project with the earliest due date", () => {
+  describe("taskSummaries", () => {
+    it("summarises open tasks per project, with the earliest dates among them", () => {
       const { tasks, knowledge, alpha } = setup();
       knowledge.registerProject("beta");
       const beta = tasks.ensureProject("beta");
-      tasks.add(alpha.id, { title: "Later", due_date: "2026-12-01" });
-      tasks.add(alpha.id, { title: "Sooner", status: "doing", due_date: "2026-11-01" });
+      tasks.add(alpha.id, { title: "Later", start_date: "2026-11-20", due_date: "2026-12-01" });
+      tasks.add(alpha.id, { title: "Sooner", status: "doing", start_date: "2026-10-01", due_date: "2026-11-01" });
       tasks.add(alpha.id, { title: "No date", status: "review" });
       tasks.add(beta.id, { title: "No date" });
-      const summaries = tasks.openTaskSummaries();
-      expect(summaries.get(alpha.id)).toEqual({ open_tasks: 3, earliest_due: "2026-11-01" });
-      expect(summaries.get(beta.id)).toEqual({ open_tasks: 1, earliest_due: null });
+      const summaries = tasks.taskSummaries();
+      expect(summaries.get(alpha.id)).toEqual({
+        open_tasks: 3,
+        done_tasks: 0,
+        earliest_due: "2026-11-01",
+        earliest_start: "2026-10-01",
+      });
+      expect(summaries.get(beta.id)).toEqual({ open_tasks: 1, done_tasks: 0, earliest_due: null, earliest_start: null });
     });
 
-    it("leaves out done and archived tasks, and projects with nothing open", () => {
+    it("starts a range on its due date when the task has no start date", () => {
       const { tasks, alpha } = setup();
-      tasks.add(alpha.id, { title: "Done", status: "done", due_date: "2020-01-01" });
+      tasks.add(alpha.id, { title: "Due only", due_date: "2026-11-05" });
+      expect(tasks.taskSummaries().get(alpha.id)?.earliest_start).toBe("2026-11-05");
+    });
+
+    it("ignores a start date on a task with no due date", () => {
+      const { tasks, alpha } = setup();
+      tasks.add(alpha.id, { title: "Start only", start_date: "2026-11-05" });
+      expect(tasks.taskSummaries().get(alpha.id)).toMatchObject({ earliest_due: null, earliest_start: null });
+    });
+
+    it("counts done tasks but takes no dates from them", () => {
+      const { tasks, alpha } = setup();
+      tasks.add(alpha.id, { title: "Done", status: "done", start_date: "2020-01-01", due_date: "2020-01-02" });
+      expect(tasks.taskSummaries().get(alpha.id)).toEqual({
+        open_tasks: 0,
+        done_tasks: 1,
+        earliest_due: null,
+        earliest_start: null,
+      });
+    });
+
+    it("leaves out archived tasks, and projects with no tasks", () => {
+      const { tasks, alpha } = setup();
       const gone = tasks.add(alpha.id, { title: "Gone", due_date: "2020-01-01" });
       tasks.edit(gone.id, { expected_version: 1, archived: true });
-      expect(tasks.openTaskSummaries().has(alpha.id)).toBe(false);
+      expect(tasks.taskSummaries().has(alpha.id)).toBe(false);
     });
 
     it("counts a blocked task as open", () => {
       const { tasks, alpha } = setup();
       const stuck = tasks.add(alpha.id, { title: "Stuck", due_date: "2020-01-01" });
       tasks.edit(stuck.id, { expected_version: 1, blocked_reason: "Waiting" });
-      expect(tasks.openTaskSummaries().get(alpha.id)).toEqual({ open_tasks: 1, earliest_due: "2020-01-01" });
+      expect(tasks.taskSummaries().get(alpha.id)).toMatchObject({ open_tasks: 1, earliest_due: "2020-01-01" });
     });
   });
 

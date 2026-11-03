@@ -201,7 +201,12 @@ describe("task routes", () => {
     const alpha = (await api().get("/api/projects").set("Cookie", carolCookie)).body.projects.find(
       (p: { name: string }) => p.name === "alpha",
     );
-    expect(alpha).toMatchObject({ open_tasks: 1, earliest_due: "2026-11-01" });
+    expect(alpha).toMatchObject({
+      open_tasks: 1,
+      done_tasks: 1,
+      earliest_due: "2026-11-01",
+      earliest_start: "2026-11-01",
+    });
     const seenByDave = (await api().get("/api/projects").set("Cookie", daveCookie)).body.projects;
     expect(seenByDave.some((p: { name: string }) => p.name === "alpha")).toBe(false);
   });

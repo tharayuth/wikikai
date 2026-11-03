@@ -322,21 +322,53 @@ describe("tasks on the calendar", () => {
 
 describe("calendarIconState", () => {
   const today = "2026-11-02";
+  const summary = (fields: {
+    open_tasks?: number;
+    done_tasks?: number;
+    earliest_due?: string;
+    earliest_start?: string;
+  }) => ({ open_tasks: 0, done_tasks: 0, earliest_due: null, earliest_start: null, ...fields });
 
-  it("has no state when no task is open", () => {
-    expect(calendarIconState({ open_tasks: 0, earliest_due: null }, today)).toBeNull();
+  it("has no state for a project with no tasks", () => {
+    expect(calendarIconState(summary({}), today)).toBeNull();
   });
 
-  it("is open for tasks with no due date", () => {
-    expect(calendarIconState({ open_tasks: 2, earliest_due: null }, today)).toBe("open");
+  it("is open when no open task has a due date", () => {
+    expect(calendarIconState(summary({ open_tasks: 2 }), today)).toBe("open");
   });
 
-  it("is upcoming while the earliest due date is today or later", () => {
-    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-02" }, today)).toBe("upcoming");
-    expect(calendarIconState({ open_tasks: 1, earliest_due: "2026-11-03" }, today)).toBe("upcoming");
+  it("stays open when undated work sits beside finished tasks", () => {
+    expect(calendarIconState(summary({ open_tasks: 1, done_tasks: 3 }), today)).toBe("open");
   });
 
-  it("is overdue once the earliest due date has passed", () => {
-    expect(calendarIconState({ open_tasks: 3, earliest_due: "2026-11-01" }, today)).toBe("overdue");
+  it("is done when every task is done", () => {
+    expect(calendarIconState(summary({ done_tasks: 2 }), today)).toBe("done");
+  });
+
+  it("is upcoming until the first date range starts", () => {
+    expect(
+      calendarIconState(summary({ open_tasks: 1, earliest_due: "2026-11-10", earliest_start: "2026-11-03" }), today),
+    ).toBe("upcoming");
+  });
+
+  it("is active from the day a date range starts", () => {
+    expect(
+      calendarIconState(summary({ open_tasks: 1, earliest_due: "2026-11-10", earliest_start: "2026-11-02" }), today),
+    ).toBe("active");
+    expect(
+      calendarIconState(summary({ open_tasks: 1, earliest_due: "2026-11-10", earliest_start: "2026-11-01" }), today),
+    ).toBe("active");
+  });
+
+  it("is active through the due date itself", () => {
+    expect(
+      calendarIconState(summary({ open_tasks: 1, earliest_due: "2026-11-02", earliest_start: "2026-11-02" }), today),
+    ).toBe("active");
+  });
+
+  it("is overdue once a due date has passed, even with another range running", () => {
+    expect(
+      calendarIconState(summary({ open_tasks: 3, earliest_due: "2026-11-01", earliest_start: "2026-10-20" }), today),
+    ).toBe("overdue");
   });
 });

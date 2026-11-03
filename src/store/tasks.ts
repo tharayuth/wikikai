@@ -311,10 +311,14 @@ function toRow(r: TaskDbRow): TaskRow {
   };
 }
 
-export interface OpenTaskSummary {
+export interface TaskSummary {
   open_tasks: number;
+  done_tasks: number;
   /** Earliest due date among open tasks; null when none has one. */
   earliest_due: string | null;
+  /** Earliest day a date range opens among open tasks with a due date. A task
+   *  with no start date opens on its due date. */
+  earliest_start: string | null;
 }
 
 export class TaskStore {
@@ -492,17 +496,22 @@ export class TaskStore {
     return { ...placement, column_id: null, status: column.status };
   }
 
-  /** Per project, the tasks still open (not done, not archived). A project
-   *  with nothing open has no entry. */
-  openTaskSummaries(): Map<number, OpenTaskSummary> {
+  /** Per project, what its calendar icon needs, leaving out archived tasks. A
+   *  project with no other tasks has no entry. */
+  taskSummaries(): Map<number, TaskSummary> {
     const rows = this.db
       .prepare(
-        `SELECT project_id, COUNT(*) AS open_tasks, MIN(due_date) AS earliest_due
+        `SELECT project_id,
+                SUM(status != 'done') AS open_tasks,
+                SUM(status = 'done') AS done_tasks,
+                MIN(CASE WHEN status != 'done' THEN due_date END) AS earliest_due,
+                MIN(CASE WHEN status != 'done' AND due_date IS NOT NULL
+                         THEN COALESCE(start_date, due_date) END) AS earliest_start
          FROM tasks
-         WHERE status != 'done' AND archived_at IS NULL
+         WHERE archived_at IS NULL
          GROUP BY project_id`,
       )
-      .all() as (OpenTaskSummary & { project_id: number })[];
+      .all() as (TaskSummary & { project_id: number })[];
     return new Map(rows.map(({ project_id, ...summary }) => [project_id, summary]));
   }
 

@@ -385,7 +385,9 @@ export const portalApi = createApi({
           count: number;
           registered: boolean;
           open_tasks: number;
+          done_tasks: number;
           earliest_due: string | null;
+          earliest_start: string | null;
         }[];
       },
       void
