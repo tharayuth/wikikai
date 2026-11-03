@@ -35,7 +35,8 @@ export interface NoteItem {
 export interface NoteItemInput {
   id?: number;
   text: string;
-  checked: boolean;
+  /** Default: what the item with this id already has, or unticked. */
+  checked?: boolean;
 }
 
 export interface Note {
@@ -71,6 +72,15 @@ export interface EditNoteInput extends AddNoteInput {
   expected_version?: number;
   archived?: boolean;
   trashed?: boolean;
+}
+
+export interface NoteSearch {
+  /** Only these projects. Default: every project. */
+  projectIds?: number[];
+  /** Text in the title, body, list items or labels. */
+  query?: string;
+  state?: NoteState;
+  limit: number;
 }
 
 export class NoteNotFoundError extends Error {
@@ -147,7 +157,7 @@ function cleanItems(values: NoteItemInput[], prior: NoteItem[]): NoteItem[] {
     if (v.text.length > ITEM_MAX) throw new Error(`item must be ≤ ${ITEM_MAX} chars`);
     const id = v.id != null && !seen.has(v.id) ? v.id : ++next;
     seen.add(id);
-    return { id, text: v.text, checked: v.checked };
+    return { id, text: v.text, checked: v.checked ?? prior.find((p) => p.id === id)?.checked ?? false };
   });
 }
 
@@ -173,6 +183,15 @@ function toNote(r: NoteDbRow): Note {
     archived: r.archived_at !== null,
     trashed: r.trashed_at !== null,
   };
+}
+
+/** Parsed fields, not the stored row, so a search for "checked" cannot match
+ *  every checklist through its JSON. */
+function noteMatches(note: Note, query: string | undefined): boolean {
+  const q = query?.trim().toLocaleLowerCase();
+  if (!q) return true;
+  const haystack = [note.title, note.body, ...(note.items ?? []).map((i) => i.text), ...note.labels];
+  return haystack.some((text) => text.toLocaleLowerCase().includes(q));
 }
 
 const STATE_FILTER: Record<NoteState, string> = {
@@ -204,6 +223,23 @@ export class NoteStore {
       .prepare(`SELECT * FROM notes WHERE project_id = ? AND ${STATE_FILTER[state]}`)
       .all(projectId) as NoteDbRow[];
     return rows.map(toNote);
+  }
+
+  /** `total` counts every match, so a caller can tell the limit cut the list. */
+  search(filter: NoteSearch): { notes: Note[]; total: number } {
+    const scope = filter.projectIds ? `project_id IN (SELECT value FROM json_each(?)) AND ` : "";
+    const rows = this.db
+      .prepare(`SELECT * FROM notes WHERE ${scope}${STATE_FILTER[filter.state ?? "active"]}`)
+      .all(...(filter.projectIds ? [JSON.stringify(filter.projectIds)] : [])) as NoteDbRow[];
+    const found = rows.map(toNote).filter((n) => noteMatches(n, filter.query));
+    return { notes: found.slice(0, filter.limit), total: found.length };
+  }
+
+  projectIdsNamed(names: string[]): number[] {
+    return this.db
+      .prepare(`SELECT id FROM projects WHERE name IN (SELECT value FROM json_each(?))`)
+      .pluck()
+      .all(JSON.stringify(names)) as number[];
   }
 
   add(projectId: number, input: AddNoteInput): Note {

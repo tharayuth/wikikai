@@ -18,6 +18,10 @@ import {
   EditPageSchema,
   EditSectionSchema,
   EditTaskSchema,
+  AddNoteSchema,
+  ListNotesSchema,
+  GetNoteSchema,
+  EditNoteSchema,
   FindTableRowsSchema,
   GetBlockSchema,
   GetExampleSchema,
@@ -495,6 +499,50 @@ export function createMcpServer(
       inputSchema: shapeOf(EditTaskSchema),
     },
     async (input) => jsonContent(await handlers.edit_task(input)),
+  );
+
+  // ─── Project notes ───
+  server.registerTool(
+    "add_note",
+    {
+      title: "Create note",
+      description:
+        "Create a short note on a project: text, or a checklist with `items`. Returns it with `version` and `url`.",
+      inputSchema: shapeOf(AddNoteSchema),
+    },
+    async (input) => jsonContent(await handlers.add_note(input)),
+  );
+
+  server.registerTool(
+    "list_notes",
+    {
+      title: "Search notes",
+      description:
+        "Search or list notes as compact rows with a text preview. `search` does not cover notes. `total` counts every match, past `limit`.",
+      inputSchema: shapeOf(ListNotesSchema),
+    },
+    async (input) => jsonContent(await handlers.list_notes(input)),
+  );
+
+  server.registerTool(
+    "get_note",
+    {
+      title: "Read note",
+      description: "One note in full, with its list items.",
+      inputSchema: shapeOf(GetNoteSchema),
+    },
+    async (input) => jsonContent(await handlers.get_note(input)),
+  );
+
+  server.registerTool(
+    "edit_note",
+    {
+      title: "Edit note",
+      description:
+        "Change a note. No permanent delete. Returns it with its new `version`.",
+      inputSchema: shapeOf(EditNoteSchema),
+    },
+    async (input) => jsonContent(await handlers.edit_note(input)),
   );
 
   // ─── Images and files ───

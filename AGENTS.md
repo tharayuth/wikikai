@@ -75,7 +75,7 @@ src/
   store/milestones.ts  a project's milestones: named dates on the Gantt that tasks can join
   store/notes.ts       Keep-style notes on a project: content versioning, pin, archive, trash
   store/schema.sql     SQLite schema (knowledge, pages, pages_fts)
-  mcp/server.ts        registers 39 tools on McpServer (input schemas come from handlers.ts)
+  mcp/server.ts        registers 43 tools on McpServer (input schemas come from handlers.ts)
   mcp/handlers.ts      Zod schemas + tool impls — single source of truth for tool shapes
   mcp/examples.ts      get_example helper (outline + slice)
   examples/*.md        markdown reference content (copied to dist/ by build:assets)

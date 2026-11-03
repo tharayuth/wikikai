@@ -1,6 +1,6 @@
 ---
 name: wikikai
-description: Use WikiKai MCP server to persist presentation-style knowledge — markdown pages with Mermaid diagrams, Chart.js graphs, stats cards, and step lists. INVOKE when the user asks to "บันทึก", "เก็บไว้", "ทำ doc", "make a knowledge doc", "save this as a knowledge page", "ทำสรุปไว้ดู", "open my notes", or when producing an explanation that the user will want to revisit and share via URL. Also INVOKE when the user references existing knowledge (e.g. `&3`, `#12`, "เปิด knowledge เก่า", "search my docs"). Also INVOKE when the user asks to create or update tasks on a project's board, or to pick up work ("ทำงานถัดไป", "next task on the board", "T12"). Skip for transient answers, code edits, or pure conversation.
+description: Use WikiKai MCP server to persist presentation-style knowledge — markdown pages with Mermaid diagrams, Chart.js graphs, stats cards, and step lists. INVOKE when the user asks to "บันทึก", "เก็บไว้", "ทำ doc", "make a knowledge doc", "save this as a knowledge page", "ทำสรุปไว้ดู", "open my notes", or when producing an explanation that the user will want to revisit and share via URL. Also INVOKE when the user references existing knowledge (e.g. `&3`, `#12`, "เปิด knowledge เก่า", "search my docs"). Also INVOKE when the user asks to read, search or change a project's notes. Also INVOKE when the user asks to create or update tasks on a project's board, or to pick up work ("ทำงานถัดไป", "next task on the board", "T12"). Skip for transient answers, code edits, or pure conversation.
 ---
 
 # WikiKai skill
@@ -81,6 +81,15 @@ A task is tracked work on a project's board, written `T12`. A page checkbox (`- 
 4. Finish: `edit_task({ task_id, expected_version, status: "review", add_links: [...] })`, linking the commit or the WikiKai page. Set `done` only when the user says so.
 
 **If stuck**, set `blocked_reason` and stop, leaving the task in `doing`. `next` skips blocked tasks.
+
+### Project notes (quick notes, not documents)
+A note is a short text or checklist on a project's Notes tab, written `N12`. Use a knowledge page for anything to present or share, and a task for tracked work. The `search` tool does not cover notes, so look there with `list_notes` when the user asks about a note.
+
+- `list_notes({ project?, query?, state?, limit? })` — compact rows with a `preview`, active notes by default. `query` finds text in the title, body, list items or labels. With no `project` it covers every project you can see. `total` counts every match, past `limit`.
+- `get_note({ note_id })` — one note in full, with `items` and `version`.
+- `add_note({ project, title?, body?, items?, labels?, pinned? })` — `items: [{ text, checked? }]` makes it a checklist. `body` is plain text, not markdown.
+- `edit_note({ note_id, expected_version?, title?, body?, items?, labels?, pinned?, archived?, trashed? })` — changing the title, body, items or labels needs `expected_version`; `STALE` means someone changed the note, so read it again. `items` replaces the whole list, so send every item and keep each `id`. `trashed: true` moves it to the trash and `false` restores it.
+- Permanent delete and colour are portal-only. These tools do not take `user_prompt`.
 
 **Keep descriptions short.** Up to 20,000 characters, with no revision history, so an overwrite loses the old text. Put anything worth keeping on a wiki page and link it from the task.
 

@@ -30,6 +30,7 @@ import {
   type TaskRow,
   type TaskStatus,
 } from "../store/tasks.js";
+import { NOTE_STATES, NoteStore, type Note } from "../store/notes.js";
 import { getCallContext } from "../lib/callContext.js";
 import { assertProjectAccess } from "../lib/permissions.js";
 import { formatSecretFence, sealSecret, unsealSecret } from "../lib/secret.js";
@@ -838,6 +839,87 @@ export const EditTaskSchema = z.object({
   milestone: z.string().min(1).max(100).nullable().optional().describe("Milestone name. null clears."),
 });
 
+// Lengths and counts are left to NoteStore, which checks them anyway: these
+// schemas are sent to every client in every session.
+export const AddNoteSchema = z.object({
+  project: z.string(),
+  title: z.string().optional(),
+  body: z.string().optional().describe("Plain text, not markdown."),
+  items: z
+    .array(z.object({ text: z.string(), checked: z.boolean().optional() }))
+    .optional()
+    .describe("Makes it a checklist."),
+  labels: z.array(z.string()).optional(),
+  pinned: z.boolean().optional(),
+});
+
+export const ListNotesSchema = z.object({
+  project: z.string().optional().describe("Default: every project you can see."),
+  query: z.string().optional().describe("Text in the title, body, list items or labels."),
+  state: z.enum(NOTE_STATES).optional().describe("Default active."),
+  limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
+});
+
+export const GetNoteSchema = z.object({
+  note_id: z.number().int().positive(),
+});
+
+export const EditNoteSchema = z.object({
+  note_id: z.number().int().positive(),
+  expected_version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("`version` from your last note call. Needed to change title, body, items or labels; STALE if it changed."),
+  title: z.string().optional(),
+  body: z.string().optional().describe("Plain text, not markdown."),
+  items: z
+    .array(
+      z.object({
+        id: z.number().int().positive().optional().describe("Keep it when editing an item."),
+        text: z.string(),
+        checked: z.boolean().optional().describe("Default: unchanged."),
+      }),
+    )
+    .nullable()
+    .optional()
+    .describe("Replaces the whole list, so send every item. null: plain text."),
+  labels: z.array(z.string()).optional().describe("Replaces the whole list."),
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
+  trashed: z.boolean().optional().describe("true moves it to the trash; false restores it."),
+});
+
+export type NoteResult = Note & { project: string; url: string };
+
+export interface NoteListEntry {
+  id: number;
+  project: string;
+  title: string;
+  /** The start of the text or list; get_note has the rest. */
+  preview: string;
+  labels: string[];
+  pinned: boolean;
+  version: number;
+  updated_at: string;
+  url: string;
+}
+
+const NOTE_PREVIEW_MAX = 160;
+
+function notePreview(note: Note): string {
+  const text = note.items
+    ? note.items.map((i) => `[${i.checked ? "x" : " "}] ${i.text}`).join("\n")
+    : note.body.trim();
+  return text.length > NOTE_PREVIEW_MAX ? `${text.slice(0, NOTE_PREVIEW_MAX)}…` : text;
+}
+
+function noteUrl(ctx: HandlerContext, projectId: number, noteId: number): string {
+  const base = ctx.publicBaseUrl.replace(/\/$/, "");
+  return `${base}/?calendar=${projectId}&view=notes&note=${noteId}`;
+}
+
 export type TaskResult = Task & { url: string };
 
 export interface TaskListEntry {
@@ -904,6 +986,10 @@ export type ToolInputs = {
   list_tasks: z.infer<typeof ListTasksSchema>;
   get_task: z.infer<typeof GetTaskSchema>;
   edit_task: z.infer<typeof EditTaskSchema>;
+  add_note: z.infer<typeof AddNoteSchema>;
+  list_notes: z.infer<typeof ListNotesSchema>;
+  get_note: z.infer<typeof GetNoteSchema>;
+  edit_note: z.infer<typeof EditNoteSchema>;
 };
 
 export type StoredImageResult = ImageMetaWithSrc & {
@@ -1374,6 +1460,10 @@ export interface ToolHandlers {
   list_tasks(input: ToolInputs["list_tasks"]): Promise<{ tasks: TaskListEntry[] }>;
   get_task(input: ToolInputs["get_task"]): Promise<TaskResult>;
   edit_task(input: ToolInputs["edit_task"]): Promise<TaskResult>;
+  add_note(input: ToolInputs["add_note"]): Promise<NoteResult>;
+  list_notes(input: ToolInputs["list_notes"]): Promise<{ notes: NoteListEntry[]; total: number }>;
+  get_note(input: ToolInputs["get_note"]): Promise<NoteResult>;
+  edit_note(input: ToolInputs["edit_note"]): Promise<NoteResult>;
 }
 
 /** Walk page content and collect every image reference. Three surfaces:
@@ -1565,6 +1655,19 @@ export function buildToolHandlers(
     version: row.version,
     url: taskUrl(ctx, row.project_id, row.id),
   });
+
+  const notes = new NoteStore(db, activityLog);
+  const noteProjectName = (note: Note): string => notes.getProject(note.project_id)?.name ?? "";
+  const withNoteUrl = (note: Note): NoteResult => ({
+    ...note,
+    project: noteProjectName(note),
+    url: noteUrl(ctx, note.project_id, note.id),
+  });
+  const requireNote = (id: number): Note => {
+    const note = notes.get(id);
+    if (!note) throw new Error(`note N${id} not found`);
+    return note;
+  };
 
   /** Attachment references in a page body, for diff-based cleanup after
    *  an edit. Empty when no file store is wired (tests that never attach). */
@@ -2947,6 +3050,62 @@ export function buildToolHandlers(
             : { assignee_id: assignee === null ? null : tasks.resolveAssignee(current.project, assignee, callerId()) }),
         }),
       );
+    },
+
+    async add_note(input) {
+      const parsed = AddNoteSchema.parse(input);
+      gateEditByProject(parsed.project);
+      const project = tasks.ensureProject(parsed.project);
+      const { project: _project, ...fields } = parsed;
+      return withNoteUrl(notes.add(project.id, fields));
+    },
+
+    async list_notes(input) {
+      const parsed = ListNotesSchema.parse(input);
+      let projectIds: number[] | undefined;
+      if (parsed.project !== undefined) {
+        gateReadByProject(parsed.project);
+        projectIds = [tasks.ensureProject(parsed.project).id];
+      } else {
+        // Pushed into the query for the same reason as `search`: filtering after
+        // the limit would miscount `total` and silently shrink the page.
+        const visible = visibleProjectsForCaller();
+        if (visible !== null) projectIds = notes.projectIdsNamed([...visible]);
+      }
+      const found = notes.search({
+        projectIds,
+        query: parsed.query,
+        state: parsed.state,
+        limit: parsed.limit ?? DEFAULT_LIST_LIMIT,
+      });
+      return {
+        total: found.total,
+        notes: found.notes.map((note) => ({
+          id: note.id,
+          project: noteProjectName(note),
+          title: note.title,
+          preview: notePreview(note),
+          labels: note.labels,
+          pinned: note.pinned,
+          version: note.version,
+          updated_at: note.updated_at,
+          url: noteUrl(ctx, note.project_id, note.id),
+        })),
+      };
+    },
+
+    async get_note(input) {
+      const parsed = GetNoteSchema.parse(input);
+      const note = requireNote(parsed.note_id);
+      gateReadByProject(noteProjectName(note));
+      return withNoteUrl(note);
+    },
+
+    async edit_note(input) {
+      const parsed = EditNoteSchema.parse(input);
+      gateEditByProject(noteProjectName(requireNote(parsed.note_id)));
+      const { note_id, ...fields } = parsed;
+      return withNoteUrl(notes.edit(note_id, fields));
     },
   };
 }

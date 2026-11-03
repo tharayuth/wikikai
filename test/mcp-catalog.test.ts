@@ -25,9 +25,10 @@ describe("MCP tool catalog", () => {
     const size = JSON.stringify(await listTools()).length;
     // ≈ 4 characters per token. Raising the budget needs a reason: every
     // client pays for it at the start of every session. It rose from 40,000 for
-    // `module` and `column` on the task tools: by then every description held
-    // only what an agent needs to call the tool correctly.
-    expect(size, `catalog is ${size} chars`).toBeLessThan(41_000);
+    // `module` and `column` on the task tools, and from 41,000 for the four note
+    // tools: by then every description held only what an agent needs to call the
+    // tool correctly.
+    expect(size, `catalog is ${size} chars`).toBeLessThan(44_000);
   });
 
   it("gives every tool a description", async () => {
@@ -40,6 +41,12 @@ describe("MCP tool catalog", () => {
     for (const t of await listTools()) {
       expect(t.description, t.name).not.toContain("\\n");
     }
+  });
+
+  it("exposes the note tools, with no way to delete for good", async () => {
+    const names = (await listTools()).map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["add_note", "list_notes", "get_note", "edit_note"]));
+    expect(names).not.toContain("delete_note");
   });
 
   it("exposes the task tools, with no way to delete", async () => {

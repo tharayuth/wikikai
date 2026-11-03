@@ -14,7 +14,7 @@ Both guides include working examples of every block type, reusable prompts, and 
 ## Why WikiKai?
 
 - **Let AI do the work.** Create documents, edit sections, update tables, and upload images and files through MCP.
-- **Jot things down.** Each project has quick notes and checklists in the style of Google Keep: colours, pins, labels, archive and trash.
+- **Jot things down.** Each project has quick notes and checklists in the style of Google Keep: colours, pins, labels, archive and trash. Your AI assistant can search, read and edit them too.
 - **Track the work too.** Each project has boards, a task list, a calendar and a Gantt chart with milestones. Split a project into modules, add your own columns, and let AI pick up the next task, link what it produced, and leave it for your review.
 - **Pick up where you left off.** Organize knowledge into projects and pages, then ask AI to find and reuse it in your next conversation.
 - **Point to exactly what you mean.** Reference a document with `&N`, a page with `#N`, or a table, chart or other supported block with `@N`.
