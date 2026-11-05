@@ -98,10 +98,20 @@ a:hover { text-decoration: underline; }
 /* ───── Custom scrollbar (applied to the main scrolling surfaces) ───── */
 .sidebar,
 .viewer,
-.gantt-scroll,
 #search-results {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
+}
+/* Chrome drops the ::-webkit-scrollbar rules below for any element with the two
+   properties above, and draws a square thumb with arrows instead. The Gantt keeps
+   them, so only a browser without those rules gets the standard properties.
+   scrollbar-color inherits, so the Gantt has to turn off what .viewer passes down. */
+.gantt-scroll { scrollbar-color: auto; }
+@supports not selector(::-webkit-scrollbar) {
+  .gantt-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
 }
 .sidebar::-webkit-scrollbar,
 .viewer::-webkit-scrollbar,
