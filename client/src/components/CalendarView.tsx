@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   useGetProjectCalendarQuery,
+  useListProjectModulesQuery,
   useListProjectTasksQuery,
   useListProjectsQuery,
   type CalendarDay,
@@ -21,8 +22,9 @@ import {
   todayLocal,
   type CalendarTaskEntry,
 } from "../lib/calendarGrid";
-import { tasksInModule } from "../lib/taskBoard";
+import { addTarget, tasksInModule } from "../lib/taskBoard";
 import { useBackdropClose } from "../hooks/useBackdropClose";
+import { TaskQuickAdd } from "./TaskQuickAdd";
 
 /**
  * Google-Calendar-style month view of one project: each day lists the
@@ -140,6 +142,9 @@ export function CalendarView({ projectId, month, moduleId, onOpenTask }: Props):
   }, [days]);
 
   const taskQuery = useListProjectTasksQuery({ projectId });
+  const canAdd = taskQuery.data?.can_edit ?? false;
+  const modulesQuery = useListProjectModulesQuery(projectId);
+  const target = addTarget(modulesQuery.data?.modules ?? [], moduleId);
   const tasksOnDay = useMemo(
     () => tasksByDate(showTasks ? tasksInModule(taskQuery.data?.tasks ?? [], moduleId) : [], grid.from, grid.to),
     [showTasks, taskQuery.data, moduleId, grid.from, grid.to],
@@ -263,6 +268,7 @@ export function CalendarView({ projectId, month, moduleId, onOpenTask }: Props):
               outside={monthOf(date) !== shown}
               today={date === today}
               showPages={showPages}
+              canAdd={canAdd}
               onOpen={() => setOpenDay(date)}
             />
           ))}
@@ -276,7 +282,18 @@ export function CalendarView({ projectId, month, moduleId, onOpenTask }: Props):
           tasks={tasksOnDay.get(openDay) ?? []}
           onOpenTask={onOpenTask}
           onClose={() => setOpenDay(null)}
-        />
+        >
+          {canAdd && (
+            <TaskQuickAdd
+              projectId={projectId}
+              moduleId={target?.id}
+              moduleName={target?.name}
+              date={openDay}
+              hiddenNote={showTasks ? null : "Tasks are hidden on the calendar."}
+              autoFocus
+            />
+          )}
+        </DayPanel>
       )}
     </div>
   );
@@ -289,6 +306,7 @@ function DayCell({
   outside,
   today,
   showPages,
+  canAdd,
   onOpen,
   onOpenTask,
 }: {
@@ -298,12 +316,15 @@ function DayCell({
   outside: boolean;
   today: boolean;
   showPages: boolean;
+  /** Any day opens to add a task. Without this, only a day with something on it opens. */
+  canAdd: boolean;
   onOpen: () => void;
   onOpenTask: (id: number) => void;
 }): JSX.Element {
   const dayNum = Number(date.slice(8));
   const total = day?.knowledge.reduce((n, k) => n + k.pages.length, 0) ?? 0;
   const hasItems = total > 0 || tasks.length > 0;
+  const opens = hasItems || canAdd;
 
   // Fill the cell line by line, tasks first; whatever doesn't fit becomes
   // "+N more" (pages when they are listed, knowledge when only knowledge is).
@@ -334,6 +355,8 @@ function DayCell({
   if (outside) cls.push("outside");
   if (today) cls.push("today");
   if (hasItems) cls.push("has-items");
+  if (opens) cls.push("opens");
+  if (canAdd) cls.push("can-add");
 
   const description = [
     total ? `${total} pages` : "",
@@ -341,13 +364,13 @@ function DayCell({
   ].filter(Boolean).join(", ");
 
   return (
-    <div className={cls.join(" ")} onClick={hasItems ? onOpen : undefined}>
+    <div className={cls.join(" ")} onClick={opens ? onOpen : undefined}>
       <button
         type="button"
         className="cal-daynum"
         onClick={(e) => {
           e.stopPropagation();
-          if (hasItems) onOpen();
+          if (opens) onOpen();
         }}
         aria-label={`${longDateLabel(date)}${description ? `, ${description}` : ""}`}
       >
@@ -470,12 +493,15 @@ function DayPanel({
   tasks,
   onOpenTask,
   onClose,
+  children,
 }: {
   date: string;
   day: CalendarDay | undefined;
   tasks: DayTask[];
   onOpenTask: (id: number) => void;
   onClose: () => void;
+  /** The add form, when the person may add. */
+  children: ReactNode;
 }): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -503,6 +529,7 @@ function DayPanel({
           </button>
         </div>
         <div className="cal-panel-body">
+          {children}
           {tasks.map((entry) => (
             <TaskLine
               key={`${entry.task.id}-${entry.kind}`}

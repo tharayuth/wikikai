@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addTarget,
   allAssignees,
   allLabels,
   apiErrorMessage,
@@ -114,6 +115,25 @@ describe("tasksInModule", () => {
   it("keeps one module's tasks, or all with no module", () => {
     expect(ids(tasksInModule(cards, 2))).toEqual([2]);
     expect(tasksInModule(cards, null)).toBe(cards);
+  });
+});
+
+describe("addTarget", () => {
+  const modules = [
+    { id: 1, name: "General" },
+    { id: 2, name: "Backend" },
+  ];
+
+  it("adds to the module on screen", () => {
+    expect(addTarget(modules, 2)?.name).toBe("Backend");
+  });
+
+  it("adds to the default board when All is chosen", () => {
+    expect(addTarget(modules, null)?.name).toBe("General");
+  });
+
+  it("leaves the choice to the server until the modules load", () => {
+    expect(addTarget([], null)).toBeNull();
   });
 });
 

@@ -677,12 +677,19 @@ export const portalApi = createApi({
 
     addTask: builder.mutation<
       TaskDetail,
-      { projectId: number; title: string; moduleId?: number; columnId?: number | null }
+      {
+        projectId: number;
+        title: string;
+        moduleId?: number;
+        columnId?: number | null;
+        startDate?: string;
+        dueDate?: string;
+      }
     >({
-      query: ({ projectId, title, moduleId, columnId }) => ({
+      query: ({ projectId, title, moduleId, columnId, startDate, dueDate }) => ({
         url: `projects/${projectId}/tasks`,
         method: "POST",
-        body: { title, module_id: moduleId, column_id: columnId },
+        body: { title, module_id: moduleId, column_id: columnId, start_date: startDate, due_date: dueDate },
       }),
       invalidatesTags: (_r, _e, arg) => [
         { type: "Tasks", id: arg.projectId },

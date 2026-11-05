@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useListProjectTasksQuery } from "../store/api";
+import { useListProjectModulesQuery, useListProjectTasksQuery } from "../store/api";
 import { isOverdue, todayLocal } from "../lib/calendarGrid";
-import { filterTasks, sortTasks, tasksInModule, type TaskFilter, type TaskSortKey } from "../lib/taskBoard";
+import { addTarget, filterTasks, sortTasks, tasksInModule, type TaskFilter, type TaskSortKey } from "../lib/taskBoard";
+import { TaskQuickAdd } from "./TaskQuickAdd";
 
 const COLUMNS: { key: TaskSortKey; label: string }[] = [
   { key: "id", label: "ID" },
@@ -33,6 +34,8 @@ export function TaskListView({ projectId, moduleId, filter, onOpenTask }: Props)
     [data, moduleId, filter, sortKey, sortDir],
   );
   const today = todayLocal();
+  const modulesQuery = useListProjectModulesQuery(projectId);
+  const target = addTarget(modulesQuery.data?.modules ?? [], moduleId);
 
   const onSort = (key: TaskSortKey): void => {
     if (key === sortKey) {
@@ -54,10 +57,15 @@ export function TaskListView({ projectId, moduleId, filter, onOpenTask }: Props)
 
   return (
     <div className="task-list">
-      <label className="task-list-archived">
-        <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-        Include archived
-      </label>
+      <div className="task-list-toolbar">
+        {data?.can_edit && (
+          <TaskQuickAdd projectId={projectId} moduleId={target?.id} moduleName={target?.name} filter={filter} confirm />
+        )}
+        <label className="task-list-archived">
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Include archived
+        </label>
+      </div>
       {isLoading ? (
         <p className="task-loading">Loading tasks…</p>
       ) : rows.length === 0 ? (

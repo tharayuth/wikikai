@@ -145,6 +145,21 @@ describe("task routes", () => {
     expect((await api().post(`/api/projects/${projectId}/tasks`).set("Cookie", daveCookie).send({ title: "X" })).status).toBe(403);
   });
 
+  it("adds a titled task to the default board's Todo, on a day when one is given", async () => {
+    const res = await api()
+      .post(`/api/projects/${projectId}/tasks`)
+      .set("Cookie", aliceCookie)
+      .send({ title: "T", start_date: "2026-11-20", due_date: "2026-11-20" });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      status: "todo",
+      column_id: null,
+      module_id: tasks.modules.firstModule(projectId).id,
+      start_date: "2026-11-20",
+      due_date: "2026-11-20",
+    });
+  });
+
   it("refuses non-members by task id", async () => {
     const t = tasks.add(projectId, { title: "T" });
     expect((await api().get(`/api/tasks/${t.id}`).set("Cookie", daveCookie)).status).toBe(403);

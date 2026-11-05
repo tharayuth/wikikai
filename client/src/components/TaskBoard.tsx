@@ -21,7 +21,6 @@ import { useAppDispatch } from "../store";
 import { showToast } from "../store/uiSlice";
 import {
   useAddColumnMutation,
-  useAddTaskMutation,
   useDeleteColumnMutation,
   useListProjectTasksQuery,
   useMoveTaskMutation,
@@ -45,6 +44,7 @@ import {
   type TaskFilter,
 } from "../lib/taskBoard";
 import { BoardMenu, NameForm } from "./BoardControls";
+import { TaskQuickAdd } from "./TaskQuickAdd";
 
 interface Props {
   projectId: number;
@@ -215,7 +215,7 @@ function Column({
         </button>
       )}
       {column.status === "todo" && canEdit && (
-        <QuickAdd projectId={projectId} moduleId={moduleId} columnId={column.id} filter={filter} />
+        <TaskQuickAdd projectId={projectId} moduleId={moduleId} columnId={column.id} filter={filter} />
       )}
     </section>
   );
@@ -450,56 +450,5 @@ function CardBody({ task, onOpen }: { task: TaskRow; onOpen?: () => void }): JSX
         </div>
       )}
     </>
-  );
-}
-
-function QuickAdd({
-  projectId,
-  moduleId,
-  columnId,
-  filter,
-}: {
-  projectId: number;
-  moduleId: number;
-  columnId: number | null;
-  filter: TaskFilter;
-}): JSX.Element {
-  const dispatch = useAppDispatch();
-  const [title, setTitle] = useState("");
-  const [addTask, { isLoading }] = useAddTaskMutation();
-
-  const submit = (e: React.FormEvent): void => {
-    e.preventDefault();
-    const text = title.trim();
-    if (!text) return;
-    addTask({ projectId, title: text, moduleId, columnId })
-      .unwrap()
-      .then((created) => {
-        setTitle("");
-        // A new task has no assignee or labels, so an assignee or label filter
-        // hides it at once. Say so, or the person adds it a second time.
-        if (filterTasks([created], filter).length === 0) {
-          dispatch(showToast({ message: `Added T${created.id}. The current filter hides it.`, kind: "info" }));
-        }
-      })
-      .catch((err: unknown) => {
-        dispatch(showToast({ message: apiErrorMessage(err, "Could not add the task"), kind: "error" }));
-      });
-  };
-
-  return (
-    <form className="task-quick-add" onSubmit={submit}>
-      <input
-        type="text"
-        value={title}
-        maxLength={300}
-        placeholder="Add a task"
-        aria-label="New task title"
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <button type="submit" disabled={isLoading || !title.trim()}>
-        Add
-      </button>
-    </form>
   );
 }

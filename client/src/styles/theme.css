@@ -5911,7 +5911,14 @@ button.ki-id-badge::after {
   display: flex; flex-direction: column; gap: 3px;
   overflow: hidden;
 }
-.cal-day.has-items { cursor: pointer; }
+.cal-day.opens { cursor: pointer; }
+@media (hover: hover) {
+  .cal-day.can-add:hover::after {
+    content: "+";
+    position: absolute; top: 5px; right: 8px;
+    color: var(--text-3); font-size: 15px; line-height: 1;
+  }
+}
 .cal-day.outside { background: var(--surface-2); }
 .cal-day.outside .cal-daynum,
 .cal-day.outside .cal-items { opacity: .55; }
@@ -5922,7 +5929,7 @@ button.ki-id-badge::after {
   font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2);
   cursor: inherit;
 }
-.cal-day.has-items .cal-daynum:hover { background: var(--surface-2); }
+.cal-day.opens .cal-daynum:hover { background: var(--surface-2); }
 .cal-day.today .cal-daynum { background: var(--accent); color: var(--accent-text); }
 .cal-count { display: none; }
 .cal-items { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -6616,6 +6623,8 @@ button.ki-id-badge::after {
 .task-quick-add button:disabled { color: var(--text-3); cursor: default; }
 
 .task-list { flex: 1; padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.task-list-toolbar { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+.task-list-toolbar .task-quick-add { flex: 1 1 280px; max-width: 520px; }
 .task-list-archived { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
 .task-list-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .task-list table { width: 100%; border-collapse: collapse; font-size: 13px; }

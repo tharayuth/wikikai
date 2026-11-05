@@ -109,6 +109,15 @@ export function selectedModuleId(
   return modules[0]?.id ?? null;
 }
 
+/**
+ * Which module a new task joins from a view that can show them all: the one on
+ * screen, or with `All` chosen the default board, which is the project's first
+ * module on the server too. Null until the modules load: the server then picks.
+ */
+export function addTarget<M extends { id: number }>(modules: M[], selectedId: number | null): M | null {
+  return modules.find((m) => m.id === selectedId) ?? modules[0] ?? null;
+}
+
 /** The board after a drop, shown at once while the server confirms. Mirrors
  *  TaskStore.move: an absent `beforeId` means the bottom. */
 export function applyMove<T extends BoardCard>(
