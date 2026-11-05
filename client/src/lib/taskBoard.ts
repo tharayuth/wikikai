@@ -93,7 +93,7 @@ export function tasksInModule<T extends { module_id: number }>(tasks: T[], modul
 
 /**
  * Which module a project tab shows. A missing or unknown id falls back without
- * an error: the Board shows one module, while the List and Calendar show all
+ * an error: the Board shows one module, while Tasks and the Calendar show all
  * (null). A task link names no module, so the Board opens on that task's.
  */
 export function selectedModuleId(

@@ -130,7 +130,7 @@ describe("selectedModuleId", () => {
     expect(selectedModuleId(modules, 99, "board", null)).toBe(1);
   });
 
-  it("falls back to All on the List and Calendar", () => {
+  it("falls back to All on Tasks and the Calendar", () => {
     expect(selectedModuleId(modules, null, "list", null)).toBeNull();
     expect(selectedModuleId(modules, 99, "calendar", null)).toBeNull();
   });
