@@ -36,7 +36,13 @@ import {
 } from "../lib/starredKnowledge";
 import { matchesAnyKnowledgeTag } from "../lib/knowledgeTags";
 import { withDocumentlessProjects } from "../lib/sidebarGroups";
-import { calendarIconState, todayLocal, type CalendarIconState, type CalendarIconSummary } from "../lib/calendarGrid";
+import {
+  CALENDAR_STATE_HINTS,
+  calendarIconState,
+  todayLocal,
+  type CalendarIconState,
+  type CalendarIconSummary,
+} from "../lib/calendarGrid";
 import {
   SidebarTagFilterModal,
   type SidebarTagFilterOption,
@@ -1092,14 +1098,7 @@ function ProjectGroup({
   };
 
   // Spelled out as well as coloured, so the state is not carried by colour alone.
-  const calendarHints: Record<CalendarIconState, string> = {
-    overdue: ": has overdue tasks",
-    active: ": has tasks within their date range",
-    upcoming: ": has upcoming due dates",
-    open: ": has open tasks",
-    done: ": all tasks are done",
-  };
-  const calendarLabel = `Calendar and tasks of ${project}${calendarState ? calendarHints[calendarState] : ""}`;
+  const calendarLabel = `Calendar and tasks of ${project}${calendarState ? `: ${CALENDAR_STATE_HINTS[calendarState]}` : ""}`;
 
   return (
     <div className={`sidebar-group${open ? "" : " collapsed"}`}>

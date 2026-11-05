@@ -6,13 +6,17 @@ import {
   useDeleteModuleMutation,
   useUpdateModuleMutation,
   type TaskModule,
+  type TaskRow,
 } from "../store/api";
-import { apiErrorMessage } from "../lib/taskBoard";
+import { CALENDAR_STATE_HINTS, calendarIconState, summarizeTasks, todayLocal } from "../lib/calendarGrid";
+import { apiErrorMessage, tasksInModule } from "../lib/taskBoard";
 import { BoardMenu, NameForm, type BoardMenuItem } from "./BoardControls";
 
 interface Props {
   projectId: number;
   modules: TaskModule[];
+  /** The project's tasks, for each module's colour and count. */
+  tasks: TaskRow[];
   canEdit: boolean;
   /** Null is the `All` choice. */
   selectedId: number | null;
@@ -22,7 +26,7 @@ interface Props {
 }
 
 /** Chooses which of a project's boards the tabs below show. */
-export function ModuleBar({ projectId, modules, canEdit, selectedId, allowAll, onSelect }: Props): JSX.Element {
+export function ModuleBar({ projectId, modules, tasks, canEdit, selectedId, allowAll, onSelect }: Props): JSX.Element {
   const dispatch = useAppDispatch();
   const [addModule] = useAddModuleMutation();
   const [updateModule] = useUpdateModuleMutation();
@@ -109,27 +113,16 @@ export function ModuleBar({ projectId, modules, canEdit, selectedId, allowAll, o
     <div className="module-bar">
       <div className="module-bar-tabs" role="tablist" aria-label="Modules">
         {allowAll && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={selectedId === null}
-            className={selectedId === null ? "active" : undefined}
-            onClick={() => onSelect(null)}
-          >
-            All
-          </button>
+          <ModuleTab name="All" tasks={tasks} selected={selectedId === null} onSelect={() => onSelect(null)} />
         )}
         {modules.map((m) => (
-          <button
+          <ModuleTab
             key={m.id}
-            type="button"
-            role="tab"
-            aria-selected={m.id === selectedId}
-            className={m.id === selectedId ? "active" : undefined}
-            onClick={() => onSelect(m.id)}
-          >
-            {m.name}
-          </button>
+            name={m.name}
+            tasks={tasksInModule(tasks, m.id)}
+            selected={m.id === selectedId}
+            onSelect={() => onSelect(m.id)}
+          />
         ))}
       </div>
       {canEdit && !adding && !renaming && (
@@ -153,5 +146,40 @@ export function ModuleBar({ projectId, modules, canEdit, selectedId, allowAll, o
         <BoardMenu label={`Module ${selected.name} menu`} items={menuItems(selected)} />
       )}
     </div>
+  );
+}
+
+/** One choice in the bar, in the calendar icon's colours for its own tasks, with
+ *  how many are not done. A module with none left shows no number. */
+function ModuleTab({
+  name,
+  tasks,
+  selected,
+  onSelect,
+}: {
+  name: string;
+  tasks: TaskRow[];
+  selected: boolean;
+  onSelect: () => void;
+}): JSX.Element {
+  const summary = summarizeTasks(tasks);
+  const state = calendarIconState(summary, todayLocal());
+  const open = summary.open_tasks;
+  const cls = ["module-tab"];
+  if (selected) cls.push("active");
+  if (state) cls.push(`state-${state}`);
+  const detail = state ? CALENDAR_STATE_HINTS[state] : "no tasks";
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      className={cls.join(" ")}
+      title={`${name}: ${open > 0 ? `${open} not done, ` : ""}${detail}`}
+      onClick={onSelect}
+    >
+      {name}
+      {open > 0 && <span className="module-tab-count">{open}</span>}
+    </button>
   );
 }

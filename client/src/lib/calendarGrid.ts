@@ -133,6 +133,44 @@ export interface CalendarIconSummary {
   earliest_start: string | null;
 }
 
+/** What each state's colour means, in words, for tooltips and screen readers. */
+export const CALENDAR_STATE_HINTS: Record<CalendarIconState, string> = {
+  overdue: "has overdue tasks",
+  active: "has tasks within their date range",
+  upcoming: "has upcoming due dates",
+  open: "has open tasks",
+  done: "all tasks are done",
+};
+
+interface SummarizedTask {
+  status: string;
+  start_date: string | null;
+  due_date: string | null;
+  archived: boolean;
+}
+
+/**
+ * The same summary as TaskStore.taskSummaries, from tasks the client already
+ * holds. The server only summarises whole projects, and a module needs its own.
+ */
+export function summarizeTasks(tasks: SummarizedTask[]): CalendarIconSummary {
+  const summary: CalendarIconSummary = { open_tasks: 0, done_tasks: 0, earliest_due: null, earliest_start: null };
+  const earlier = (current: string | null, date: string): string =>
+    current === null || date < current ? date : current;
+  for (const task of tasks) {
+    if (task.archived) continue;
+    if (task.status === "done") {
+      summary.done_tasks++;
+      continue;
+    }
+    summary.open_tasks++;
+    if (task.due_date === null) continue;
+    summary.earliest_due = earlier(summary.earliest_due, task.due_date);
+    summary.earliest_start = earlier(summary.earliest_start, task.start_date ?? task.due_date);
+  }
+  return summary;
+}
+
 /** What a project's calendar icon shows, first match wins: overdue when an open
  *  task is past its due date, active when an open task's date range has started,
  *  upcoming when open tasks have due dates still ahead, open when no open task

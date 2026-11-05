@@ -6148,6 +6148,29 @@ button.ki-id-badge::after {
   color: var(--text);
   font-weight: 600;
 }
+/* A module in the calendar icon's colours. The text tokens hold their contrast
+   on a surface at this small size. Orange needs its own dark value, because
+   --amber-text is yellow there and the icon is not. */
+.module-tab { display: inline-flex; align-items: center; gap: 6px; }
+.module-tab.state-overdue { --module-color: var(--red-text); --module-tint: var(--red-light); }
+.module-tab.state-active { --module-color: var(--amber-text); --module-tint: var(--amber-light); }
+[data-theme="dark"] .module-tab.state-active { --module-color: var(--amber); }
+.module-tab.state-upcoming, .module-tab.state-done { --module-color: var(--green-text); --module-tint: var(--green-light); }
+.module-tab.state-open { --module-color: var(--blue-text); --module-tint: var(--blue-light); }
+.module-bar-tabs button.module-tab { color: var(--module-color, var(--text-2)); }
+.module-bar-tabs button.module-tab:hover { color: var(--module-color, var(--text)); }
+.module-bar-tabs button.module-tab.active {
+  background: var(--module-tint, var(--accent-light));
+  border-color: var(--module-color, var(--accent));
+  color: var(--module-color, var(--text));
+}
+.module-tab-count {
+  box-sizing: border-box; min-width: 16px; padding: 0 5px;
+  border-radius: 999px;
+  background: var(--module-color);
+  color: var(--surface);
+  font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center;
+}
 
 /* ─── Gantt ─── */
 .gantt-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px 18px 18px; }

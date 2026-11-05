@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { summarizeTasks } from "../client/src/lib/calendarGrid.js";
 import { openDb } from "../src/store/db.js";
 import { ActivityLogStore } from "../src/store/activityLog.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
@@ -36,6 +37,18 @@ const order = (tasks: TaskStore, projectId: number): string[] =>
   tasks.list(projectId).map((t) => `${t.status}:${t.title}`);
 
 describe("TaskStore", () => {
+  it("agrees with the summary the portal computes for one module", () => {
+    const { tasks, alpha } = setup();
+    tasks.add(alpha.id, { title: "Open, no dates" });
+    tasks.add(alpha.id, { title: "Open, start only", start_date: "2026-11-01" });
+    tasks.add(alpha.id, { title: "Open, due only", due_date: "2026-11-20" });
+    tasks.add(alpha.id, { title: "Open, range", start_date: "2026-11-10", due_date: "2026-11-30" });
+    tasks.add(alpha.id, { title: "Done", status: "done", start_date: "2026-01-01", due_date: "2026-01-02" });
+    const gone = tasks.add(alpha.id, { title: "Archived", due_date: "2026-01-01" });
+    tasks.edit(gone.id, { expected_version: gone.version, archived: true });
+    expect(summarizeTasks(tasks.list(alpha.id, { includeArchived: true }))).toEqual(tasks.taskSummaries().get(alpha.id));
+  });
+
   describe("add", () => {
     it("creates a todo at the bottom of its status", () => {
       const { tasks, alpha } = setup();

@@ -143,6 +143,7 @@ export function ProjectView({ location }: { location: CalendarLocation }): JSX.E
         <ModuleBar
           projectId={projectId}
           modules={modules}
+          tasks={tasksQuery.data?.tasks ?? []}
           canEdit={modulesQuery.data?.can_edit ?? false}
           selectedId={selectedId}
           allowAll={view !== "board"}

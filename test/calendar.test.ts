@@ -6,7 +6,7 @@ import { openDb, type Db } from "../src/store/db.js";
 import { KnowledgeStore } from "../src/store/knowledge.js";
 import { PageStore } from "../src/store/pages.js";
 import { bucketEvents, projectCalendar, type CalendarEvent } from "../src/store/calendar.js";
-import { calendarIconState, filterDays, isOverdue, monthGrid, shiftMonth, tasksByDate } from "../client/src/lib/calendarGrid.js";
+import { calendarIconState, filterDays, isOverdue, monthGrid, shiftMonth, summarizeTasks, tasksByDate } from "../client/src/lib/calendarGrid.js";
 import {
   buildCalendarSearch,
   buildProjectViewSearch,
@@ -317,6 +317,56 @@ describe("tasks on the calendar", () => {
     expect(isOverdue(task(1, { due_date: "2026-11-02" }), "2026-11-02")).toBe(false);
     expect(isOverdue(task(1, { due_date: "2026-11-01", status: "done" }), "2026-11-02")).toBe(false);
     expect(isOverdue(task(1), "2026-11-02")).toBe(false);
+  });
+});
+
+describe("summarizeTasks", () => {
+  const today = "2026-11-02";
+  const task = (fields: { status?: string; start_date?: string; due_date?: string; archived?: boolean }) => ({
+    status: "todo",
+    start_date: null,
+    due_date: null,
+    archived: false,
+    ...fields,
+  });
+  const stateOf = (tasks: ReturnType<typeof task>[]) => calendarIconState(summarizeTasks(tasks), today);
+
+  it("counts what is not done, and leaves archived tasks out", () => {
+    const summary = summarizeTasks([
+      task({}),
+      task({ status: "doing" }),
+      task({ status: "review" }),
+      task({ status: "done" }),
+      task({ archived: true }),
+      task({ status: "done", archived: true }),
+    ]);
+    expect(summary).toMatchObject({ open_tasks: 3, done_tasks: 1 });
+  });
+
+  it("takes dates from open tasks only", () => {
+    const summary = summarizeTasks([
+      task({ status: "done", start_date: "2026-01-01", due_date: "2026-01-02" }),
+      task({ start_date: "2026-11-05", due_date: "2026-11-09" }),
+      task({ start_date: "2026-11-07", due_date: "2026-11-08" }),
+    ]);
+    expect(summary).toMatchObject({ earliest_due: "2026-11-08", earliest_start: "2026-11-05" });
+  });
+
+  it("opens a range on its due date when it has no start, and ignores a start with no due date", () => {
+    expect(summarizeTasks([task({ due_date: "2026-11-09" })]).earliest_start).toBe("2026-11-09");
+    expect(summarizeTasks([task({ start_date: "2026-11-01" })])).toMatchObject({
+      earliest_due: null,
+      earliest_start: null,
+    });
+  });
+
+  it("gives the same colours as the calendar icon", () => {
+    expect(stateOf([])).toBeNull();
+    expect(stateOf([task({ due_date: "2026-11-01" }), task({ due_date: "2026-11-09" })])).toBe("overdue");
+    expect(stateOf([task({ start_date: "2026-11-02", due_date: "2026-11-09" })])).toBe("active");
+    expect(stateOf([task({ due_date: "2026-11-09" }), task({})])).toBe("upcoming");
+    expect(stateOf([task({}), task({ status: "done" })])).toBe("open");
+    expect(stateOf([task({ status: "done" })])).toBe("done");
   });
 });
 
