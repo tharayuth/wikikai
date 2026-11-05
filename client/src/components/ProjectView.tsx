@@ -33,11 +33,6 @@ const TABS: { view: ProjectViewKind; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
-    view: "list",
-    label: "Tasks",
-    icon: <path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M12 6h8M12 12h8M12 18h8" />,
-  },
-  {
     view: "board",
     label: "Board",
     icon: (
@@ -47,6 +42,11 @@ const TABS: { view: ProjectViewKind; label: string; icon: JSX.Element }[] = [
         <rect x="16" y="4" width="5" height="13" rx="1" />
       </>
     ),
+  },
+  {
+    view: "list",
+    label: "Tasks",
+    icon: <path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M12 6h8M12 12h8M12 18h8" />,
   },
   {
     view: "gantt",
@@ -73,7 +73,7 @@ const TABS: { view: ProjectViewKind; label: string; icon: JSX.Element }[] = [
 
 /**
  * Everything behind a project's calendar icon: one tab bar over the Calendar,
- * Tasks, Board, Gantt and Notes. Rendered in place of the viewer for `/?calendar=<id>`.
+ * Board, Tasks, Gantt and Notes. Rendered in place of the viewer for `/?calendar=<id>`.
  */
 export function ProjectView({ location }: { location: CalendarLocation }): JSX.Element {
   const { projectId, month, view, taskId, moduleId, noteId } = location;

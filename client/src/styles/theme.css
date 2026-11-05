@@ -98,23 +98,27 @@ a:hover { text-decoration: underline; }
 /* ───── Custom scrollbar (applied to the main scrolling surfaces) ───── */
 .sidebar,
 .viewer,
+.gantt-scroll,
 #search-results {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
 .sidebar::-webkit-scrollbar,
 .viewer::-webkit-scrollbar,
+.gantt-scroll::-webkit-scrollbar,
 #search-results::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 .sidebar::-webkit-scrollbar-track,
 .viewer::-webkit-scrollbar-track,
+.gantt-scroll::-webkit-scrollbar-track,
 #search-results::-webkit-scrollbar-track {
   background: transparent;
 }
 .sidebar::-webkit-scrollbar-thumb,
 .viewer::-webkit-scrollbar-thumb,
+.gantt-scroll::-webkit-scrollbar-thumb,
 #search-results::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 6px;
@@ -124,6 +128,7 @@ a:hover { text-decoration: underline; }
 }
 .sidebar::-webkit-scrollbar-thumb:hover,
 .viewer::-webkit-scrollbar-thumb:hover,
+.gantt-scroll::-webkit-scrollbar-thumb:hover,
 #search-results::-webkit-scrollbar-thumb:hover {
   background: var(--text-3);
   background-clip: padding-box;
@@ -6188,6 +6193,8 @@ button.ki-id-badge::after {
 .gantt-panel input[type="text"] { flex: 1 1 160px; min-width: 0; }
 .gantt-panel-progress { color: var(--text-2); font-size: 12px; }
 
+/* Where its two scrollbars meet. */
+.gantt-scroll::-webkit-scrollbar-corner { background: transparent; }
 /* One scroller for both axes. The label column and the header stick to it, and
    every track shares one coordinate system, so bars and lines stay aligned.
    A card that fits its rows, as the task list does, and scrolls once it is full. */
@@ -6637,9 +6644,9 @@ button.ki-id-badge::after {
 .task-list tr.archived td { color: var(--text-3); }
 .task-list-title {
   padding: 0; border: none; background: transparent;
-  color: var(--text); font: inherit; cursor: pointer; text-align: left;
+  color: var(--accent-strong); font: inherit; cursor: pointer; text-align: left;
 }
-.task-list-title:hover { color: var(--accent-strong); }
+.task-list-title:hover { text-decoration: underline; }
 .task-list td .task-card-blocked, .task-list-archived-tag { margin-left: 8px; }
 .task-list-archived-tag { font-size: 11px; color: var(--text-3); }
 
